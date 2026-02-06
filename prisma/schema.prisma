@@ -1,0 +1,204 @@
+// Prisma Schema for CrafterForumWeb_NextJS
+// SQLite 기반 포럼 데이터베이스 스키마
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 사용자 모델
+// ============================================
+model User {
+  id                Int       @id @default(autoincrement())
+  email             String    @unique
+  password          String
+  nickname          String
+  role              String    @default("user") // "user" | "admin"
+  emailVerified     Int       @default(0) // 0 = false, 1 = true
+  isBanned          Int       @default(0)
+  isApproved        Int       @default(0)
+  minecraftUuid     String?
+  minecraftNickname String?
+  lastAuthAt        DateTime?
+  signupNote        String?
+  createdAt         DateTime  @default(now())
+  deletedAt         DateTime?
+
+  // Relations
+  posts            Post[]
+  comments         Comment[]
+  likes            Like[]
+  postReads        PostRead[]
+  minecraftCodes   MinecraftCode[]
+  inquiries        Inquiry[]
+  inquiryReplies   InquiryReply[]
+
+  @@index([nickname])
+}
+
+// ============================================
+// 게시글 모델
+// ============================================
+model Post {
+  id        Int       @id @default(autoincrement())
+  title     String
+  content   String
+  authorId  Int
+  tags      String? // JSON 문자열로 저장
+  likes     Int       @default(0)
+  views     Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt @default(now())
+  deletedAt DateTime?
+
+  // Relations
+  author      User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments    Comment[]
+  likeRecords Like[]
+  postReads   PostRead[]
+
+  @@index([authorId])
+}
+
+// ============================================
+// 댓글 모델 (대댓글 지원 가능)
+// ============================================
+model Comment {
+  id        Int      @id @default(autoincrement())
+  postId    Int
+  authorId  Int
+  content   String
+  isPinned  Int      @default(0) // 0 = false, 1 = true
+  parentId  Int?     // 대댓글용 (null이면 최상위 댓글)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+
+  // Relations
+  post   Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([postId])
+  @@index([parentId])
+}
+
+// ============================================
+// 좋아요 모델
+// ============================================
+model Like {
+  id     Int @id @default(autoincrement())
+  postId Int
+  userId Int
+
+  // Relations
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([postId, userId])
+}
+
+// ============================================
+// 게시글 읽음 상태 추적
+// ============================================
+model PostRead {
+  userId               Int
+  postId               Int
+  lastReadCommentCount Int      @default(0)
+  updatedAt            DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+}
+
+// ============================================
+// 마인크래프트 인증 코드
+// ============================================
+model MinecraftCode {
+  code           String    @id
+  userId         Int?
+  ipAddress      String?
+  isVerified     Int       @default(0)
+  linkedNickname String?
+  linkedUuid     String?
+  createdAt      DateTime  @default(now())
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// ============================================
+// 태그 모델
+// ============================================
+model Tag {
+  id    Int    @id @default(autoincrement())
+  name  String
+  color String @default("#5865F2")
+}
+
+// ============================================
+// 외부 링크 모델
+// ============================================
+model Link {
+  id        Int    @id @default(autoincrement())
+  title     String
+  url       String
+  iconUrl   String?
+  category  String @default("external") // "external" | "ai"
+  sortOrder Int    @default(0)
+}
+
+// ============================================
+// 문의 모델
+// ============================================
+model Inquiry {
+  id        Int      @id @default(autoincrement())
+  authorId  Int
+  title     String
+  content   String
+  status    String   @default("pending") // "pending" | "answered" | "closed"
+  createdAt DateTime @default(now())
+
+  // Relations
+  author  User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  replies InquiryReply[]
+
+  @@index([authorId])
+}
+
+// ============================================
+// 문의 답변 모델
+// ============================================
+model InquiryReply {
+  id         Int      @id @default(autoincrement())
+  inquiryId  Int
+  authorId   Int
+  content    String
+  createdAt  DateTime @default(now())
+
+  // Relations
+  inquiry Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// 업로드 파일 메타데이터
+// ============================================
+model Upload {
+  id           Int      @id @default(autoincrement())
+  filename     String
+  originalName String
+  mimetype     String?
+  size         Int?
+  createdAt    DateTime @default(now())
+}

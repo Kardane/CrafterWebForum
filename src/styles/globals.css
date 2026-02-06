@@ -1,0 +1,190 @@
+@import "tailwindcss";
+
+@theme {
+	/* mcbrass.kro.kr:3000 실시간 추출 Warm Theme 색상 */
+	--color-neutral: #99AAB5;
+	--color-info: #8B2332;
+	--color-success: #57F287;
+	--color-warning: #FEE75C;
+	--color-error: #ED4245;
+	--color-punishment: #9B59B6;
+	--color-transition: #3498DB;
+
+	/* 웜톤 배경 시스템 */
+	--color-bg-primary: #474643;
+	/* 메인 배경 (Brownish Grey) */
+	--color-bg-secondary: #36322F;
+	/* 사이드바, 카드 레벨 */
+	--color-bg-tertiary: #252220;
+	/* 헤더, 입력창 딥 레벨 */
+
+	--color-text-primary: #FFFFFF;
+	--color-text-secondary: #B9BBBE;
+	--color-text-muted: #72767D;
+
+	--color-accent: #8B2332;
+	--color-accent-hover: #6B1A28;
+	--color-border: #4D4A47;
+	/* 배경색에 맞춘 다크 보더 */
+
+	/* Spacing */
+	--spacing-sidebar: 240px;
+	--spacing-header: 48px;
+
+	/* Z-Index */
+	--z-index-header: 50;
+	--z-index-sidebar: 100;
+	--z-index-modal: 1000;
+	--z-index-toast: 2000;
+
+	/* Font Family */
+	--font-sans: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+	body {
+		background-color: var(--color-bg-primary);
+		color: var(--color-text-primary);
+		@apply min-h-screen overflow-x-hidden antialiased;
+	}
+
+	::-webkit-scrollbar {
+		width: 8px;
+		height: 8px;
+	}
+
+	::-webkit-scrollbar-track {
+		background: transparent;
+	}
+
+	::-webkit-scrollbar-thumb {
+		background-color: var(--color-border);
+		border-radius: 10px;
+		border: 2px solid transparent;
+		background-clip: content-box;
+	}
+
+	::-webkit-scrollbar-thumb:hover {
+		background-color: var(--color-text-muted);
+	}
+}
+
+@layer components {
+	.btn {
+		@apply inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded text-sm font-medium transition-all duration-200 border-none outline-none cursor-pointer disabled:opacity-50 disabled:pointer-events-none;
+	}
+
+	.btn-primary {
+		background-color: var(--color-accent);
+		color: white;
+	}
+
+	.btn-primary:hover {
+		background-color: var(--color-accent-hover);
+	}
+
+	.btn-secondary {
+		background-color: var(--color-bg-secondary);
+		color: var(--color-text-primary);
+		border: 1px solid var(--color-bg-tertiary);
+	}
+
+	.btn-secondary:hover {
+		background-color: var(--color-bg-tertiary);
+	}
+
+	.btn-danger {
+		background-color: var(--color-error);
+		color: white;
+	}
+
+	.btn-success {
+		background-color: var(--color-success);
+		color: var(--color-bg-tertiary);
+	}
+
+	.btn-sm {
+		@apply px-2.5 py-1 text-xs;
+	}
+
+	.input-base {
+		background-color: var(--color-bg-tertiary);
+		border: 1px solid var(--color-border);
+		color: var(--color-text-primary);
+		@apply flex h-10 w-full rounded-md px-3 py-2 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent;
+	}
+
+	/* 마크다운 스타일 */
+	.post-content {
+		@apply text-text-primary leading-relaxed;
+	}
+
+	.post-content .md-header {
+		@apply font-bold mb-4 mt-6;
+	}
+
+	.post-content h1.md-header {
+		@apply text-3xl;
+	}
+
+	.post-content h2.md-header {
+		@apply text-2xl;
+	}
+
+	.post-content h3.md-header {
+		@apply text-xl;
+	}
+
+	.post-content .md-blockquote {
+		@apply border-l-4 border-accent pl-4 py-2 my-4 bg-bg-tertiary rounded-r;
+	}
+
+	.post-content .md-ul,
+	.post-content .md-ol {
+		@apply my-4 pl-6;
+	}
+
+	.post-content .md-ul-item {
+		@apply list-disc;
+	}
+
+	.post-content .md-ol-item {
+		@apply list-decimal;
+	}
+
+	.post-content .md-inline-code {
+		@apply bg-bg-tertiary px-1.5 py-0.5 rounded text-sm font-mono text-accent;
+	}
+
+	.post-content pre {
+		@apply bg-bg-tertiary p-4 rounded my-4 overflow-x-auto;
+	}
+
+	.post-content pre code {
+		@apply text-sm font-mono;
+	}
+
+	.post-content .md-image {
+		@apply max-w-full h-auto rounded my-4;
+	}
+
+	.post-content .embed-container {
+		@apply my-4 rounded overflow-hidden;
+	}
+
+	.post-content .embed-container iframe {
+		@apply w-full aspect-video;
+	}
+
+	.post-content .link-text {
+		@apply text-accent hover:underline;
+	}
+
+	.post-content .file-download {
+		@apply inline-flex items-center gap-1 text-accent hover:underline;
+	}
+
+	.post-content .md-hr {
+		@apply border-border my-6;
+	}
+}

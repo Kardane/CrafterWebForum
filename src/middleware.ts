@@ -1,0 +1,49 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { auth } from "@/auth.config";
+
+/**
+ * NextAuth.js 미들웨어
+ * 보호된 라우트에 대한 인증 및 권한 검증
+ */
+export async function middleware(request: NextRequest) {
+	const { pathname } = request.nextUrl;
+	const session = await auth();
+
+	// 보호된 라우트 정의
+	const protectedRoutes = ["/admin", "/profile"];
+	const adminRoutes = ["/admin"];
+
+	const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
+	const isAdminRoute = adminRoutes.some((route) => pathname.startsWith(route));
+
+	// 보호된 라우트: 로그인 필수
+	if (isProtectedRoute && !session?.user) {
+		const loginUrl = new URL("/login", request.url);
+		loginUrl.searchParams.set("callbackUrl", pathname);
+		return NextResponse.redirect(loginUrl);
+	}
+
+	// Admin 라우트: Admin 역할 필수
+	if (isAdminRoute && session?.user) {
+		if (session.user.role !== "admin") {
+			return NextResponse.json(
+				{ error: "Forbidden: Admin access required" },
+				{ status: 403 }
+			);
+		}
+	}
+
+	// 승인되지 않은 사용자는 특정 라우트 차단 가능 (선택적)
+	// if (session?.user && session.user.isApproved === 0) {
+	//   const pendingUrl = new URL("/pending-approval", request.url);
+	//   return NextResponse.redirect(pendingUrl);
+	// }
+
+	return NextResponse.next();
+}
+
+// 미들웨어 적용 경로 설정
+export const config = {
+	matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};
