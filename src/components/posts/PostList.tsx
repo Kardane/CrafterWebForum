@@ -16,6 +16,7 @@ interface Post {
 	commentCount: number;
 	tags: string[];
 	unreadCount?: number;
+	userLiked?: boolean;
 }
 
 interface PostListProps {
@@ -47,7 +48,7 @@ export default function PostList({ posts, totalPages, currentPage }: PostListPro
 	return (
 		<div className="flex flex-col gap-6">
 			{/* 포스트 목록 */}
-			<div className="grid gap-3">
+			<div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 				{posts.map((post) => (
 					<PostCard
 						key={post.id}
@@ -62,6 +63,7 @@ export default function PostList({ posts, totalPages, currentPage }: PostListPro
 						commentCount={post.commentCount}
 						tags={post.tags}
 						unreadCount={post.unreadCount}
+						userLiked={post.userLiked}
 					/>
 				))}
 			</div>

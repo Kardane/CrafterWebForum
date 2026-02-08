@@ -8,9 +8,17 @@ interface LikeButtonProps {
 	postId: number;
 	initialLikes: number;
 	initialLiked: boolean;
+	className?: string; // 추가 스타일
+	variant?: "default" | "ghost"; // 스타일 변형
 }
 
-export default function LikeButton({ postId, initialLikes, initialLiked }: LikeButtonProps) {
+export default function LikeButton({
+	postId,
+	initialLikes,
+	initialLiked,
+	className = "",
+	variant = "default"
+}: LikeButtonProps) {
 	const [likes, setLikes] = useState(initialLikes);
 	const [liked, setLiked] = useState(initialLiked);
 	const [isLoading, setIsLoading] = useState(false);
@@ -49,14 +57,17 @@ export default function LikeButton({ postId, initialLikes, initialLiked }: LikeB
 		}
 	};
 
+	// 스타일 클래스 결정
+	const baseClasses = "inline-flex items-center gap-1.5 transition-all duration-200 disabled:opacity-50";
+	const variantClasses = variant === "default"
+		? `px-3 py-1.5 rounded ${liked ? 'bg-accent text-white' : 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary'}`
+		: `${liked ? 'text-accent font-bold' : 'text-text-muted hover:text-text-primary'}`;
+
 	return (
 		<button
 			onClick={handleToggleLike}
 			disabled={isLoading}
-			className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded transition-all duration-200 ${liked
-					? 'bg-accent text-white'
-					: 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary'
-				} disabled:opacity-50`}
+			className={`${baseClasses} ${variantClasses} ${className}`}
 		>
 			<Star
 				className="w-4 h-4"

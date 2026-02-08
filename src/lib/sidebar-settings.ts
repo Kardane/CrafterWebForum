@@ -4,14 +4,7 @@
  * - 기본값 정의
  */
 
-export interface SidebarLink {
-	id: string;
-	title: string;
-	url: string;
-	icon_url?: string;
-	category?: string;
-	isCustom?: boolean;
-}
+import { SidebarLink } from "./sidebar-links";
 
 export interface SidebarSettings {
 	order: string[];

@@ -75,12 +75,14 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 			</div>
 
 			{/* 포스트 헤더 */}
-			<div className="post-header">
-				<h1 className="post-title">{post.title}</h1>
+			<div className="mb-6">
+				<h1 className="text-2xl md:text-[2rem] font-bold text-text-primary mb-4 leading-[1.3]">
+					{post.title}
+				</h1>
 
 				{/* 태그 */}
 				{post.tags && post.tags.length > 0 && (
-					<div className="post-tags">
+					<div className="flex flex-wrap gap-2 mb-4">
 						{post.tags.map((tag: string) => (
 							<span key={tag} className="tag">
 								{tag}
@@ -90,21 +92,23 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 				)}
 
 				{/* 작성자 정보 */}
-				<div className="post-author">
+				<div className="flex items-center gap-3 py-3 border-b border-border">
 					{post.author_uuid ? (
 						<img
 							src={getMinecraftHeadUrl(post.author_uuid, 40) || ""}
 							alt=""
-							className="author-avatar"
+							className="w-10 h-10 rounded-full [image-rendering:pixelated]"
 						/>
 					) : (
-						<div className="author-avatar-fallback">
+						<div className="w-10 h-10 rounded-full bg-bg-tertiary flex items-center justify-center font-semibold text-text-muted">
 							{post.author_name[0].toUpperCase()}
 						</div>
 					)}
-					<div className="author-info">
-						<div className="author-name">{post.author_name}</div>
-						<div className="post-meta">
+					<div className="flex-1">
+						<div className="font-semibold text-text-primary text-base">
+							{post.author_name}
+						</div>
+						<div className="text-[0.85rem] text-text-muted mt-0.5">
 							{new Date(post.createdAt).toLocaleString("ko-KR")}
 						</div>
 					</div>
@@ -112,22 +116,22 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 			</div>
 
 			{/* 포스트 본문 */}
-			<div className="post-body">
+			<div className="bg-bg-secondary rounded-lg p-6 my-6 min-h-[200px] max-md:p-4">
 				<PostContent content={post.content} />
 			</div>
 
 			{/* 통계 및 액션 */}
-			<div className="post-actions">
+			<div className="flex items-center gap-4 py-4 border-b border-border mb-6">
 				<LikeButton
 					postId={post.id}
 					initialLikes={post.likes}
 					initialLiked={post.user_liked}
 				/>
-				<div className="post-stat">
+				<div className="flex items-center gap-1.5 text-text-secondary text-[0.9rem]">
 					<MessageCircle size={16} />
 					<span>{comments.length}</span>
 				</div>
-				<div className="post-stat">
+				<div className="flex items-center gap-1.5 text-text-secondary text-[0.9rem]">
 					<Eye size={16} />
 					<span>{post.views}</span>
 				</div>
@@ -139,104 +143,6 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 			</div>
 
 			{/* 스타일 */}
-			<style jsx>{`
-				.post-header {
-					margin-bottom: 24px;
-				}
-
-				.post-title {
-					font-size: 2rem;
-					font-weight: 700;
-					color: var(--text-primary);
-					margin-bottom: 16px;
-					line-height: 1.3;
-				}
-
-				.post-tags {
-					display: flex;
-					flex-wrap: wrap;
-					gap: 8px;
-					margin-bottom: 16px;
-				}
-
-				.post-author {
-					display: flex;
-					align-items: center;
-					gap: 12px;
-					padding: 12px 0;
-					border-bottom: 1px solid var(--border);
-				}
-
-				.author-avatar {
-					width: 40px;
-					height: 40px;
-					border-radius: 50%;
-					image-rendering: pixelated;
-				}
-
-				.author-avatar-fallback {
-					width: 40px;
-					height: 40px;
-					border-radius: 50%;
-					background: var(--bg-tertiary);
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					font-weight: 600;
-					color: var(--text-muted);
-				}
-
-				.author-info {
-					flex: 1;
-				}
-
-				.author-name {
-					font-weight: 600;
-					color: var(--text-primary);
-					font-size: 1rem;
-				}
-
-				.post-meta {
-					font-size: 0.85rem;
-					color: var(--text-muted);
-					margin-top: 2px;
-				}
-
-				.post-body {
-					background: var(--bg-secondary);
-					border-radius: 8px;
-					padding: 24px;
-					margin: 24px 0;
-					min-height: 200px;
-				}
-
-				.post-actions {
-					display: flex;
-					align-items: center;
-					gap: 16px;
-					padding: 16px 0;
-					border-bottom: 1px solid var(--border);
-					margin-bottom: 24px;
-				}
-
-				.post-stat {
-					display: flex;
-					align-items: center;
-					gap: 6px;
-					color: var(--text-secondary);
-					font-size: 0.9rem;
-				}
-
-				@media (max-width: 768px) {
-					.post-title {
-						font-size: 1.5rem;
-					}
-
-					.post-body {
-						padding: 16px;
-					}
-				}
-			`}</style>
 		</div>
 	);
 }

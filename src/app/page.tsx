@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
 import PostFilters from "@/components/posts/PostFilters";
 import PostList from "@/components/posts/PostList";
 
@@ -45,21 +44,7 @@ export default async function Home(props: PageProps) {
 
 	return (
 		<div className="max-w-4xl mx-auto">
-			{/* 헤더 영역 (제목 + 새 포스트) */}
-			<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
-				<div>
-					<h2 className="text-2xl font-bold mb-1">커뮤니티</h2>
-					<p className="text-text-muted">마인크래프트 개발 지식과 정보를 공유하세요.</p>
-				</div>
-
-				<Link
-					href="/posts/new"
-					className="btn btn-primary shadow-lg hover:shadow-xl transition-shadow flex items-center gap-2"
-				>
-					<Plus size={18} />
-					새 포스트 작성
-				</Link>
-			</div>
+			{/* 필터 및 검색 (여기에 새 포스트 버튼 포함됨) */}
 
 			{/* 필터 및 검색 */}
 			<PostFilters />

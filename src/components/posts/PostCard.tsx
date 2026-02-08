@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { ko } from "date-fns/locale";
-import { Heart, MessageSquare } from "lucide-react";
+import { MessageSquare } from "lucide-react";
+import LikeButton from "./LikeButton";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
 import classNames from "classnames";
 
@@ -19,6 +20,7 @@ interface PostCardProps {
 	commentCount: number;
 	tags: string[];
 	unreadCount?: number;
+	userLiked?: boolean;
 }
 
 export default function PostCard({
@@ -32,6 +34,7 @@ export default function PostCard({
 	commentCount,
 	tags,
 	unreadCount = 0,
+	userLiked,
 }: PostCardProps) {
 	const thumb = extractFirstImage(content);
 	const preview = getPreviewText(content);
@@ -63,9 +66,20 @@ export default function PostCard({
 					</div>
 
 					<div className="mt-auto flex items-center gap-4 text-xs text-text-muted font-medium">
-						<div className="flex items-center gap-1">
-							<Heart size={14} className={classNames("text-text-muted")} />
-							<span>{likeCount}</span>
+						<div
+							onClick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+							}}
+							className="flex items-center"
+						>
+							<LikeButton
+								postId={id}
+								initialLikes={likeCount}
+								initialLiked={!!userLiked}
+								variant="ghost"
+								className="!p-0 !bg-transparent gap-1 hover:text-accent h-auto text-xs"
+							/>
 						</div>
 						<div className="flex items-center gap-1">
 							<MessageSquare size={14} />

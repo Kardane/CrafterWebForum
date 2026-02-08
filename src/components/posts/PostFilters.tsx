@@ -19,6 +19,9 @@ const SORT_OPTIONS = [
 	{ value: "activity", label: "최근 활동순" },
 ];
 
+import Link from "next/link";
+import { Plus } from "lucide-react";
+
 export default function PostFilters() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
@@ -52,42 +55,65 @@ export default function PostFilters() {
 
 	return (
 		<div className="flex flex-col gap-4 mb-6">
-			<div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
-				{/* 새 포스트 버튼 위치 (Page 레벨에서 처리할 수 있으나 레이아웃상 여기도 가능) */}
+			<div className="flex flex-col md:flex-row gap-2 justify-between items-start md:items-center">
+				{/* 좌측: 새 포스트 + 검색창 */}
+				<div className="flex w-full md:w-auto gap-2">
+					<Link
+						href="/posts/new"
+						className="btn btn-primary flex items-center gap-2 px-4 whitespace-nowrap shadow-md hover:shadow-lg transition-shadow"
+					>
+						<Plus size={18} />
+						<span className="hidden sm:inline">새 포스트</span>
+						<span className="sm:hidden">작성</span>
+					</Link>
 
-				<div className="flex-1 w-full sm:w-auto flex gap-2">
-					<form onSubmit={handleSearch} className="flex-1 max-w-sm relative">
+					<form onSubmit={handleSearch} className="flex-1 flex max-w-md">
 						<Input
 							placeholder="포스트 검색..."
 							value={searchTerm}
 							onChange={(e) => setSearchTerm(e.target.value)}
-							className="pr-10"
+							className="rounded-l-md rounded-r-none border-r-0 focus:ring-0"
 						/>
 						<button
 							type="submit"
-							className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary p-1"
+							className="bg-accent hover:bg-accent-hover text-white px-4 rounded-r-md font-medium text-sm transition-colors"
 						>
-							<Search size={18} />
+							검색
 						</button>
 					</form>
 				</div>
 
-				<div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-					<select
-						value={currentSort}
-						onChange={(e) => updateParams("sort", e.target.value)}
-						className="h-10 rounded-md border border-border bg-bg-secondary px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-					>
-						{SORT_OPTIONS.map(opt => (
-							<option key={opt.value} value={opt.value}>{opt.label}</option>
-						))}
-					</select>
+				{/* 우측: 정렬 + 태그 */}
+				<div className="flex gap-2 w-full md:w-auto justify-end">
+					<div className="relative">
+						<select
+							value={currentSort}
+							onChange={(e) => updateParams("sort", e.target.value)}
+							className="appearance-none h-10 pl-3 pr-8 rounded-md border border-border bg-bg-secondary text-sm focus:outline-none focus:ring-2 focus:ring-accent cursor-pointer"
+						>
+							{SORT_OPTIONS.map(opt => (
+								<option key={opt.value} value={opt.value}>{opt.label}</option>
+							))}
+						</select>
+						{/* 커스텀 화살표 */}
+						<div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-text-muted">
+							<svg width="10" height="6" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+							</svg>
+						</div>
+					</div>
 
 					<button
 						onClick={() => setIsTagsOpen(!isTagsOpen)}
-						className="h-10 px-4 rounded-md bg-bg-tertiary border border-border text-sm font-medium hover:bg-bg-secondary transition-colors whitespace-nowrap"
+						className={classNames(
+							"h-10 px-4 rounded-md border text-sm font-medium transition-colors flex items-center gap-2",
+							isTagsOpen
+								? "bg-bg-secondary border-text-muted text-text-primary"
+								: "bg-bg-tertiary border-border text-text-secondary hover:bg-bg-secondary"
+						)}
 					>
-						태그 {isTagsOpen ? "▲" : "▼"}
+						태그
+						<span className="text-[10px]">{isTagsOpen ? "▲" : "▼"}</span>
 					</button>
 				</div>
 			</div>

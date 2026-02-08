@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Prisma, PrismaClient } from "@/generated/client";
+import { auth } from "@/auth";
 
 const prisma = new PrismaClient();
 
@@ -88,6 +89,20 @@ export async function GET(req: NextRequest) {
 			prisma.post.count({ where: whereCondition }),
 		]);
 
+		// 로그인한 경우 좋아요 여부 확인
+		const session = await auth();
+		let likedPostIds: number[] = [];
+		if (session?.user?.id) {
+			const likes = await prisma.like.findMany({
+				where: {
+					userId: parseInt(session.user.id.toString()),
+					postId: { in: posts.map((p) => p.id) },
+				},
+				select: { postId: true },
+			});
+			likedPostIds = likes.map((l) => l.postId);
+		}
+
 		// 데이터 가공 (프론트엔드 포맷)
 		const formattedPosts = posts.map((post) => ({
 			id: post.id,
@@ -101,7 +116,7 @@ export async function GET(req: NextRequest) {
 			authorName: post.author.nickname,
 			authorUuid: post.author.minecraftUuid,
 			commentCount: post._count.comments,
-			userLiked: false, // 로그인 사용자의 좋아요 여부는 별도 처리 필요 (세션 연동 시)
+			userLiked: likedPostIds.includes(post.id),
 		}));
 
 		// 페이지네이션 메타데이터
