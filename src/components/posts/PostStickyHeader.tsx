@@ -90,6 +90,7 @@ export default function PostStickyHeader({
 						postId={postId}
 						initialLikes={initialLikes}
 						initialLiked={initialLiked}
+						variant="legacy"
 						className="!px-2.5 !py-1 !text-xs"
 					/>
 

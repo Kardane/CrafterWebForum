@@ -14,6 +14,17 @@ interface PostDetailPageProps {
 	params: Promise<{ id: string }>;
 }
 
+function countCommentsWithReplies(
+	nodes: Array<{ replies?: Array<{ replies?: unknown[] }> }>
+): number {
+	return nodes.reduce((sum, node) => {
+		const replies = Array.isArray(node.replies)
+			? (node.replies as Array<{ replies?: Array<{ replies?: unknown[] }> }>)
+			: [];
+		return sum + 1 + countCommentsWithReplies(replies);
+	}, 0);
+}
+
 async function getPostDetail(id: string) {
 	const requestHeaders = await headers();
 	const host =
@@ -66,6 +77,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 	}
 
 	const { post, comments } = data;
+	const totalCommentCount = countCommentsWithReplies(comments);
 	const sessionUserId = toSessionUserId(session.user.id);
 	const isOwner = sessionUserId === post.author_id;
 
@@ -83,7 +95,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 					createdAt={post.createdAt}
 					initialLikes={post.likes}
 					initialLiked={post.user_liked}
-					commentCount={comments.length}
+					commentCount={totalCommentCount}
 					triggerId="post-header-trigger"
 					topOffsetClassName="top-0"
 					observerOffsetTop={0}
@@ -146,10 +158,10 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 				</div>
 
 				<div className="flex items-center gap-4 py-4 border-b border-border mb-6">
-					<LikeButton postId={post.id} initialLikes={post.likes} initialLiked={post.user_liked} />
+					<LikeButton postId={post.id} initialLikes={post.likes} initialLiked={post.user_liked} variant="legacy" />
 					<div className="flex items-center gap-1.5 text-text-secondary text-[0.9rem]">
 						<MessageCircle size={16} />
-						<span>{comments.length}</span>
+						<span>{totalCommentCount}</span>
 					</div>
 				</div>
 

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Reply, Copy, Link2, Edit, Trash2, Pin, Check } from "lucide-react";
+import { Reply, Copy, Link2, Edit, Trash2, Pin, Check, CornerDownRight } from "lucide-react";
 import PostContent from "../posts/PostContent";
 import CommentForm from "./CommentForm";
 import PollCard from "@/components/poll/PollCard";
@@ -29,13 +29,13 @@ interface Comment {
 
 interface CommentItemProps {
 	comment: Comment;
+	replyToName?: string | null;
 	onReplyRequest: (commentId: number, nickname: string) => void;
 	onEdit: (commentId: number, content: string) => void;
 	onDelete: (commentId: number) => void;
 	onPin?: (commentId: number) => void;
 	onVote?: (commentId: number, optionId: number) => void;
 	disabled?: boolean;
-	isContinuation?: boolean;
 	threadRootId?: number;
 }
 
@@ -48,13 +48,13 @@ type CopiedType = "text" | "link" | null;
 
 export default function CommentItem({
 	comment,
+	replyToName = null,
 	onReplyRequest,
 	onEdit,
 	onDelete,
 	onPin,
 	onVote,
 	disabled = false,
-	isContinuation = false,
 	threadRootId,
 }: CommentItemProps) {
 	const { data: session } = useSession();
@@ -128,27 +128,30 @@ export default function CommentItem({
 
 	return (
 		<div className="comment-wrapper" id={`comment-${comment.id}`}>
-			<div className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isContinuation ? "continuation" : ""}`}>
-				{!isContinuation && (
-					<div className="comment-avatar">
-						{comment.author.minecraftUuid ? (
-							<img
-								src={getMinecraftHeadUrl(comment.author.minecraftUuid, 36) || ""}
-								alt=""
-								className="avatar-img"
-							/>
-						) : (
-							<div className="avatar-fallback">{comment.author.nickname[0].toUpperCase()}</div>
-						)}
-					</div>
-				)}
+			<div className={`comment-item ${comment.isPinned ? "pinned" : ""}`}>
+				<div className="comment-avatar">
+					{comment.author.minecraftUuid ? (
+						<img
+							src={getMinecraftHeadUrl(comment.author.minecraftUuid, 36) || ""}
+							alt=""
+							className="avatar-img"
+						/>
+					) : (
+						<div className="avatar-fallback">{comment.author.nickname[0].toUpperCase()}</div>
+					)}
+				</div>
 
-				<div className={`comment-content ${isContinuation ? "continuation-content" : ""}`}>
-					{!isContinuation && (
-						<div className="comment-header">
-							<span className="comment-author">{comment.author.nickname}</span>
-							{comment.isPostAuthor && <span className="comment-badge author">작성자</span>}
-							{comment.isPinned && <span className="comment-badge pinned">📌 고정됨</span>}
+				<div className="comment-content">
+					<div className="comment-header">
+						<span className="comment-author">{comment.author.nickname}</span>
+						{comment.isPostAuthor && <span className="comment-badge author">작성자</span>}
+						{comment.isPinned && <span className="comment-badge pinned">📌 고정됨</span>}
+					</div>
+
+					{replyToName && (
+						<div className="comment-reply-context">
+							<CornerDownRight size={12} />
+							<span>@{replyToName}에게 답장</span>
 						</div>
 					)}
 
@@ -225,24 +228,6 @@ export default function CommentItem({
 				)}
 			</div>
 
-			{comment.replies && comment.replies.length > 0 && (
-				<div className="replies-wrapper">
-					{comment.replies.map((reply) => (
-						<CommentItem
-							key={reply.id}
-							comment={reply}
-							onReplyRequest={onReplyRequest}
-							onEdit={onEdit}
-							onDelete={onDelete}
-							onPin={onPin}
-							onVote={onVote}
-							disabled={disabled}
-							threadRootId={resolvedThreadRootId}
-						/>
-					))}
-				</div>
-			)}
-
 			<style jsx>{`
 				.comment-wrapper {
 					margin-bottom: 4px;
@@ -252,13 +237,13 @@ export default function CommentItem({
 					display: flex;
 					gap: 12px;
 					padding: 12px;
-					border-radius: 4px;
+					border-radius: 6px;
 					position: relative;
 					transition: background-color 0.15s;
 				}
 
 				.comment-item:hover {
-					background: var(--bg-tertiary);
+					background: color-mix(in srgb, var(--bg-tertiary) 84%, #000 16%);
 				}
 
 				.comment-item.pinned {
@@ -268,10 +253,6 @@ export default function CommentItem({
 
 				.comment-item.pinned:hover {
 					background: rgba(139, 35, 50, 0.2);
-				}
-
-				.comment-item.continuation {
-					padding-top: 4px;
 				}
 
 				.comment-avatar {
@@ -300,10 +281,6 @@ export default function CommentItem({
 				.comment-content {
 					flex: 1;
 					min-width: 0;
-				}
-
-				.continuation-content {
-					margin-left: 48px;
 				}
 
 				.comment-header {
@@ -335,19 +312,30 @@ export default function CommentItem({
 					color: var(--bg-primary);
 				}
 
+				.comment-reply-context {
+					display: inline-flex;
+					align-items: center;
+					gap: 4px;
+					margin-bottom: 5px;
+					padding: 2px 6px;
+					border-radius: 4px;
+					font-size: 0.72rem;
+					color: var(--text-muted);
+					background: color-mix(in srgb, var(--bg-tertiary) 75%, #000 25%);
+				}
+
 				.comment-content-row {
 					display: flex;
 					align-items: flex-start;
-					justify-content: space-between;
-					gap: 12px;
+					gap: 8px;
+					flex-wrap: wrap;
 				}
 
 				.comment-body {
 					color: var(--text-secondary);
 					font-size: 0.9rem;
 					line-height: 1.5;
-					min-width: 0;
-					flex: 1;
+					max-width: min(100%, 820px);
 				}
 
 				.comment-body :global(.post-content) {
@@ -360,15 +348,14 @@ export default function CommentItem({
 				}
 
 				.comment-hover-time {
-					font-size: 0.68rem;
-					color: color-mix(in srgb, var(--text-muted) 64%, #000 36%);
+					font-size: 0.7rem;
+					color: color-mix(in srgb, var(--text-muted) 60%, #000 40%);
 					opacity: 0;
 					transition: opacity 0.15s ease;
 					user-select: none;
 					white-space: nowrap;
 					pointer-events: none;
 					margin-top: 2px;
-					flex-shrink: 0;
 				}
 
 				.comment-wrapper:hover .comment-hover-time {
@@ -381,8 +368,8 @@ export default function CommentItem({
 					right: 8px;
 					display: flex;
 					gap: 4px;
-					background: color-mix(in srgb, var(--bg-tertiary) 90%, #000 10%);
-					border: 1px solid color-mix(in srgb, var(--border) 80%, #fff 20%);
+					background: color-mix(in srgb, var(--bg-primary) 72%, #000 28%);
+					border: 1px solid color-mix(in srgb, var(--border) 80%, #000 20%);
 					border-radius: 6px;
 					padding: 3px;
 					box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
@@ -408,18 +395,12 @@ export default function CommentItem({
 				}
 
 				.action-btn:hover {
-					background: var(--bg-tertiary);
-					color: var(--text-primary);
+					background: color-mix(in srgb, var(--bg-primary) 25%, #000 75%);
+					color: #fff;
 				}
 
 				.action-btn.danger:hover {
 					color: var(--error);
-				}
-
-				.replies-wrapper {
-					margin-left: 48px;
-					padding-left: 12px;
-					border-left: 2px solid var(--border);
 				}
 
 				@media (hover: none) {
@@ -429,6 +410,6 @@ export default function CommentItem({
 					}
 				}
 			`}</style>
-			</div>
-		);
-	}
+		</div>
+	);
+}

@@ -5,10 +5,11 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import classNames from "classnames";
-import { Settings, LogOut, HelpCircle, Shield } from "lucide-react";
+import { Settings, HelpCircle, Shield } from "lucide-react";
 import SidebarSettingsModal from "../sidebar/SidebarSettingsModal";
 import { getSidebarSettings } from "@/lib/sidebar-settings";
 import { SidebarLink, DEFAULT_LINKS } from "@/lib/sidebar-links";
+import { isPrivilegedNickname } from "@/config/admin-policy";
 
 interface SidebarProps {
 	isOpen: boolean;
@@ -30,469 +31,258 @@ function getInitials(name: string): string {
 	return name ? name.charAt(0).toUpperCase() : "?";
 }
 
+function buildSidebarLinks(): SidebarLink[] {
+	const settings = getSidebarSettings();
+	const customLinks: SidebarLink[] = (settings.customLinks || []).map((link: unknown) => ({
+		...(link as SidebarLink),
+		isCustom: true,
+	}));
+
+	let allLinks: SidebarLink[] = [...DEFAULT_LINKS, ...customLinks];
+
+	if (settings.order && settings.order.length > 0) {
+		const orderMap = new Map(settings.order.map((id, index) => [id, index]));
+		allLinks.sort((a, b) => {
+			const orderA = orderMap.get(a.id!) ?? 9999;
+			const orderB = orderMap.get(b.id!) ?? 9999;
+			return orderA - orderB;
+		});
+	} else {
+		allLinks.sort((a, b) => {
+			const catA = a.category || "기타";
+			const catB = b.category || "기타";
+			const catCompare = catA.localeCompare(catB);
+			if (catCompare !== 0) return catCompare;
+
+			const orderA = a.sort_order ?? 9999;
+			const orderB = b.sort_order ?? 9999;
+			return orderA - orderB;
+		});
+	}
+
+	if (settings.hidden) {
+		const hiddenIds = settings.hidden;
+		allLinks = allLinks.filter((link) => !hiddenIds.includes(link.id!));
+	}
+
+	if (settings.deleted) {
+		const deletedIds = settings.deleted;
+		allLinks = allLinks.filter((link) => !deletedIds.includes(link.id!));
+	}
+
+	return allLinks;
+}
+
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 	const pathname = usePathname();
 	const router = useRouter();
 	const { data: session } = useSession();
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-	const [links, setLinks] = useState<SidebarLink[]>([]);
+	const [links, setLinks] = useState<SidebarLink[]>(() => buildSidebarLinks());
 	const [inquiryCount, setInquiryCount] = useState(0);
 
-	// 사이드바 링크 로드
-	const loadLinks = () => {
-		const settings = getSidebarSettings();
-		const customLinks: SidebarLink[] = (settings.customLinks || []).map((l: any) => ({
-			...l,
-			isCustom: true
-		}));
-
-		// 기본 링크와 커스텀 링크 병합
-		let allLinks = [...DEFAULT_LINKS, ...customLinks];
-
-		// 정렬 적용
-		if (settings.order && settings.order.length > 0) {
-			const orderMap = new Map(settings.order.map((id, index) => [id, index]));
-			allLinks.sort((a, b) => {
-				const orderA = orderMap.get(a.id!) ?? 9999;
-				const orderB = orderMap.get(b.id!) ?? 9999;
-				return orderA - orderB;
-			});
-		} else {
-			// 기본 정렬 (카테고리 -> 정렬 순서)
-			allLinks.sort((a, b) => {
-				const catA = a.category || "기타";
-				const catB = b.category || "기타";
-				const catCompare = catA.localeCompare(catB);
-
-				if (catCompare !== 0) return catCompare;
-
-				const orderA = a.sort_order ?? 9999;
-				const orderB = b.sort_order ?? 9999;
-				return orderA - orderB;
-			});
-		}
-
-		// 숨김 처리
-		if (settings.hidden) {
-			allLinks = allLinks.filter((l) => !settings.hidden.includes(l.id!));
-		}
-
-		// 삭제 처리 (기본 링크)
-		if (settings.deleted) {
-			allLinks = allLinks.filter((l) => !settings.deleted!.includes(l.id!));
-		}
-
-		setLinks(allLinks);
-	};
-
-	// 문의하기 카운트 로드 (Mock)
-	const loadInquiryCount = async () => {
-		if (session?.user && (session.user as any).role === "admin") {
-			try {
-				// TODO: 실제 API 연동 (/api/inquiries/pending-count)
-				// const res = await fetch('/api/inquiries/pending-count');
-				// const data = await res.json();
-				// setInquiryCount(data.count);
-				setInquiryCount(0);
-			} catch (e) {
-				console.error("Failed to load inquiry count", e);
-			}
-		}
-	};
+	const user = session?.user;
+	const canAccessAdmin = user
+		? user.role === "admin" || isPrivilegedNickname(user.nickname)
+		: false;
 
 	useEffect(() => {
-		loadLinks();
-		loadInquiryCount();
+		const refreshLinks = () => {
+			setLinks(buildSidebarLinks());
+		};
 
-		// 설정 변경 이벤트 리스너
-		window.addEventListener("storage", (e) => {
-			if (e.key === "sidebarSettings") loadLinks();
-		});
+		const loadInquiryCount = async () => {
+			if (!canAccessAdmin) {
+				setInquiryCount(0);
+				return;
+			}
 
-		// 커스텀 이벤트 리스너 (설정 모달에서 발생시킴)
-		window.addEventListener("sidebarSettingsChanged", loadLinks);
+			try {
+				const res = await fetch("/api/inquiries/pending-count", {
+					cache: "no-store",
+				});
+
+				if (!res.ok) {
+					throw new Error("Failed to load inquiry count");
+				}
+
+				const data = (await res.json()) as { count?: number };
+				setInquiryCount(Number(data.count ?? 0));
+			} catch (error) {
+				console.error("Failed to load inquiry count", error);
+				setInquiryCount(0);
+			}
+		};
+		void loadInquiryCount();
+
+		const handleStorage = (event: StorageEvent) => {
+			if (event.key === "sidebarSettings") {
+				refreshLinks();
+			}
+		};
+		window.addEventListener("storage", handleStorage);
+		window.addEventListener("sidebarSettingsChanged", refreshLinks);
 
 		return () => {
-			window.removeEventListener("storage", loadLinks);
-			window.removeEventListener("sidebarSettingsChanged", loadLinks);
+			window.removeEventListener("storage", handleStorage);
+			window.removeEventListener("sidebarSettingsChanged", refreshLinks);
 		};
-	}, [session]); // session 변경 시 문의하기 카운트 갱신
+	}, [canAccessAdmin]);
 
-	// 링크 아이템 렌더링
 	const renderLink = (link: SidebarLink) => {
-		const isActive = pathname === link.url || (link.url !== "/" && pathname.startsWith(link.url));
+		const isExternal = link.url.startsWith("http");
+		const isActive = !isExternal && (pathname === link.url || (link.url !== "/" && pathname.startsWith(link.url)));
+		const itemClassName = classNames(
+			"mb-1 flex items-center gap-2 rounded px-2.5 py-2 text-sm transition-colors",
+			isActive
+				? "bg-accent/20 text-text-primary"
+				: "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+		);
+
+		const icon = (
+			<img
+				src={link.icon_url || "https://via.placeholder.com/20"}
+				className="h-5 w-5 rounded object-contain"
+				alt=""
+				width={20}
+				height={20}
+			/>
+		);
+
+		if (isExternal) {
+			return (
+				<a
+					key={link.id}
+					href={link.url}
+					target="_blank"
+					rel="noreferrer"
+					className={itemClassName}
+					title={link.title}
+				>
+					{icon}
+					<span className="truncate">{link.title}</span>
+				</a>
+			);
+		}
 
 		return (
-			<a
-				key={link.id}
-				href={link.url}
-				target={link.url.startsWith("http") ? "_blank" : "_self"}
-				className={classNames("nav-item", { active: isActive })}
-				title={link.title}
-			>
-				<img
-					src={link.icon_url || "https://via.placeholder.com/20"}
-					className="nav-item-icon w-5 h-5 object-contain min-w-[20px] min-h-[20px]"
-					alt=""
-					width={20}
-					height={20}
-				/>
-				<span className="nav-item-text">{link.title}</span>
-			</a>
+			<Link key={link.id} href={link.url} className={itemClassName} title={link.title}>
+				{icon}
+				<span className="truncate">{link.title}</span>
+			</Link>
 		);
 	};
 
-	const user = session?.user as any;
-
 	return (
 		<>
-			{/* 모바일 오버레이 */}
 			<div
-				className={classNames("sidebar-overlay", { active: isOpen })}
+				className={classNames(
+					"fixed inset-0 z-[99] bg-black/70 backdrop-blur-sm md:hidden",
+					isOpen ? "block" : "hidden"
+				)}
 				onClick={onClose}
 			/>
 
-			{/* 사이드바 본체 */}
-			<aside className={classNames("sidebar", { open: isOpen })}>
-				{/* 사이드바 헤더 */}
-				<div className="sidebar-header-custom">
-					<span className="header-title">바로가기</span>
+			<aside
+				className={classNames(
+					"fixed inset-y-0 left-0 z-sidebar flex w-sidebar flex-col border-r border-bg-tertiary bg-bg-secondary transition-transform duration-300 md:translate-x-0",
+					isOpen ? "translate-x-0" : "-translate-x-full"
+				)}
+			>
+				<div className="border-b border-bg-tertiary p-2">
 					<button
-						className="btn-icon-sm"
+						type="button"
 						onClick={() => setIsSettingsOpen(true)}
-						title="사이드바 설정"
+						className="inline-flex w-full items-center gap-1 rounded px-2 py-1.5 text-xs text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
 					>
-						<Settings size={14} />
+						<Settings size={12} /> 사이드바 설정
 					</button>
 				</div>
 
-				{/* 네비게이션 */}
-				<nav className="sidebar-nav">
-					{links.map((link) => renderLink(link))}
-				</nav>
+				<nav className="flex-1 overflow-y-auto p-2">{links.map((link) => renderLink(link))}</nav>
 
-				{/* 푸터 (사용자 정보) */}
 				{user ? (
-					<div className="sidebar-footer">
-						<div className="flex items-center justify-between mb-2">
-							<Link href="/profile" className="flex items-center gap-2.5 flex-1 min-w-0 hover:bg-bg-secondary p-1.5 rounded-md transition-colors group">
-								<div className="sidebar-user-avatar shrink-0">
+					<div className="border-t border-bg-tertiary bg-bg-tertiary p-3">
+						<div className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-bg-secondary">
+							<Link href="/profile" className="flex min-w-0 flex-1 items-center gap-2">
+								<div className="h-8 w-8 shrink-0 overflow-hidden rounded-md border border-border bg-bg-secondary">
 									{user.minecraftUuid ? (
 										<img
 											src={getMinecraftHeadUrl(user.minecraftUuid) || ""}
 											alt={user.nickname}
+											className="h-full w-full object-cover"
 										/>
 									) : (
-										<div className="avatar-fallback">{getInitials(user.nickname)}</div>
+										<div className="flex h-full w-full items-center justify-center text-xs font-semibold text-text-muted">
+											{getInitials(user.nickname)}
+										</div>
 									)}
 								</div>
-								<div className="sidebar-user-info overflow-hidden">
-									<div className="sidebar-user-name group-hover:text-accent transition-colors">{user.nickname}</div>
-									<div className="sidebar-user-role">
-										{user.role === "admin" ? "관리자" : "사용자"}
+								<div className="min-w-0">
+									<div className="truncate text-sm font-medium text-text-primary">{user.nickname}</div>
+									<div className="text-[11px] text-text-muted">
+										{canAccessAdmin ? "관리자" : "사용자"}
 									</div>
 								</div>
 							</Link>
 
 							<button
-								className="sidebar-logout-btn shrink-0 ml-1"
+								className="rounded px-2 py-1 text-xs text-text-muted transition-colors hover:bg-error hover:text-white"
 								onClick={() => signOut({ callbackUrl: "/login" })}
 								title="로그아웃"
 							>
-								<LogOut size={15} />
+								로그아웃
 							</button>
 						</div>
 
-						<div className="footer-actions grid grid-cols-2 gap-2">
-							<Link href="/inquiries" className="footer-action-btn justify-center">
-								<HelpCircle size={14} />
-								<span className="whitespace-nowrap overflow-hidden text-ellipsis">문의하기</span>
-								{inquiryCount > 0 && (
-									<span className="inquiry-badge ml-1">{inquiryCount}</span>
+						<div className="mt-2 flex gap-2">
+							<Link
+								href="/inquiries"
+								className="flex flex-1 items-center gap-1.5 rounded px-2.5 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
+							>
+								<HelpCircle size={16} />
+								<span>문의하기</span>
+								{canAccessAdmin && inquiryCount > 0 && (
+									<span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
+										{inquiryCount}
+									</span>
 								)}
 							</Link>
 
-							{user.role === "admin" ? (
-								<Link href="/admin" className="footer-action-btn justify-center" title="관리자">
-									<Shield size={14} />
-									<span className="whitespace-nowrap overflow-hidden text-ellipsis">관리자</span>
+							{canAccessAdmin ? (
+								<Link
+									href="/admin"
+									className="flex h-9 w-9 items-center justify-center rounded text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
+									title="관리자"
+								>
+									<Shield size={16} />
 								</Link>
 							) : (
-								<div className="footer-action-btn disabled opacity-50 cursor-not-allowed justify-center">
-									<Shield size={14} />
-									<span className="whitespace-nowrap overflow-hidden text-ellipsis">관리자</span>
+								<div
+									className="flex h-9 w-9 items-center justify-center rounded text-text-muted/60"
+									title="관리자"
+								>
+									<Shield size={16} />
 								</div>
 							)}
 						</div>
 					</div>
 				) : (
-					<div className="sidebar-footer">
-						<div className="p-2">
-							<button
-								onClick={() => router.push("/login")}
-								className="w-full btn btn-primary btn-sm"
-							>
-								로그인
-							</button>
-						</div>
+					<div className="border-t border-bg-tertiary bg-bg-tertiary p-3">
+						<button
+							onClick={() => router.push("/login")}
+							className="btn btn-primary w-full"
+						>
+							로그인
+						</button>
 					</div>
 				)}
 			</aside>
 
-			{/* 설정 모달 */}
 			<SidebarSettingsModal
 				isOpen={isSettingsOpen}
 				onClose={() => setIsSettingsOpen(false)}
 			/>
-
-			<style jsx>{`
-				/* 사이드바 기본 스타일 (globals.css 와 일부 겹칠 수 있으나 상세 구현) */
-				.sidebar-overlay {
-					position: fixed;
-					inset: 0;
-					background: rgba(0, 0, 0, 0.7);
-					backdrop-filter: blur(4px);
-					z-index: 99;
-					display: none;
-				}
-
-				.sidebar-overlay.active {
-					display: block;
-				}
-
-				.sidebar {
-					width: var(--spacing-sidebar);
-					background: var(--color-bg-secondary);
-					display: flex;
-					flex-direction: column;
-					border-right: 1px solid var(--color-bg-tertiary);
-					height: 100vh;
-					position: fixed;
-					left: 0;
-					top: 0;
-					bottom: 0;
-					z-index: 100;
-					transition: transform 0.3s ease;
-				}
-
-				.sidebar-header-custom {
-					display: flex;
-					justify-content: space-between;
-					align-items: center;
-					padding: 16px 12px 8px 16px;
-					margin-top: 56px; /* 헤더 높이만큼 띄움 (헤더가 fixed인 경우) */
-				}
-
-				/* 모바일 대응: 헤더가 fixed면 사이드바도 그 아래로 */
-				@media (min-width: 769px) {
-					.sidebar {
-						top: 0;
-						height: 100vh;
-						margin-top: 0;
-					}
-					.sidebar-header-custom {
-						margin-top: 0;
-					}
-				}
-
-				.header-title {
-					font-size: 0.85rem;
-					font-weight: 600;
-					color: var(--color-text-secondary);
-				}
-
-				.btn-icon-sm {
-					background: none;
-					border: none;
-					color: var(--color-text-muted);
-					cursor: pointer;
-					padding: 4px;
-					border-radius: 4px;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-				}
-
-				.btn-icon-sm:hover {
-					color: var(--color-text-primary);
-					background: var(--color-bg-tertiary);
-				}
-
-				.sidebar-nav {
-					flex: 1;
-					overflow-y: auto;
-					padding: 8px;
-				}
-
-				.nav-item {
-					display: flex;
-					align-items: center;
-					gap: 10px;
-					padding: 8px 12px;
-					border-radius: 4px;
-					color: var(--color-text-secondary);
-					font-size: 0.95rem;
-					text-decoration: none;
-					margin-bottom: 2px;
-					transition: all 0.15s;
-				}
-
-				.nav-item:hover {
-					background: var(--color-bg-tertiary);
-					color: var(--color-text-primary);
-				}
-
-				.nav-item.active {
-					background: rgba(139, 35, 50, 0.15); /* Accent color opacity */
-					color: var(--color-text-primary);
-					font-weight: 500;
-				}
-
-				.nav-item-icon {
-					width: 20px;
-					height: 20px;
-					border-radius: 4px;
-					object-fit: contain;
-				}
-
-				.sidebar-footer {
-					padding: 12px;
-					background: var(--color-bg-tertiary);
-					border-top: 1px solid var(--color-border);
-				}
-
-				.sidebar-user {
-					display: flex;
-					align-items: center;
-					gap: 10px;
-					padding: 8px;
-					border-radius: 4px;
-					cursor: pointer;
-					transition: background 0.15s;
-					margin-bottom: 8px;
-				}
-
-				.sidebar-user:hover {
-					background: var(--color-bg-secondary);
-				}
-
-				.sidebar-user-avatar img {
-					width: 32px;
-					height: 32px;
-					border-radius: 4px;
-				}
-
-				.avatar-fallback {
-					width: 32px;
-					height: 32px;
-					border-radius: 4px;
-					background: var(--color-bg-secondary);
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					font-weight: 600;
-					color: var(--color-text-muted);
-					border: 1px solid var(--color-border);
-				}
-
-				.sidebar-user-info {
-					flex: 1;
-					min-width: 0;
-				}
-
-				.sidebar-user-name {
-					font-size: 0.9rem;
-					font-weight: 500;
-					white-space: nowrap;
-					overflow: hidden;
-					text-overflow: ellipsis;
-					display: block;
-					color: var(--color-text-primary);
-				}
-
-				.sidebar-user-role {
-					font-size: 0.75rem;
-					color: var(--color-text-muted);
-				}
-
-				.sidebar-logout-btn {
-					background: none;
-					border: none;
-					color: var(--color-text-muted);
-					cursor: pointer;
-					padding: 6px;
-					border-radius: 4px;
-				}
-
-				.sidebar-logout-btn:hover {
-					background: var(--color-error);
-					color: white;
-				}
-
-				.footer-actions {
-					display: flex;
-					gap: 8px;
-				}
-
-				.footer-action-btn {
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					gap: 6px;
-					padding: 6px 10px;
-					background: var(--color-bg-secondary); /* 배경색 변경: tertiary -> secondary (대비) */
-					border: 1px solid var(--color-border);
-					border-radius: 4px;
-					color: var(--color-text-secondary);
-					font-size: 0.85rem;
-					text-decoration: none;
-					transition: all 0.15s;
-				}
-
-				.footer-action-btn:hover {
-					background: var(--color-bg-primary); /* hover 시 더 밝게? */
-					color: var(--color-text-primary);
-					border-color: var(--color-text-muted);
-				}
-
-				.footer-action-btn.icon-only {
-					padding: 6px;
-					width: 34px; /* 정사각형에 가깝게 */
-				}
-
-				.inquiry-badge {
-					background: var(--color-accent);
-					color: white;
-					font-size: 0.7rem;
-					padding: 0 5px;
-					border-radius: 10px;
-					min-width: 16px;
-					height: 16px;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					line-height: 1;
-				}
-
-				/* 모바일 반응형 */
-				@media (max-width: 768px) {
-					.sidebar {
-						transform: translateX(-100%);
-						top: 0;
-						height: 100vh;
-						margin-top: 0;
-						box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
-					}
-					.sidebar.open {
-						transform: translateX(0);
-					}
-					.sidebar-header-custom {
-						margin-top: 0; 
-						border-bottom: 1px solid var(--color-border);
-						/* 모바일에서는 상단에 로고나 닫기 버튼 등이 추가될 수 있음 */
-					}
-				}
-			`}</style>
 		</>
 	);
 }

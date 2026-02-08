@@ -5,6 +5,7 @@ import ProfileCard from "@/components/profile/ProfileCard";
 import UserStats from "@/components/profile/UserStats";
 import PasswordChangeForm from "@/components/profile/PasswordChangeForm";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface ProfileUser {
 	nickname: string;
@@ -85,9 +86,14 @@ export default function ProfilePage() {
 	return (
 		<div className="max-w-2xl mx-auto p-6 space-y-6">
 			<header className="mb-6">
-				<h1 className="text-2xl font-bold flex items-center gap-2">
-					<span>👤</span> 내 정보
-				</h1>
+				<div className="flex items-center gap-2">
+					<Link href="/" className="btn btn-secondary btn-sm">
+						← 메인
+					</Link>
+					<h1 className="flex items-center gap-2 text-2xl font-bold">
+						<span>👤</span> 내 정보
+					</h1>
+				</div>
 			</header>
 
 			<ProfileCard user={userData} />
