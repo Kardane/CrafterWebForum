@@ -263,24 +263,23 @@ export default function CommentItem({
 							onClick={() => onReplyRequest(resolvedThreadRootId, comment.author.nickname)}
 							title="답장"
 						>
-							<Reply size={16} />
+							<Reply size={18} />
 						</button>
-						<button type="button" className="action-btn" onClick={handleCopyLink} title="링크 복사">
-							{copiedType === "link" ? <Check size={16} /> : <Link2 size={16} />}
-						</button>
-						<button type="button" className="action-btn" onClick={handleCopyText} title="텍스트 복사">
-							{copiedType === "text" ? <Check size={16} /> : <Copy size={16} />}
-						</button>
+
 						{(isOwner || isAdmin) && (
-							<>
-								<button type="button" className="action-btn" onClick={() => setIsEditing(true)} title="수정">
-									<Edit size={16} />
-								</button>
-								<button type="button" className="action-btn danger" onClick={(e) => onDelete(comment.id, e)} title="삭제">
-									<Trash2 size={16} />
-								</button>
-							</>
+							<button type="button" className="action-btn" onClick={() => setIsEditing(true)} title="수정">
+								<Edit size={18} />
+							</button>
 						)}
+
+						<button type="button" className="action-btn" onClick={handleCopyText} title="텍스트 복사">
+							{copiedType === "text" ? <Check size={18} /> : <Copy size={18} />}
+						</button>
+
+						<button type="button" className="action-btn" onClick={handleCopyLink} title="링크 복사">
+							{copiedType === "link" ? <Check size={18} /> : <Link2 size={18} />}
+						</button>
+
 						{isAdmin && onPin && (
 							<button
 								type="button"
@@ -288,7 +287,13 @@ export default function CommentItem({
 								onClick={() => onPin(comment.id)}
 								title={comment.isPinned ? "고정 해제" : "고정"}
 							>
-								<Pin size={16} />
+								<Pin size={18} />
+							</button>
+						)}
+
+						{isAdmin && (
+							<button type="button" className="action-btn danger" onClick={(e) => onDelete(comment.id, e)} title="삭제">
+								<Trash2 size={18} />
 							</button>
 						)}
 					</div>
@@ -304,7 +309,7 @@ export default function CommentItem({
 						display: flex;
 						flex-direction: column;
 						gap: 0;
-						padding: 12px;
+						padding: 8px;
 						border-radius: 6px;
 						position: relative;
 						transition: background-color 0.15s;
@@ -316,8 +321,8 @@ export default function CommentItem({
 					}
 
 					.comment-item.compact {
-						padding-top: 6px;
-						padding-bottom: 8px;
+						padding-top: 4px;
+						padding-bottom: 4px;
 					}
 
 					.comment-main-row {
@@ -483,10 +488,14 @@ export default function CommentItem({
 					margin: 0;
 				}
 
-				.comment-body :global(.post-content .md-image),
-				.comment-body :global(.post-content .embed-container) {
-					margin-top: 0;
-				}
+					.comment-body :global(.post-content .md-image),
+					.comment-body :global(.post-content .embed-container) {
+						margin-top: 0;
+					}
+
+					.comment-body :global(.post-content hr) {
+						margin: 8px 0;
+					}
 
 					.comment-hover-time {
 						font-size: 0.72rem;
@@ -513,12 +522,11 @@ export default function CommentItem({
 					right: 8px;
 					display: flex;
 					gap: 4px;
-					background: color-mix(in srgb, var(--bg-primary) 72%, #000 28%);
-					border: 1px solid color-mix(in srgb, var(--border) 80%, #000 20%);
+					background: #2b2a28;
+					border: 1px solid rgba(255, 255, 255, 0.08);
 					border-radius: 6px;
 					padding: 3px;
 					box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-					backdrop-filter: blur(4px);
 					opacity: 0;
 					pointer-events: none;
 					transition: opacity 0.15s ease;
@@ -536,17 +544,20 @@ export default function CommentItem({
 					}
 
 				.action-btn {
-					padding: 6px 7px;
+					padding: 5px 6px;
 					background: none;
 					border: none;
 					color: var(--text-muted);
 					cursor: pointer;
 					border-radius: 4px;
 					transition: background 0.2s ease, color 0.15s ease;
+					display: flex;
+					align-items: center;
+					justify-content: center;
 				}
 
 				.action-btn:hover {
-					background: var(--border);
+					background: rgba(0, 0, 0, 0.4);
 					color: var(--text-primary);
 				}
 

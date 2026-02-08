@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ko } from "date-fns/locale";
-import { AdminBackupInfo } from "@/types/admin";
+import { AdminBackupInfo, AdminBackupStatus } from "@/types/admin";
 import {
 	fetchAdminJson,
 	fetchAdminResponse,
@@ -25,18 +25,19 @@ export default function AdminBackupTab() {
 	const [running, setRunning] = useState(false);
 	const [message, setMessage] = useState<string | null>(null);
 	const [latestBackup, setLatestBackup] = useState<AdminBackupInfo | null>(null);
+	const [backupSupported, setBackupSupported] = useState(true);
 
 	const loadLatestBackup = useCallback(async () => {
 		try {
-			const data = await fetchAdminJson<{ latestBackup?: AdminBackupInfo | null }>(
-				"/api/admin/backup"
-			);
+			const data = await fetchAdminJson<Partial<AdminBackupStatus>>("/api/admin/backup");
 			setLatestBackup(data.latestBackup ?? null);
+			setBackupSupported(data.backupSupported ?? true);
 		} catch (error) {
 			if ((error as Error).message !== "AUTH_REQUIRED") {
 				console.error(error);
 			}
 			setLatestBackup(null);
+			setBackupSupported(false);
 		}
 	}, []);
 
@@ -45,6 +46,11 @@ export default function AdminBackupTab() {
 	}, [loadLatestBackup]);
 
 	const runBackup = async () => {
+		if (!backupSupported) {
+			setMessage("현재 데이터베이스에서는 파일 백업을 지원하지 않습니다");
+			return;
+		}
+
 		setRunning(true);
 		setMessage(null);
 		try {
@@ -79,7 +85,7 @@ export default function AdminBackupTab() {
 		<div>
 			<h2 className="mb-2 text-xl font-semibold">백업</h2>
 			<p className="mb-4 text-sm text-text-muted">
-				SQLite 백업 파일을 생성하고 즉시 다운로드합니다
+				로컬 SQLite 환경에서 백업 파일을 생성하고 즉시 다운로드합니다
 			</p>
 
 			<div className="mb-4 rounded border border-border bg-bg-tertiary/40 p-3 text-sm">
@@ -95,12 +101,12 @@ export default function AdminBackupTab() {
 
 			<button
 				className="btn btn-primary"
-				disabled={running}
+				disabled={running || !backupSupported}
 				onClick={() => {
 					void runBackup();
 				}}
 			>
-				{running ? "백업 생성 중..." : "백업 생성"}
+				{running ? "백업 생성 중..." : backupSupported ? "백업 생성" : "백업 미지원"}
 			</button>
 
 			{message && <p className="mt-3 text-sm text-text-secondary">{message}</p>}

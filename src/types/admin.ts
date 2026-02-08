@@ -53,3 +53,9 @@ export interface AdminBackupInfo {
 	createdAt: string;
 	size: number;
 }
+
+export interface AdminBackupStatus {
+	latestBackup: AdminBackupInfo | null;
+	backupSupported: boolean;
+	backupReason: string | null;
+}

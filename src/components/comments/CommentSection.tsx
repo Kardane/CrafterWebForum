@@ -13,6 +13,11 @@ import {
 	readPostDetailScrollState,
 	savePostDetailScrollState,
 } from "@/lib/scroll-restore";
+import {
+	flattenCommentsForStream,
+	toReplyPreview,
+	type FlattenedStreamComment,
+} from "@/lib/comment-stream";
 
 interface Comment {
 	id: number;
@@ -45,14 +50,7 @@ interface ReplyTarget {
 	nickname: string;
 }
 
-interface FlattenedComment {
-	comment: Comment;
-	threadRootId: number;
-	replyToName: string | null;
-	replyToCommentId: number | null;
-	replyToPreview: string | null;
-	isCompact: boolean;
-}
+type FlattenedComment = FlattenedStreamComment<Comment>;
 
 interface PinnedCommentItem {
 	id: number;
@@ -79,33 +77,9 @@ type RenderRow =
 			isCollapsed: boolean;
 	  };
 
-const COMPACT_TIME_WINDOW_MS = 5 * 60 * 1000;
-const REPLY_PREVIEW_MAX_LENGTH = 88;
 const LATEST_CHUNK_SIZE = 40;
 const THREAD_COLLAPSE_THRESHOLD = 8;
 const DETAIL_SCROLL_SAVE_DELAY_MS = 240;
-
-function stripReplyPreviewContent(content: string): string {
-	return content
-		.replace(/\[POLL_JSON\][\s\S]*?\[\/POLL_JSON\]/g, " ")
-		.replace(/!\[[^\]]*]\(([^)]+)\)/g, "[이미지]")
-		.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
-		.replace(/`{1,3}[\s\S]*?`{1,3}/g, " ")
-		.replace(/[*_~>#-]/g, " ")
-		.replace(/\s+/g, " ")
-		.trim();
-}
-
-function toReplyPreview(content: string): string {
-	const plain = stripReplyPreviewContent(content);
-	if (!plain) {
-		return "본문 없음";
-	}
-	if (plain.length <= REPLY_PREVIEW_MAX_LENGTH) {
-		return plain;
-	}
-	return `${plain.slice(0, REPLY_PREVIEW_MAX_LENGTH)}…`;
-}
 
 function appendReplyToThread(nodes: Comment[], rootId: number, newComment: Comment): Comment[] {
 	return nodes.map((node) => {
@@ -171,61 +145,6 @@ function updateCommentPinnedInTree(nodes: Comment[], targetId: number, isPinned:
 	});
 }
 
-function shouldCompactWithPrevious(previous: FlattenedComment | null, current: FlattenedComment): boolean {
-	if (!previous) {
-		return false;
-	}
-	if (previous.comment.isPinned || current.comment.isPinned) {
-		return false;
-	}
-	if (previous.threadRootId !== current.threadRootId) {
-		return false;
-	}
-	if (previous.comment.author.id !== current.comment.author.id) {
-		return false;
-	}
-	const previousMs = new Date(previous.comment.createdAt).getTime();
-	const currentMs = new Date(current.comment.createdAt).getTime();
-	if (!Number.isFinite(previousMs) || !Number.isFinite(currentMs) || currentMs < previousMs) {
-		return false;
-	}
-	return currentMs - previousMs <= COMPACT_TIME_WINDOW_MS;
-}
-
-function flattenComments(comments: Comment[]): FlattenedComment[] {
-	const flattened: FlattenedComment[] = [];
-	const walk = (
-		nodes: Comment[],
-		rootId: number | null,
-		replyToName: string | null,
-		replyToCommentId: number | null,
-		replyToPreview: string | null
-	) => {
-		nodes.forEach((node) => {
-			const nextRootId = rootId ?? node.id;
-			flattened.push({
-				comment: node,
-				threadRootId: nextRootId,
-				replyToName,
-				replyToCommentId,
-				replyToPreview,
-				isCompact: false,
-			});
-			if (node.replies.length > 0) {
-				walk(node.replies, nextRootId, node.author.nickname, node.id, toReplyPreview(node.content));
-			}
-		});
-	};
-	walk(comments, null, null, null, null);
-	const sorted = flattened.sort((a, b) => {
-		return new Date(a.comment.createdAt).getTime() - new Date(b.comment.createdAt).getTime();
-	});
-	return sorted.map((item, index) => ({
-		...item,
-		isCompact: shouldCompactWithPrevious(index > 0 ? sorted[index - 1] : null, item),
-	}));
-}
-
 function getReadMarkerIndex(total: number, lastReadCommentCount: number): number | null {
 	if (total <= 0 || lastReadCommentCount <= 0 || lastReadCommentCount >= total) {
 		return null;
@@ -252,14 +171,16 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	const [highlightedCommentId, setHighlightedCommentId] = useState<number | null>(null);
 	const [isPinnedModalOpen, setIsPinnedModalOpen] = useState(false);
 	const [visibleStart, setVisibleStart] = useState(0);
+	const [composerReserveHeight, setComposerReserveHeight] = useState(120);
 	const [expandedThreadRoots, setExpandedThreadRoots] = useState<Set<number>>(() => new Set());
 	const streamRef = useRef<HTMLDivElement>(null);
+	const composerShellRef = useRef<HTMLDivElement>(null);
 	const highlightTimerRef = useRef<number | null>(null);
 	const scrollSaveTimerRef = useRef<number | null>(null);
 	const hasInitializedViewRef = useRef(false);
 	const restoreAppliedRef = useRef(false);
 
-	const flattenedComments = useMemo(() => flattenComments(comments), [comments]);
+	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
 	const threadReplyCounts = useMemo(() => {
 		const counts = new Map<number, number>();
 		for (const item of flattenedComments) {
@@ -447,6 +368,35 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		window.addEventListener(OPEN_PINNED_COMMENTS_EVENT, openPinnedModal);
 		return () => {
 			window.removeEventListener(OPEN_PINNED_COMMENTS_EVENT, openPinnedModal);
+		};
+	}, []);
+
+	useEffect(() => {
+		const composer = composerShellRef.current;
+		if (!composer) {
+			return;
+		}
+
+		const updateReserve = () => {
+			const nextHeight = Math.ceil(composer.getBoundingClientRect().height) + 24;
+			setComposerReserveHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+		};
+
+		updateReserve();
+		window.addEventListener("resize", updateReserve);
+
+		if (typeof ResizeObserver === "undefined") {
+			return () => {
+				window.removeEventListener("resize", updateReserve);
+			};
+		}
+
+		const observer = new ResizeObserver(updateReserve);
+		observer.observe(composer);
+
+		return () => {
+			observer.disconnect();
+			window.removeEventListener("resize", updateReserve);
 		};
 	}, []);
 
@@ -707,8 +657,8 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				</button>
 			</div>
 
-			<div className="comment-stream" ref={streamRef}>
-				<div className="comment-list">
+				<div className="comment-stream" ref={streamRef}>
+					<div className="comment-list" style={{ paddingBottom: `${composerReserveHeight}px` }}>
 					{hasOlderComments && (
 						<div className="older-loader">
 							<button type="button" className="btn btn-secondary btn-sm" onClick={handleLoadOlderComments}>
@@ -774,8 +724,8 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				</div>
 			</div>
 
-			<div className="composer-dock">
-				<div className="composer-shell" id="comment-composer">
+				<div className="composer-dock">
+					<div className="composer-shell" id="comment-composer" ref={composerShellRef}>
 					<CommentForm
 						onSubmit={(content) => handleCommentCreate(content, replyTarget?.parentId ?? null)}
 						disabled={isLoading}
@@ -879,10 +829,9 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					/* 통합 스크롤 영역 */
 				}
 
-				.comment-list {
-					padding: 0;
-					padding-bottom: 20px;
-				}
+					.comment-list {
+						padding: 0;
+					}
 
 				.older-loader {
 					display: flex;

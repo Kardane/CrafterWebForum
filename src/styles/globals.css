@@ -304,6 +304,8 @@
 	}
 
 	.post-content .md-hr {
-		@apply border-border my-6;
+		border: 0;
+		border-top: 1px solid rgba(255, 255, 255, 0.05);
+		@apply my-3;
 	}
 }

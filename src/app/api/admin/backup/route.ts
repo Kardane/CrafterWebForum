@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import path from "path";
 import { mkdir, copyFile, readFile, readdir, stat } from "fs/promises";
 import { requireAdmin } from "@/lib/admin-auth";
+import { isSqliteFileDatabaseUrl } from "@/lib/database-url";
 
 export const runtime = "nodejs";
 
@@ -11,8 +12,8 @@ let lastBackupAt = 0;
 
 function resolveSqlitePath() {
 	const raw = process.env.DATABASE_URL ?? "file:./dev.db";
-	if (!raw.startsWith("file:")) {
-		return path.resolve(process.cwd(), "prisma", "dev.db");
+	if (!isSqliteFileDatabaseUrl(raw)) {
+		return null;
 	}
 
 	const dbRef = raw.slice("file:".length);
@@ -78,8 +79,20 @@ export async function GET() {
 		const admin = await requireAdmin();
 		if ("response" in admin) return admin.response;
 
+		if (!isSqliteFileDatabaseUrl(process.env.DATABASE_URL ?? "")) {
+			return NextResponse.json({
+				latestBackup: null,
+				backupSupported: false,
+				backupReason: "FILE_BASED_SQLITE_ONLY",
+			});
+		}
+
 		const latestBackup = await getLatestBackupMeta(BACKUPS_DIR);
-		return NextResponse.json({ latestBackup });
+		return NextResponse.json({
+			latestBackup,
+			backupSupported: true,
+			backupReason: null,
+		});
 	} catch (error) {
 		console.error("[API] GET /api/admin/backup error:", error);
 		return NextResponse.json({ error: "Failed to load backup info" }, { status: 500 });
@@ -101,6 +114,13 @@ export async function POST() {
 		}
 
 		const sourceDb = resolveSqlitePath();
+		if (!sourceDb) {
+			return NextResponse.json(
+				{ error: "Backup is supported only for file-based SQLite databases" },
+				{ status: 400 }
+			);
+		}
+
 		const backupName = makeBackupName();
 		const backupPath = path.join(BACKUPS_DIR, backupName);
 

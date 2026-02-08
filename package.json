@@ -11,9 +11,13 @@
 		"test:unit": "vitest run",
 		"test:unit:watch": "vitest",
 		"test:e2e": "playwright test",
-		"test:e2e:ui": "playwright test --ui"
+		"test:e2e:ui": "playwright test --ui",
+		"db:migrate:turso": "node scripts/migrate-sqlite-to-turso.mjs"
 	},
 	"dependencies": {
+		"@libsql/client": "^0.17.0",
+		"@prisma/adapter-libsql": "^6.19.2",
+		"@prisma/client": "^6.19.2",
 		"bcryptjs": "^3.0.3",
 		"classnames": "^2.5.1",
 		"clsx": "^2.1.1",
@@ -29,7 +33,6 @@
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.55.0",
-		"@prisma/client": "^6.19.2",
 		"@tailwindcss/postcss": "^4",
 		"@types/node": "^20",
 		"@types/react": "^19",

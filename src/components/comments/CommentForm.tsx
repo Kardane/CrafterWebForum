@@ -453,13 +453,13 @@ export default function CommentForm({
 					transform: rotate(45deg);
 				}
 
-				.plus-menu {
-					position: absolute;
-					bottom: 0;
-					left: calc(100% + 8px);
-					background: color-mix(in srgb, var(--color-bg-secondary) 95%, transparent);
-					backdrop-filter: blur(4px);
-					border: 1px solid var(--border);
+					.plus-menu {
+						position: absolute;
+						left: 0;
+						bottom: calc(100% + 8px);
+						background: color-mix(in srgb, var(--color-bg-secondary) 95%, transparent);
+						backdrop-filter: blur(4px);
+						border: 1px solid var(--border);
 					border-radius: 8px;
 					padding: 4px;
 					min-width: 170px;
@@ -558,7 +558,7 @@ export default function CommentForm({
 					pointer-events: none;
 				}
 
-				@media (max-width: 640px) {
+					@media (max-width: 640px) {
 					.form-input-wrapper {
 						gap: 6px;
 					}
@@ -568,10 +568,10 @@ export default function CommentForm({
 						height: 34px;
 					}
 
-					.plus-menu {
-						left: 0;
-						bottom: calc(100% + 8px);
-					}
+						.plus-menu {
+							left: 0;
+							bottom: calc(100% + 8px);
+						}
 
 					.submit-btn {
 						padding: 0 12px;
