@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Reply, Copy, Link2, Edit, Trash2, Pin, MoreHorizontal } from "lucide-react";
+import { Reply, Copy, Link2, Edit, Trash2, Pin, Check } from "lucide-react";
 import PostContent from "../posts/PostContent";
 import CommentForm from "./CommentForm";
 import PollCard from "@/components/poll/PollCard";
-import { extractPollData, hasPoll, PollData } from "@/lib/poll";
+import { extractPollData } from "@/lib/poll";
+import { toSessionUserId } from "@/lib/session-user";
+import { useToast } from "@/components/ui/useToast";
 
 interface Comment {
 	id: number;
@@ -15,6 +17,7 @@ interface Comment {
 	updatedAt: string;
 	isPinned: boolean;
 	parentId: number | null;
+	isPostAuthor: boolean;
 	author: {
 		id: number;
 		nickname: string;
@@ -26,87 +29,106 @@ interface Comment {
 
 interface CommentItemProps {
 	comment: Comment;
-	onReply: (content: string) => void;
+	onReplyRequest: (commentId: number, nickname: string) => void;
 	onEdit: (commentId: number, content: string) => void;
 	onDelete: (commentId: number) => void;
 	onPin?: (commentId: number) => void;
 	onVote?: (commentId: number, optionId: number) => void;
 	disabled?: boolean;
 	isContinuation?: boolean;
+	threadRootId?: number;
 }
 
-/**
- * 마인크래프트 헤드 이미지 URL
- */
 function getMinecraftHeadUrl(uuid: string | null, size = 36): string | null {
 	if (!uuid) return null;
 	return `https://api.mineatar.io/face/${uuid}?scale=${Math.ceil(size / 8)}`;
 }
 
-/**
- * 댓글 아이템 컴포넌트 - 레거시 스타일
- * - 36px 원형 아바타
- * - 고정 댓글 배경색
- * - 호버 액션 버튼
- */
+type CopiedType = "text" | "link" | null;
+
 export default function CommentItem({
 	comment,
-	onReply,
+	onReplyRequest,
 	onEdit,
 	onDelete,
 	onPin,
 	onVote,
 	disabled = false,
-	isContinuation = false
+	isContinuation = false,
+	threadRootId,
 }: CommentItemProps) {
 	const { data: session } = useSession();
-	const [isReplying, setIsReplying] = useState(false);
+	const { showToast } = useToast();
 	const [isEditing, setIsEditing] = useState(false);
-	const [showActions, setShowActions] = useState(false);
+	const [copiedType, setCopiedType] = useState<CopiedType>(null);
+	const copiedTimeoutRef = useRef<number | null>(null);
 
-	const isOwner = session?.user?.id === comment.author.id;
+	useEffect(
+		() => () => {
+			if (copiedTimeoutRef.current) {
+				window.clearTimeout(copiedTimeoutRef.current);
+			}
+		},
+		[]
+	);
+
+	const sessionUserId = toSessionUserId(session?.user?.id);
+	const isOwner = sessionUserId === comment.author.id;
 	const isAdmin = (session?.user as { role?: string })?.role === "admin";
 
-	// 투표 데이터 추출
+	const createdAtLabel = new Date(comment.createdAt).toLocaleString("ko-KR", {
+		month: "2-digit",
+		day: "2-digit",
+		hour: "2-digit",
+		minute: "2-digit",
+	});
+	const fullCreatedAtLabel = new Date(comment.createdAt).toLocaleString("ko-KR");
+
 	const pollData = extractPollData(comment.content);
-	const contentWithoutPoll = comment.content.replace(
-		/\[POLL_JSON\][\s\S]*?\[\/POLL_JSON\]/,
-		""
-	).trim();
+	const contentWithoutPoll = comment.content.replace(/\[POLL_JSON\][\s\S]*?\[\/POLL_JSON\]/, "").trim();
+	const resolvedThreadRootId = threadRootId ?? comment.id;
 
-	// 답장 제출
-	const handleReplySubmit = (content: string) => {
-		onReply(content);
-		setIsReplying(false);
-	};
-
-	// 수정 제출
 	const handleEditSubmit = (content: string) => {
 		onEdit(comment.id, content);
 		setIsEditing(false);
 	};
 
-	// 텍스트 복사
-	const handleCopyText = () => {
-		navigator.clipboard.writeText(comment.content);
-		alert("내용이 복사되었습니다");
+	const markCopied = (type: Exclude<CopiedType, null>) => {
+		setCopiedType(type);
+		if (copiedTimeoutRef.current) {
+			window.clearTimeout(copiedTimeoutRef.current);
+		}
+		copiedTimeoutRef.current = window.setTimeout(() => {
+			setCopiedType(null);
+		}, 1200);
 	};
 
-	// 링크 복사
-	const handleCopyLink = () => {
-		const url = `${window.location.origin}${window.location.pathname}#comment-${comment.id}`;
-		navigator.clipboard.writeText(url);
-		alert("링크가 복사되었습니다");
+	const handleCopyText = async () => {
+		try {
+			await navigator.clipboard.writeText(comment.content);
+			markCopied("text");
+			showToast({ type: "success", message: "댓글 내용 복사 완료" });
+		} catch (error) {
+			console.error("Failed to copy comment text:", error);
+			showToast({ type: "error", message: "복사 실패" });
+		}
+	};
+
+	const handleCopyLink = async () => {
+		try {
+			const url = `${window.location.origin}${window.location.pathname}#comment-${comment.id}`;
+			await navigator.clipboard.writeText(url);
+			markCopied("link");
+			showToast({ type: "success", message: "댓글 링크 복사 완료" });
+		} catch (error) {
+			console.error("Failed to copy comment link:", error);
+			showToast({ type: "error", message: "복사 실패" });
+		}
 	};
 
 	return (
 		<div className="comment-wrapper" id={`comment-${comment.id}`}>
-			<div
-				className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isContinuation ? "continuation" : ""}`}
-				onMouseEnter={() => setShowActions(true)}
-				onMouseLeave={() => setShowActions(false)}
-			>
-				{/* 아바타 (연속 댓글이 아닐 때만 표시) */}
+			<div className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isContinuation ? "continuation" : ""}`}>
 				{!isContinuation && (
 					<div className="comment-avatar">
 						{comment.author.minecraftUuid ? (
@@ -116,51 +138,42 @@ export default function CommentItem({
 								className="avatar-img"
 							/>
 						) : (
-							<div className="avatar-fallback">
-								{comment.author.nickname[0].toUpperCase()}
-							</div>
+							<div className="avatar-fallback">{comment.author.nickname[0].toUpperCase()}</div>
 						)}
 					</div>
 				)}
 
-				{/* 콘텐츠 영역 */}
 				<div className={`comment-content ${isContinuation ? "continuation-content" : ""}`}>
-					{/* 작성자 정보 (연속 댓글이 아닐 때만 표시) */}
 					{!isContinuation && (
 						<div className="comment-header">
 							<span className="comment-author">{comment.author.nickname}</span>
-							{comment.author.role === "admin" && (
-								<span className="comment-badge admin">관리자</span>
-							)}
-							{comment.isPinned && (
-								<span className="comment-badge pinned">📌 고정됨</span>
-							)}
-							<span className="comment-time">
-								{new Date(comment.createdAt).toLocaleString("ko-KR")}
-								{comment.updatedAt !== comment.createdAt && " (수정됨)"}
-							</span>
+							{comment.isPostAuthor && <span className="comment-badge author">작성자</span>}
+							{comment.isPinned && <span className="comment-badge pinned">📌 고정됨</span>}
 						</div>
 					)}
 
-					{/* 수정 모드 */}
 					{isEditing ? (
 						<CommentForm
 							onSubmit={handleEditSubmit}
 							onCancel={() => setIsEditing(false)}
 							initialValue={comment.content}
-							placeholder="댓글을 수정하세요..."
+							placeholder="댓글을 수정해줘"
 							disabled={disabled}
 						/>
 					) : (
 						<>
-							{/* 댓글 내용 */}
 							{contentWithoutPoll && (
-								<div className="comment-body">
-									<PostContent content={contentWithoutPoll} />
+								<div className="comment-content-row">
+									<div className="comment-body">
+										<PostContent content={contentWithoutPoll} />
+									</div>
+									<span className="comment-hover-time" title={fullCreatedAtLabel}>
+										{createdAtLabel}
+										{comment.updatedAt !== comment.createdAt ? " (수정됨)" : ""}
+									</span>
 								</div>
 							)}
 
-							{/* 투표 카드 */}
 							{pollData && (
 								<PollCard
 									pollData={pollData}
@@ -170,98 +183,66 @@ export default function CommentItem({
 							)}
 						</>
 					)}
-
-					{/* 답장 버튼 (편집 중이 아닐 때) */}
-					{!isEditing && !comment.parentId && (
-						<button
-							onClick={() => setIsReplying(!isReplying)}
-							disabled={disabled}
-							className="reply-btn"
-						>
-							답장
-						</button>
-					)}
 				</div>
 
-				{/* 호버 액션 버튼 */}
-				{showActions && !isEditing && (
+				{!isEditing && (
 					<div className="comment-actions">
 						<button
+							type="button"
 							className="action-btn"
-							onClick={() => setIsReplying(!isReplying)}
+							onClick={() => onReplyRequest(resolvedThreadRootId, comment.author.nickname)}
 							title="답장"
 						>
-							<Reply size={14} />
+							<Reply size={16} />
 						</button>
-						<button className="action-btn" onClick={handleCopyLink} title="링크 복사">
-							<Link2 size={14} />
+						<button type="button" className="action-btn" onClick={handleCopyLink} title="링크 복사">
+							{copiedType === "link" ? <Check size={16} /> : <Link2 size={16} />}
 						</button>
-						<button className="action-btn" onClick={handleCopyText} title="텍스트 복사">
-							<Copy size={14} />
+						<button type="button" className="action-btn" onClick={handleCopyText} title="텍스트 복사">
+							{copiedType === "text" ? <Check size={16} /> : <Copy size={16} />}
 						</button>
 						{(isOwner || isAdmin) && (
 							<>
-								<button
-									className="action-btn"
-									onClick={() => setIsEditing(true)}
-									title="수정"
-								>
-									<Edit size={14} />
+								<button type="button" className="action-btn" onClick={() => setIsEditing(true)} title="수정">
+									<Edit size={16} />
 								</button>
-								<button
-									className="action-btn danger"
-									onClick={() => onDelete(comment.id)}
-									title="삭제"
-								>
-									<Trash2 size={14} />
+								<button type="button" className="action-btn danger" onClick={() => onDelete(comment.id)} title="삭제">
+									<Trash2 size={16} />
 								</button>
 							</>
 						)}
 						{isAdmin && onPin && (
 							<button
+								type="button"
 								className="action-btn"
 								onClick={() => onPin(comment.id)}
 								title={comment.isPinned ? "고정 해제" : "고정"}
 							>
-								<Pin size={14} />
+								<Pin size={16} />
 							</button>
 						)}
 					</div>
 				)}
 			</div>
 
-			{/* 답장 폼 */}
-			{isReplying && (
-				<div className="reply-form-wrapper">
-					<CommentForm
-						onSubmit={handleReplySubmit}
-						onCancel={() => setIsReplying(false)}
-						placeholder="답장을 입력하세요..."
-						replyTo={comment.author.nickname}
-						disabled={disabled}
-					/>
-				</div>
-			)}
-
-			{/* 대댓글 목록 */}
 			{comment.replies && comment.replies.length > 0 && (
 				<div className="replies-wrapper">
 					{comment.replies.map((reply) => (
 						<CommentItem
 							key={reply.id}
 							comment={reply}
-							onReply={onReply}
+							onReplyRequest={onReplyRequest}
 							onEdit={onEdit}
 							onDelete={onDelete}
 							onPin={onPin}
 							onVote={onVote}
 							disabled={disabled}
+							threadRootId={resolvedThreadRootId}
 						/>
 					))}
 				</div>
 			)}
 
-			{/* 스타일 */}
 			<style jsx>{`
 				.comment-wrapper {
 					margin-bottom: 4px;
@@ -300,14 +281,14 @@ export default function CommentItem({
 				.avatar-img {
 					width: 36px;
 					height: 36px;
-					border-radius: 50%;
+					border-radius: 4px;
 					image-rendering: pixelated;
 				}
 
 				.avatar-fallback {
 					width: 36px;
 					height: 36px;
-					border-radius: 50%;
+					border-radius: 4px;
 					background: var(--bg-tertiary);
 					display: flex;
 					align-items: center;
@@ -344,9 +325,9 @@ export default function CommentItem({
 					border-radius: 4px;
 				}
 
-				.comment-badge.admin {
-					background: var(--accent);
-					color: white;
+				.comment-badge.author {
+					background: #8b2332;
+					color: #fff;
 				}
 
 				.comment-badge.pinned {
@@ -354,29 +335,44 @@ export default function CommentItem({
 					color: var(--bg-primary);
 				}
 
-				.comment-time {
-					font-size: 0.75rem;
-					color: var(--text-muted);
+				.comment-content-row {
+					display: flex;
+					align-items: flex-start;
+					justify-content: space-between;
+					gap: 12px;
 				}
 
 				.comment-body {
 					color: var(--text-secondary);
 					font-size: 0.9rem;
 					line-height: 1.5;
+					min-width: 0;
+					flex: 1;
 				}
 
-				.reply-btn {
-					margin-top: 6px;
-					padding: 0;
-					background: none;
-					border: none;
-					color: var(--accent);
-					font-size: 0.8rem;
-					cursor: pointer;
+				.comment-body :global(.post-content) {
+					margin: 0;
 				}
 
-				.reply-btn:hover {
-					text-decoration: underline;
+				.comment-body :global(.post-content .md-image),
+				.comment-body :global(.post-content .embed-container) {
+					margin-top: 0;
+				}
+
+				.comment-hover-time {
+					font-size: 0.68rem;
+					color: color-mix(in srgb, var(--text-muted) 64%, #000 36%);
+					opacity: 0;
+					transition: opacity 0.15s ease;
+					user-select: none;
+					white-space: nowrap;
+					pointer-events: none;
+					margin-top: 2px;
+					flex-shrink: 0;
+				}
+
+				.comment-wrapper:hover .comment-hover-time {
+					opacity: 1;
 				}
 
 				.comment-actions {
@@ -384,20 +380,31 @@ export default function CommentItem({
 					top: 8px;
 					right: 8px;
 					display: flex;
-					gap: 2px;
-					background: var(--bg-secondary);
-					border: 1px solid var(--border);
-					border-radius: 4px;
-					padding: 2px;
+					gap: 4px;
+					background: color-mix(in srgb, var(--bg-tertiary) 90%, #000 10%);
+					border: 1px solid color-mix(in srgb, var(--border) 80%, #fff 20%);
+					border-radius: 6px;
+					padding: 3px;
+					box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+					backdrop-filter: blur(4px);
+					opacity: 0;
+					pointer-events: none;
+					transition: opacity 0.15s ease;
+				}
+
+				.comment-wrapper:hover .comment-actions,
+				.comment-item:focus-within .comment-actions {
+					opacity: 1;
+					pointer-events: auto;
 				}
 
 				.action-btn {
-					padding: 4px 6px;
+					padding: 6px 7px;
 					background: none;
 					border: none;
 					color: var(--text-muted);
 					cursor: pointer;
-					border-radius: 2px;
+					border-radius: 4px;
 				}
 
 				.action-btn:hover {
@@ -409,17 +416,19 @@ export default function CommentItem({
 					color: var(--error);
 				}
 
-				.reply-form-wrapper {
-					margin-left: 48px;
-					margin-top: 8px;
-				}
-
 				.replies-wrapper {
 					margin-left: 48px;
 					padding-left: 12px;
 					border-left: 2px solid var(--border);
 				}
+
+				@media (hover: none) {
+					.comment-actions {
+						opacity: 1;
+						pointer-events: auto;
+					}
+				}
 			`}</style>
-		</div>
-	);
-}
+			</div>
+		);
+	}

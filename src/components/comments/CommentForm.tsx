@@ -1,69 +1,119 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { DragEvent, useEffect, useRef, useState } from "react";
 import { Plus, Paperclip, BarChart3, HelpCircle, X } from "lucide-react";
 import PollModal from "@/components/poll/PollModal";
+import MarkdownHelpModal from "@/components/comments/MarkdownHelpModal";
 import { serializePollData, PollData } from "@/lib/poll";
+import { useToast } from "@/components/ui/useToast";
 
 interface CommentFormProps {
-	onSubmit: (content: string) => void;
+	onSubmit: (content: string) => Promise<void> | void;
 	disabled?: boolean;
 	placeholder?: string;
 	initialValue?: string;
 	onCancel?: () => void;
 	replyTo?: string;
+	variant?: "composer" | "inline";
 }
 
-/**
- * 댓글 작성 폼 - 레거시 스타일
- * - 하단 고정 (sticky)
- * - + 버튼 메뉴 (파일 첨부, 투표 만들기, 마크다운 도움말)
- * - 답장 바 표시
- */
+interface UploadPayload {
+	type: "image" | "file";
+	url: string;
+	originalName: string;
+	error?: string;
+}
+
 export default function CommentForm({
 	onSubmit,
 	disabled = false,
 	placeholder = "댓글을 입력하세요...",
 	initialValue = "",
 	onCancel,
-	replyTo
+	replyTo,
+	variant = "inline",
 }: CommentFormProps) {
+	const { showToast } = useToast();
 	const [content, setContent] = useState(initialValue);
 	const [isMenuOpen, setIsMenuOpen] = useState(false);
 	const [isPollModalOpen, setIsPollModalOpen] = useState(false);
 	const [isSyntaxHelpOpen, setIsSyntaxHelpOpen] = useState(false);
+	const [isUploading, setIsUploading] = useState(false);
+	const [isDragActive, setIsDragActive] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	const dragDepthRef = useRef(0);
 
-	// 폼 제출
-	const handleSubmit = (e: React.FormEvent) => {
-		e.preventDefault();
+	useEffect(() => {
+		setContent(initialValue);
+	}, [initialValue]);
+
+	const appendUploadedContent = (payload: UploadPayload) => {
+		const snippet =
+			payload.type === "image"
+				? `![${payload.originalName}](${payload.url})`
+				: `[📦 ${payload.originalName}](${payload.url})`;
+		setContent((prev) => prev + (prev ? "\n" : "") + snippet);
+	};
+
+	const uploadFiles = async (files: File[]) => {
+		if (files.length === 0) return;
+
+		setIsUploading(true);
+		try {
+			for (const file of files) {
+				const formData = new FormData();
+				formData.append("file", file);
+
+				const response = await fetch("/api/upload", {
+					method: "POST",
+					body: formData,
+				});
+				const data = (await response.json()) as UploadPayload | { error: string };
+
+				if (!response.ok || !("url" in data)) {
+					const message = "error" in data ? data.error : "파일 업로드에 실패했습니다";
+					throw new Error(message);
+				}
+
+				appendUploadedContent(data);
+			}
+
+			showToast({ type: "success", message: "파일 업로드 완료" });
+			setIsMenuOpen(false);
+		} catch (error) {
+			console.error("Comment attachment upload error:", error);
+			showToast({
+				type: "error",
+				message: error instanceof Error ? error.message : "파일 업로드에 실패했습니다",
+			});
+		} finally {
+			setIsUploading(false);
+		}
+	};
+
+	const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+		const files = event.target.files;
+		if (!files || files.length === 0) return;
+		await uploadFiles(Array.from(files));
+		event.target.value = "";
+	};
+
+	const handleSubmit = async (event: React.FormEvent) => {
+		event.preventDefault();
 
 		if (!content.trim()) {
-			alert("댓글 내용을 입력해주세요.");
+			showToast({ type: "error", message: "댓글 내용을 입력해줘" });
 			return;
 		}
 
-		onSubmit(content);
-		setContent("");
+		try {
+			await onSubmit(content);
+			setContent("");
+		} catch (error) {
+			console.error("Comment submit error:", error);
+		}
 	};
 
-	// 파일 선택
-	const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-		const files = e.target.files;
-		if (!files || files.length === 0) return;
-
-		const file = files[0];
-
-		// TODO: 파일 업로드 API 호출
-		// 현재는 placeholder 텍스트 추가
-		const fileText = `[파일: ${file.name}]`;
-		setContent((prev) => prev + (prev ? "\n" : "") + fileText);
-
-		// 메뉴 닫기
-		setIsMenuOpen(false);
-	};
-
-	// 투표 생성
 	const handlePollCreate = (pollData: PollData) => {
 		const pollString = serializePollData(pollData);
 		setContent((prev) => prev + (prev ? "\n" : "") + pollString);
@@ -71,62 +121,90 @@ export default function CommentForm({
 		setIsMenuOpen(false);
 	};
 
+	const handleDragEnter = (event: DragEvent<HTMLFormElement>) => {
+		if (variant !== "composer") return;
+		event.preventDefault();
+		event.stopPropagation();
+		dragDepthRef.current += 1;
+		setIsDragActive(true);
+	};
+
+	const handleDragLeave = (event: DragEvent<HTMLFormElement>) => {
+		if (variant !== "composer") return;
+		event.preventDefault();
+		event.stopPropagation();
+		dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+		if (dragDepthRef.current === 0) {
+			setIsDragActive(false);
+		}
+	};
+
+	const handleDragOver = (event: DragEvent<HTMLFormElement>) => {
+		if (variant !== "composer") return;
+		event.preventDefault();
+		event.stopPropagation();
+	};
+
+	const handleDrop = (event: DragEvent<HTMLFormElement>) => {
+		if (variant !== "composer") return;
+		event.preventDefault();
+		event.stopPropagation();
+		dragDepthRef.current = 0;
+		setIsDragActive(false);
+		const files = Array.from(event.dataTransfer.files ?? []);
+		void uploadFiles(files);
+	};
+
 	return (
 		<>
-			<form onSubmit={handleSubmit} className="comment-form">
-				{/* 답장 바 */}
+			<form
+				onSubmit={handleSubmit}
+				className={`comment-form ${variant} ${isDragActive ? "drag-active" : ""}`}
+				onDragEnter={handleDragEnter}
+				onDragLeave={handleDragLeave}
+				onDragOver={handleDragOver}
+				onDrop={handleDrop}
+			>
 				{replyTo && (
 					<div className="reply-bar">
 						<span>
 							<span className="reply-name">@{replyTo}</span>님에게 답장
 						</span>
 						{onCancel && (
-							<button
-								type="button"
-								className="reply-cancel"
-								onClick={onCancel}
-							>
+							<button type="button" className="reply-cancel" onClick={onCancel}>
 								<X size={14} />
 							</button>
 						)}
 					</div>
 				)}
 
-				{/* 입력 영역 */}
 				<div className="form-input-wrapper">
-					{/* + 버튼 */}
 					<div className="plus-btn-wrapper">
 						<button
 							type="button"
 							className={`plus-btn ${isMenuOpen ? "active" : ""}`}
-							onClick={() => setIsMenuOpen(!isMenuOpen)}
+							onClick={() => setIsMenuOpen((prev) => !prev)}
 						>
-							<Plus size={20} />
+							<Plus size={18} />
 						</button>
 
-						{/* 메뉴 드롭다운 */}
 						{isMenuOpen && (
 							<div className="plus-menu">
-								<button
-									type="button"
-									className="menu-item"
-									onClick={() => fileInputRef.current?.click()}
-								>
+								<button type="button" className="menu-item" onClick={() => fileInputRef.current?.click()}>
 									<Paperclip size={16} />
 									파일 첨부
 								</button>
-								<button
-									type="button"
-									className="menu-item"
-									onClick={() => setIsPollModalOpen(true)}
-								>
+								<button type="button" className="menu-item" onClick={() => setIsPollModalOpen(true)}>
 									<BarChart3 size={16} />
 									투표 만들기
 								</button>
 								<button
 									type="button"
 									className="menu-item"
-									onClick={() => setIsSyntaxHelpOpen(!isSyntaxHelpOpen)}
+									onClick={() => {
+										setIsSyntaxHelpOpen(true);
+										setIsMenuOpen(false);
+									}}
 								>
 									<HelpCircle size={16} />
 									문법 도움말
@@ -135,10 +213,9 @@ export default function CommentForm({
 						)}
 					</div>
 
-					{/* 텍스트 입력 */}
 					<textarea
 						value={content}
-						onChange={(e) => setContent(e.target.value)}
+						onChange={(event) => setContent(event.target.value)}
 						placeholder={placeholder}
 						disabled={disabled}
 						className="comment-textarea"
@@ -146,80 +223,51 @@ export default function CommentForm({
 						onFocus={() => setIsMenuOpen(false)}
 					/>
 
-					{/* 제출 버튼 */}
-					<button
-						type="submit"
-						disabled={disabled || !content.trim()}
-						className="submit-btn"
-					>
-						{disabled ? "..." : "전송"}
+					<button type="submit" disabled={disabled || isUploading || !content.trim()} className="submit-btn">
+						{isUploading ? "업로드..." : disabled ? "..." : "전송"}
 					</button>
 				</div>
 
-				{/* 취소 버튼 (수정 모드일 때) */}
+				{isDragActive && variant === "composer" && (
+					<div className="drop-overlay">
+						파일을 놓으면 바로 업로드됨
+					</div>
+				)}
+
 				{onCancel && !replyTo && (
 					<div className="cancel-wrapper">
-						<button
-							type="button"
-							onClick={onCancel}
-							disabled={disabled}
-							className="btn btn-secondary btn-sm"
-						>
+						<button type="button" onClick={onCancel} disabled={disabled} className="btn btn-secondary btn-sm">
 							취소
 						</button>
 					</div>
 				)}
 
-				{/* 숨겨진 파일 입력 */}
-				<input
-					type="file"
-					ref={fileInputRef}
-					onChange={handleFileSelect}
-					style={{ display: "none" }}
-				/>
-
-				{/* 문법 도움말 */}
-				{isSyntaxHelpOpen && (
-					<div className="syntax-help">
-						<div className="syntax-title">마크다운 문법</div>
-						<div className="syntax-item">
-							<code>**굵게**</code> → <strong>굵게</strong>
-						</div>
-						<div className="syntax-item">
-							<code>*기울임*</code> → <em>기울임</em>
-						</div>
-						<div className="syntax-item">
-							<code>~~취소선~~</code> → <del>취소선</del>
-						</div>
-						<div className="syntax-item">
-							<code>`코드`</code> → <code>코드</code>
-						</div>
-						<div className="syntax-item">
-							<code>[링크](url)</code> → 링크
-						</div>
-						<div className="syntax-item">
-							<code>```언어{"\n"}코드```</code> → 코드 블록
-						</div>
-					</div>
-				)}
+				<input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
 			</form>
 
-			{/* 투표 모달 */}
-			<PollModal
-				isOpen={isPollModalOpen}
-				onClose={() => setIsPollModalOpen(false)}
-				onSubmit={handlePollCreate}
-			/>
+			<PollModal isOpen={isPollModalOpen} onClose={() => setIsPollModalOpen(false)} onSubmit={handlePollCreate} />
+			<MarkdownHelpModal isOpen={isSyntaxHelpOpen} onClose={() => setIsSyntaxHelpOpen(false)} />
 
-			{/* 스타일 */}
 			<style jsx>{`
 				.comment-form {
+					display: flex;
+					flex-direction: column;
+					gap: 8px;
+					position: relative;
+				}
+
+				.comment-form.composer {
+					padding: 10px 12px;
 					background: var(--bg-secondary);
-					border-top: 1px solid var(--border);
-					padding: 12px;
-					position: sticky;
-					bottom: 0;
-					z-index: 10;
+					border: 1px solid var(--border);
+					border-radius: 10px;
+					box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.28);
+				}
+
+				.comment-form.inline {
+					padding: 0;
+					background: transparent;
+					border: none;
 				}
 
 				.reply-bar {
@@ -227,16 +275,15 @@ export default function CommentForm({
 					align-items: center;
 					justify-content: space-between;
 					padding: 8px 12px;
-					margin-bottom: 8px;
 					background: var(--bg-tertiary);
-					border-radius: 4px;
+					border-radius: 6px;
 					font-size: 0.85rem;
 					color: var(--text-secondary);
 				}
 
 				.reply-name {
 					color: var(--accent);
-					font-weight: 500;
+					font-weight: 600;
 				}
 
 				.reply-cancel {
@@ -253,20 +300,21 @@ export default function CommentForm({
 
 				.form-input-wrapper {
 					display: flex;
-					align-items: flex-start;
+					align-items: stretch;
 					gap: 8px;
 				}
 
 				.plus-btn-wrapper {
 					position: relative;
+					flex-shrink: 0;
 				}
 
 				.plus-btn {
-					width: 36px;
-					height: 36px;
-					background: var(--bg-tertiary);
+					width: 42px;
+					height: 42px;
+					background: var(--bg-primary);
 					border: 1px solid var(--border);
-					border-radius: 50%;
+					border-radius: 999px;
 					display: flex;
 					align-items: center;
 					justify-content: center;
@@ -277,7 +325,7 @@ export default function CommentForm({
 
 				.plus-btn:hover,
 				.plus-btn.active {
-					background: var(--accent);
+					background: color-mix(in srgb, var(--accent) 65%, var(--bg-primary) 35%);
 					border-color: var(--accent);
 					color: white;
 					transform: rotate(45deg);
@@ -285,15 +333,15 @@ export default function CommentForm({
 
 				.plus-menu {
 					position: absolute;
-					bottom: 100%;
+					bottom: calc(100% + 8px);
 					left: 0;
-					margin-bottom: 8px;
-					background: var(--bg-secondary);
+					background: var(--bg-primary);
 					border: 1px solid var(--border);
 					border-radius: 8px;
 					padding: 4px;
-					min-width: 160px;
-					box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+					min-width: 170px;
+					box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+					z-index: 40;
 				}
 
 				.menu-item {
@@ -318,15 +366,20 @@ export default function CommentForm({
 
 				.comment-textarea {
 					flex: 1;
-					padding: 8px 12px;
+					padding: 10px 12px;
 					background: var(--bg-tertiary);
 					border: 1px solid var(--border);
-					border-radius: 4px;
+					border-radius: 6px;
 					color: var(--text-primary);
-					font-size: 0.9rem;
+					font-size: 0.92rem;
 					resize: none;
-					min-height: 36px;
-					max-height: 150px;
+					min-height: 42px;
+					max-height: 180px;
+					overflow-y: auto;
+				}
+
+				.comment-form.composer .comment-textarea {
+					background: #1f1c1a;
 				}
 
 				.comment-textarea:focus {
@@ -335,13 +388,14 @@ export default function CommentForm({
 				}
 
 				.submit-btn {
-					padding: 8px 16px;
+					padding: 0 16px;
+					min-height: 42px;
 					background: var(--accent);
 					border: none;
-					border-radius: 4px;
+					border-radius: 6px;
 					color: white;
 					font-size: 0.9rem;
-					font-weight: 500;
+					font-weight: 600;
 					cursor: pointer;
 					white-space: nowrap;
 				}
@@ -356,37 +410,37 @@ export default function CommentForm({
 				}
 
 				.cancel-wrapper {
-					margin-top: 8px;
 					text-align: right;
 				}
 
-				.syntax-help {
-					margin-top: 12px;
-					padding: 12px;
-					background: var(--bg-tertiary);
-					border-radius: 4px;
-					font-size: 0.85rem;
-				}
-
-				.syntax-title {
-					font-weight: 600;
-					color: var(--text-primary);
-					margin-bottom: 8px;
-				}
-
-				.syntax-item {
+				.drop-overlay {
+					position: absolute;
+					inset: 0;
 					display: flex;
 					align-items: center;
-					gap: 8px;
-					color: var(--text-secondary);
-					margin-bottom: 4px;
+					justify-content: center;
+					background: rgba(0, 0, 0, 0.55);
+					border: 1px dashed var(--accent);
+					border-radius: 10px;
+					color: #fff;
+					font-weight: 600;
+					pointer-events: none;
 				}
 
-				.syntax-item code {
-					background: var(--bg-secondary);
-					padding: 2px 6px;
-					border-radius: 3px;
-					font-family: monospace;
+				@media (max-width: 640px) {
+					.form-input-wrapper {
+						gap: 6px;
+					}
+
+					.plus-btn {
+						width: 38px;
+						height: 38px;
+					}
+
+					.submit-btn {
+						padding: 0 12px;
+						min-height: 38px;
+					}
 				}
 			`}</style>
 		</>
