@@ -12,7 +12,9 @@
 		"test:unit:watch": "vitest",
 		"test:e2e": "playwright test",
 		"test:e2e:ui": "playwright test --ui",
-		"db:migrate:turso": "node scripts/migrate-sqlite-to-turso.mjs"
+		"db:migrate:turso": "node scripts/migrate-sqlite-to-turso.mjs",
+		"db:apply:oracle": "node scripts/apply-oracle-legacy-data.mjs",
+		"check:deploy": "node scripts/check-deploy-readiness.mjs"
 	},
 	"dependencies": {
 		"@libsql/client": "^0.17.0",

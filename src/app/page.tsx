@@ -1,5 +1,7 @@
 import PostFilters from "@/components/posts/PostFilters";
 import PostList from "@/components/posts/PostList";
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 
 // API Base URL 유틸리티
 const getBaseUrl = () => {
@@ -32,6 +34,11 @@ interface PageProps {
 
 // Next.js 15 type compatibility
 export default async function Home(props: PageProps) {
+	const session = await auth();
+	if (!session?.user) {
+		redirect("/login?callbackUrl=/");
+	}
+
 	const searchParams = await props.searchParams;
 	let data;
 	try {

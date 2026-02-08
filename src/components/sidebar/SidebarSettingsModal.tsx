@@ -17,73 +17,80 @@ interface SidebarSettingsModalProps {
 	onClose: () => void;
 }
 
+interface SidebarSettingsModalContentProps {
+	onClose: () => void;
+}
+
+function buildSidebarModalInitialState() {
+	const currentSettings = getSidebarSettings();
+
+	// 기본 링크 (isCustom: false 강제 불필요, 이미 설정됨)
+	const defaultItems = DEFAULT_LINKS;
+
+	// 커스텀 링크
+	const customItems = (currentSettings.customLinks || []).map((link: SidebarLink) => ({
+		...link,
+		isCustom: true,
+	}));
+
+	// 전체 병합
+	const allLinks = [...defaultItems, ...customItems];
+
+	// 중복 ID 제거 (핵심 수정)
+	const uniqueLinksMap = new Map<string, SidebarLink>();
+	allLinks.forEach((link) => {
+		const id = link.id ?? "";
+		if (id && !uniqueLinksMap.has(id)) {
+			uniqueLinksMap.set(id, link);
+		}
+	});
+	const uniqueLinks = Array.from(uniqueLinksMap.values());
+
+	// 삭제된 항목 필터링
+	const filteredLinks = uniqueLinks.filter((link) => !currentSettings.deleted?.includes(link.id ?? ""));
+
+	// 순서 정렬
+	if (currentSettings.order && currentSettings.order.length > 0) {
+		const orderMap = new Map<string, number>();
+		currentSettings.order.forEach((id, index) => {
+			orderMap.set(id, index);
+		});
+
+		filteredLinks.sort((a, b) => {
+			const orderA = orderMap.get(a.id ?? "") ?? 9999;
+			const orderB = orderMap.get(b.id ?? "") ?? 9999;
+			return orderA - orderB;
+		});
+	} else {
+		// 기본 정렬: SSR/CSR 동일 순서 보장
+		filteredLinks.sort(compareSidebarLinks);
+	}
+
+	return { settings: currentSettings, items: filteredLinks };
+}
+
+export default function SidebarSettingsModal({ isOpen, onClose }: SidebarSettingsModalProps) {
+	if (!isOpen) {
+		return null;
+	}
+
+	return <SidebarSettingsModalContent onClose={onClose} />;
+}
+
 /**
  * 사이드바 설정 모달 - 레거시 스타일
  * - 드래그 정렬
  * - 링크 숨기기/표시
  * - 커스텀 링크 추가/편집/삭제
  */
-export default function SidebarSettingsModal({
-	isOpen,
-	onClose
-}: SidebarSettingsModalProps) {
-	const [settings, setSettings] = useState<SidebarSettings>(getSidebarSettings());
-	const [items, setItems] = useState<SidebarLink[]>([]);
+function SidebarSettingsModalContent({ onClose }: SidebarSettingsModalContentProps) {
+	const [initialState] = useState(buildSidebarModalInitialState);
+	const [settings, setSettings] = useState<SidebarSettings>(initialState.settings);
+	const [items, setItems] = useState<SidebarLink[]>(initialState.items);
 	const [draggedItem, setDraggedItem] = useState<SidebarLink | null>(null);
 	const [newLinkTitle, setNewLinkTitle] = useState("");
 	const [newLinkUrl, setNewLinkUrl] = useState("");
 	const [showAddModal, setShowAddModal] = useState(false); // 링크 추가 모달 표시 상태
-
-	// 아이템 목록 초기화
-	useEffect(() => {
-		if (isOpen) {
-			const currentSettings = getSidebarSettings();
-			setSettings(currentSettings);
-
-			// 기본 링크 (isCustom: false 강제 불필요, 이미 설정됨)
-			const defaultItems = DEFAULT_LINKS;
-
-			// 커스텀 링크
-				const customItems = (currentSettings.customLinks || []).map((l: SidebarLink) => ({
-					...l,
-					isCustom: true
-				}));
-
-			// 전체 병합
-			const allLinks = [...defaultItems, ...customItems];
-
-			// 중복 ID 제거 (핵심 수정)
-			const uniqueLinksMap = new Map();
-			allLinks.forEach(link => {
-				if (!uniqueLinksMap.has(link.id)) {
-					uniqueLinksMap.set(link.id, link);
-				}
-			});
-			const uniqueLinks = Array.from(uniqueLinksMap.values());
-
-			// 삭제된 항목 필터링
-			const filteredLinks = uniqueLinks.filter(l => !currentSettings.deleted?.includes(l.id!));
-
-			// 순서 정렬
-				if (currentSettings.order && currentSettings.order.length > 0) {
-				const orderMap = new Map<string, number>();
-				currentSettings.order.forEach((id, index) => {
-					orderMap.set(id, index);
-				});
-
-					filteredLinks.sort((a, b) => {
-						const orderA = orderMap.get(a.id!) ?? 9999;
-						const orderB = orderMap.get(b.id!) ?? 9999;
-						return orderA - orderB;
-					});
-				} else {
-					// 기본 정렬: SSR/CSR 동일 순서 보장
-					filteredLinks.sort(compareSidebarLinks);
-				}
-
-			setItems(filteredLinks);
-		}
-	}, [isOpen]);
 
 	// ESC 키로 모달 닫기
 	useEffect(() => {
@@ -94,12 +101,9 @@ export default function SidebarSettingsModal({
 			}
 		};
 
-		if (isOpen) {
-			document.addEventListener("keydown", handleEsc);
-		}
-
+		document.addEventListener("keydown", handleEsc);
 		return () => document.removeEventListener("keydown", handleEsc);
-	}, [isOpen, onClose]);
+	}, [onClose]);
 
 	// 드래그 핸들러
 	const handleDragStart = (e: DragEvent<HTMLDivElement>, item: SidebarLink) => {
@@ -233,8 +237,6 @@ export default function SidebarSettingsModal({
 		window.dispatchEvent(new Event("sidebarSettingsChanged"));
 		onClose();
 	};
-
-	if (!isOpen) return null;
 
 	return (
 		<>

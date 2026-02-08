@@ -15,6 +15,12 @@ const eslintConfig = defineConfig([
     "coverage/**",
     "playwright-report/**",
     "test-results/**",
+    // Local automation/docs/reference folders should not block app lint gate.
+    ".agent/**",
+    "legacy/**",
+    "보고서/**",
+    "AGENTS.md",
+    "walkthrough.md",
     // Generated Prisma client files should not be linted.
     "src/generated/**",
   ]),

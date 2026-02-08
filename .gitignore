@@ -12,7 +12,7 @@
 /coverage
 /playwright-report/
 /test-results/
-
+/oracle/
 # next.js
 /.next/
 /out/
