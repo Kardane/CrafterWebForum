@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { PrismaClient } from "@/generated/client";
-
-const prisma = new PrismaClient();
+import { getDeprecationHeaders } from "@/lib/deprecation";
+import { getUserProfile } from "@/lib/user-service";
 
 /**
  * 사용자 프로필 정보 API
@@ -20,59 +19,26 @@ export async function GET() {
 
 		if (!session?.user) {
 			return NextResponse.json(
-				{ error: "auth_error_unauthorized" },
+				{ error: "unauthorized" },
 				{ status: 401 }
 			);
 		}
 
-		// 사용자 정보 조회
-		const user = await prisma.user.findUnique({
-			where: { id: session.user.id },
-			select: {
-				id: true,
-				email: true,
-				nickname: true,
-				role: true,
-				minecraftUuid: true,
-				createdAt: true,
-				lastAuthAt: true,
-			},
-		});
-
-		if (!user) {
+		const profile = await getUserProfile(session.user.id);
+		if (!profile) {
 			return NextResponse.json(
-				{ error: "auth_error_unauthorized" },
+				{ error: "not_found" },
 				{ status: 404 }
 			);
 		}
 
-		// 게시글 수 조회
-		const postCount = await prisma.post.count({
-			where: {
-				authorId: session.user.id,
-				deletedAt: null,
-			},
+		return NextResponse.json(profile, {
+			headers: getDeprecationHeaders("/api/users/me"),
 		});
-
-		// 댓글 수 조회
-		const commentCount = await prisma.comment.count({
-			where: {
-				authorId: session.user.id,
-			},
-		});
-
-		return NextResponse.json({
-			user,
-			stats: {
-				posts: postCount,
-				comments: commentCount,
-			},
-			last_auth_at: user.lastAuthAt,
-		});
-	} catch (error) {
+	} catch (error: unknown) {
 		console.error("[Auth] /profile error:", error);
 		return NextResponse.json(
-			{ error: "server_error" },
+			{ error: "internal_server_error" },
 			{ status: 500 }
 		);
 	}

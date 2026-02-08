@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { compare, hash } from "bcryptjs";
-import { PrismaClient } from "@/generated/client";
-
-const prisma = new PrismaClient();
+import { getDeprecationHeaders } from "@/lib/deprecation";
+import { changeUserPassword } from "@/lib/user-service";
 
 /**
  * 비밀번호 변경 API
@@ -20,77 +18,55 @@ export async function PUT(req: NextRequest) {
 
 		if (!session?.user) {
 			return NextResponse.json(
-				{ error: "auth_error_unauthorized" },
+				{ error: "unauthorized" },
 				{ status: 401 }
 			);
 		}
 
-		const body = await req.json();
-		const { currentPassword, newPassword } = body;
+		const body = await req.json() as {
+			currentPassword?: unknown;
+			newPassword?: unknown;
+		};
+		const result = await changeUserPassword(
+			session.user.id,
+			body.currentPassword,
+			body.newPassword
+		);
 
-		// 필수 필드 검증
-		if (!currentPassword || !newPassword) {
+		if (!result.ok) {
+			if (result.reason === "validation_error") {
+				return NextResponse.json(
+					{ error: "validation_error" },
+					{ status: 400 }
+				);
+			}
+
+			if (result.reason === "wrong_password") {
+				return NextResponse.json(
+					{ error: "wrong_password" },
+					{ status: 400 }
+				);
+			}
+
 			return NextResponse.json(
-				{ error: "validation_error_required" },
-				{ status: 400 }
-			);
-		}
-
-		// 새 비밀번호 길이 검증
-		if (newPassword.length < 8) {
-			return NextResponse.json(
-				{ error: "validation_error_password" },
-				{ status: 400 }
-			);
-		}
-
-		// 사용자 조회 (비밀번호 포함)
-		const user = await prisma.user.findUnique({
-			where: { id: session.user.id },
-			select: {
-				id: true,
-				nickname: true,
-				password: true,
-			},
-		});
-
-		if (!user) {
-			return NextResponse.json(
-				{ error: "auth_error_unauthorized" },
+				{ error: "not_found" },
 				{ status: 404 }
 			);
 		}
 
-		// 현재 비밀번호 검증
-		const isValidPassword = await compare(currentPassword, user.password);
-		if (!isValidPassword) {
-			return NextResponse.json(
-				{ error: "profile_error_wrong_password" },
-				{ status: 401 }
-			);
-		}
-
-		// 새 비밀번호 해싱
-		const hashedPassword = await hash(newPassword, 10);
-
-		// 비밀번호 업데이트
-		await prisma.user.update({
-			where: { id: user.id },
-			data: { password: hashedPassword },
-		});
-
-		console.log(
-			`[Auth] Password Changed: ${user.nickname} (ID: ${user.id})`
+		return NextResponse.json(
+			{
+				success: true,
+				message: "password_updated",
+			},
+			{
+				headers: getDeprecationHeaders("/api/users/me/password"),
+			}
 		);
-
-		return NextResponse.json({
-			success: true,
-			message: "profile_success_password",
-		});
-	} catch (error) {
+	} catch (error: unknown) {
 		console.error("[Auth] /password error:", error);
 		return NextResponse.json(
-			{ error: "server_error" },
+			{ error: "internal_server_error" },
 			{ status: 500 }
 		);
 	}

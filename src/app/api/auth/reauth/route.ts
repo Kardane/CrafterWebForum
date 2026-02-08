@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { PrismaClient } from "@/generated/client";
-
-const prisma = new PrismaClient();
+import { getDeprecationHeaders } from "@/lib/deprecation";
+import { updateMinecraftIdentity } from "@/lib/user-service";
 
 /**
  * 마인크래프트 재인증 API
@@ -19,48 +18,36 @@ export async function POST(req: NextRequest) {
 
 		if (!session?.user) {
 			return NextResponse.json(
-				{ error: "auth_error_unauthorized" },
+				{ error: "unauthorized" },
 				{ status: 401 }
 			);
 		}
 
-		const body = await req.json();
-		const { nickname, uuid } = body;
+		const body = await req.json() as {
+			nickname?: unknown;
+			uuid?: unknown;
+		};
+		const nickname = typeof body.nickname === "string" ? body.nickname.trim() : "";
+		const uuid = typeof body.uuid === "string" ? body.uuid.trim() : "";
 
 		// 필수 필드 검증
 		if (!nickname || !uuid) {
 			return NextResponse.json(
-				{ error: "validation_error_required" },
+				{ error: "validation_error" },
 				{ status: 400 }
 			);
 		}
 
-		console.log(
-			`[Auth] Reauth Requested for ${session.user.nickname} -> ${nickname} (UUID: ${uuid})`
-		);
-
-		// 닉네임/UUID 업데이트
-		const result = await prisma.user.update({
-			where: { id: session.user.id },
-			data: {
-				nickname,
-				minecraftNickname: nickname,
-				minecraftUuid: uuid,
-				lastAuthAt: new Date(),
+		const result = await updateMinecraftIdentity(session.user.id, nickname, uuid);
+		return NextResponse.json(
+			{
+				success: true,
+				last_auth_at: result.lastAuthAt,
 			},
-			select: {
-				lastAuthAt: true,
-			},
-		});
-
-		console.log(
-			`[Auth] Reauth Success: New Timestamp: ${result.lastAuthAt}`
+			{
+				headers: getDeprecationHeaders("/api/users/me/minecraft-reauth"),
+			}
 		);
-
-		return NextResponse.json({
-			success: true,
-			last_auth_at: result.lastAuthAt,
-		});
 	} catch (error: unknown) {
 		console.error("[Auth] Reauth Error:", error);
 
@@ -72,13 +59,13 @@ export async function POST(req: NextRequest) {
 		) {
 			// Prisma unique constraint violation
 			return NextResponse.json(
-				{ error: "auth_error_exists" },
+				{ error: "conflict" },
 				{ status: 400 }
 			);
 		}
 
 		return NextResponse.json(
-			{ error: "db_error" },
+			{ error: "internal_server_error" },
 			{ status: 500 }
 		);
 	}
