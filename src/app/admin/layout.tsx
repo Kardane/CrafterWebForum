@@ -7,10 +7,7 @@ export default async function AdminLayout({
 }: Readonly<{ children: React.ReactNode }>) {
 	const admin = await requireAdmin();
 	if ("response" in admin) {
-		if (admin.response.status === 401) {
-			redirect("/login?callbackUrl=/admin");
-		}
-		redirect("/");
+		redirect("/login?callbackUrl=/admin");
 	}
 
 	return (
