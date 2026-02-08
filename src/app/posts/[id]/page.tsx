@@ -97,8 +97,8 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 					initialLiked={post.user_liked}
 					commentCount={totalCommentCount}
 					triggerId="post-header-trigger"
-					topOffsetClassName="top-0"
-					observerOffsetTop={0}
+					topOffsetClassName="top-12"
+					observerOffsetTop={48}
 				/>
 				<div id="post-header-trigger" className="h-px" />
 

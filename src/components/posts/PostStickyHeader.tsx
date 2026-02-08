@@ -43,34 +43,33 @@ export default function PostStickyHeader({
 	const [isVisible, setIsVisible] = useState(false);
 
 	useEffect(() => {
-		const trigger = document.getElementById(triggerId);
-		if (!trigger) {
-			const onScroll = () => setIsVisible(window.scrollY > 220);
-			onScroll();
-			window.addEventListener("scroll", onScroll, { passive: true });
-			return () => window.removeEventListener("scroll", onScroll);
-		}
-
-		const observer = new IntersectionObserver(
-			([entry]) => {
-				setIsVisible(!entry.isIntersecting);
-			},
-			{
-				rootMargin: `-${observerOffsetTop}px 0px 0px 0px`,
-				threshold: 0,
+		const handleScroll = () => {
+			const trigger = document.getElementById(triggerId);
+			if (!trigger) {
+				setIsVisible(window.scrollY > 220);
+				return;
 			}
-		);
-		observer.observe(trigger);
-		return () => observer.disconnect();
+
+			const triggerTop = trigger.getBoundingClientRect().top;
+			const scrolledEnough = window.scrollY > 120;
+			setIsVisible(scrolledEnough && triggerTop <= observerOffsetTop + 4);
+		};
+
+		handleScroll();
+		window.addEventListener("scroll", handleScroll, { passive: true });
+		window.addEventListener("resize", handleScroll);
+		return () => {
+			window.removeEventListener("scroll", handleScroll);
+			window.removeEventListener("resize", handleScroll);
+		};
 	}, [triggerId, observerOffsetTop]);
 
 	return (
 		<div
-			className={`sticky ${topOffsetClassName} z-40 mb-3 transition-all duration-200 ${
-				isVisible
+			className={`sticky ${topOffsetClassName} z-[45] mb-3 transition-all duration-200 ${isVisible
 					? "opacity-100 translate-y-0"
 					: "opacity-0 -translate-y-2 pointer-events-none"
-			}`}
+				}`}
 		>
 			<div className="rounded-md border border-border bg-bg-secondary/95 px-3 py-2 shadow-[0_6px_20px_rgba(0,0,0,0.25)] backdrop-blur">
 				<div className="flex items-center gap-3">
