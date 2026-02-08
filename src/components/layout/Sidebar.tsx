@@ -77,6 +77,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 			allLinks = allLinks.filter((l) => !settings.hidden.includes(l.id!));
 		}
 
+		// 삭제 처리 (기본 링크)
+		if (settings.deleted) {
+			allLinks = allLinks.filter((l) => !settings.deleted!.includes(l.id!));
+		}
+
 		setLinks(allLinks);
 	};
 
@@ -191,7 +196,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
 							<button
 								className="sidebar-logout-btn shrink-0 ml-1"
-								onClick={() => signOut()}
+								onClick={() => signOut({ callbackUrl: "/login" })}
 								title="로그아웃"
 							>
 								<LogOut size={15} />
@@ -201,7 +206,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 						<div className="footer-actions grid grid-cols-2 gap-2">
 							<Link href="/inquiries" className="footer-action-btn justify-center">
 								<HelpCircle size={14} />
-								<span>문의하기</span>
+								<span className="whitespace-nowrap overflow-hidden text-ellipsis">문의하기</span>
 								{inquiryCount > 0 && (
 									<span className="inquiry-badge ml-1">{inquiryCount}</span>
 								)}
@@ -210,12 +215,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 							{user.role === "admin" ? (
 								<Link href="/admin" className="footer-action-btn justify-center" title="관리자">
 									<Shield size={14} />
-									<span>관리자</span>
+									<span className="whitespace-nowrap overflow-hidden text-ellipsis">관리자</span>
 								</Link>
 							) : (
 								<div className="footer-action-btn disabled opacity-50 cursor-not-allowed justify-center">
 									<Shield size={14} />
-									<span>관리자</span>
+									<span className="whitespace-nowrap overflow-hidden text-ellipsis">관리자</span>
 								</div>
 							)}
 						</div>
@@ -245,7 +250,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 				.sidebar-overlay {
 					position: fixed;
 					inset: 0;
-					background: rgba(0, 0, 0, 0.5);
+					background: rgba(0, 0, 0, 0.7);
+					backdrop-filter: blur(4px);
 					z-index: 99;
 					display: none;
 				}
@@ -265,7 +271,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 					left: 0;
 					top: 0;
 					bottom: 0;
-					z-index: var(--z-index-sidebar);
+					z-index: 100;
 					transition: transform 0.3s ease;
 				}
 
@@ -280,8 +286,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 				/* 모바일 대응: 헤더가 fixed면 사이드바도 그 아래로 */
 				@media (min-width: 769px) {
 					.sidebar {
-						top: var(--spacing-header);
-						height: calc(100vh - var(--spacing-header));
+						top: 0;
+						height: 100vh;
 						margin-top: 0;
 					}
 					.sidebar-header-custom {
@@ -400,6 +406,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 					white-space: nowrap;
 					overflow: hidden;
 					text-overflow: ellipsis;
+					display: block;
 					color: var(--color-text-primary);
 				}
 

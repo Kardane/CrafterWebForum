@@ -9,6 +9,7 @@ import { SidebarLink } from "./sidebar-links";
 export interface SidebarSettings {
 	order: string[];
 	hidden: string[];
+	deleted?: string[]; // 삭제된 기본 링크 ID 목록
 	gridItems: string[];
 	customLinks: SidebarLink[];
 }
@@ -21,6 +22,7 @@ const STORAGE_KEY = "sidebarSettings";
 export const DEFAULT_SETTINGS: SidebarSettings = {
 	order: [],
 	hidden: [],
+	deleted: [],
 	gridItems: [],
 	customLinks: []
 };

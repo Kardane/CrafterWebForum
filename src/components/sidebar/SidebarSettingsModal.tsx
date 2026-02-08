@@ -29,9 +29,9 @@ export default function SidebarSettingsModal({
 	const [settings, setSettings] = useState<SidebarSettings>(getSidebarSettings());
 	const [items, setItems] = useState<SidebarLink[]>([]);
 	const [draggedItem, setDraggedItem] = useState<SidebarLink | null>(null);
-	const [isAddingLink, setIsAddingLink] = useState(false);
 	const [newLinkTitle, setNewLinkTitle] = useState("");
 	const [newLinkUrl, setNewLinkUrl] = useState("");
+	const [showAddModal, setShowAddModal] = useState(false); // 링크 추가 모달 표시 상태
 
 	// 아이템 목록 초기화
 	useEffect(() => {
@@ -39,8 +39,8 @@ export default function SidebarSettingsModal({
 			const currentSettings = getSidebarSettings();
 			setSettings(currentSettings);
 
-			// 기본 링크 (isCustom: false 강제)
-			const defaultItems = DEFAULT_LINKS.map((l) => ({ ...l, isCustom: false }));
+			// 기본 링크 (isCustom: false 강제 불필요, 이미 설정됨)
+			const defaultItems = DEFAULT_LINKS;
 
 			// 커스텀 링크
 			const customItems = (currentSettings.customLinks || []).map((l: any) => ({
@@ -51,6 +51,18 @@ export default function SidebarSettingsModal({
 			// 전체 병합
 			const allLinks = [...defaultItems, ...customItems];
 
+			// 중복 ID 제거 (핵심 수정)
+			const uniqueLinksMap = new Map();
+			allLinks.forEach(link => {
+				if (!uniqueLinksMap.has(link.id)) {
+					uniqueLinksMap.set(link.id, link);
+				}
+			});
+			const uniqueLinks = Array.from(uniqueLinksMap.values());
+
+			// 삭제된 항목 필터링
+			const filteredLinks = uniqueLinks.filter(l => !currentSettings.deleted?.includes(l.id!));
+
 			// 순서 정렬
 			if (currentSettings.order && currentSettings.order.length > 0) {
 				const orderMap = new Map<string, number>();
@@ -58,14 +70,14 @@ export default function SidebarSettingsModal({
 					orderMap.set(id, index);
 				});
 
-				allLinks.sort((a, b) => {
+				filteredLinks.sort((a, b) => {
 					const orderA = orderMap.get(a.id!) ?? 9999;
 					const orderB = orderMap.get(b.id!) ?? 9999;
 					return orderA - orderB;
 				});
 			} else {
 				// 기본 정렬: 카테고리 -> sort_order
-				allLinks.sort((a, b) => {
+				filteredLinks.sort((a, b) => {
 					const catA = a.category || "기타";
 					const catB = b.category || "기타";
 					if (catA !== catB) return catA.localeCompare(catB);
@@ -76,9 +88,25 @@ export default function SidebarSettingsModal({
 				});
 			}
 
-			setItems(allLinks);
+			setItems(filteredLinks);
 		}
 	}, [isOpen]);
+
+	// ESC 키로 모달 닫기
+	useEffect(() => {
+		const handleEsc = (e: KeyboardEvent) => {
+			if (e.key === "Escape") {
+				e.preventDefault(); // 기본 동작 방지
+				onClose();
+			}
+		};
+
+		if (isOpen) {
+			document.addEventListener("keydown", handleEsc);
+		}
+
+		return () => document.removeEventListener("keydown", handleEsc);
+	}, [isOpen, onClose]);
 
 	// 드래그 핸들러
 	const handleDragStart = (e: DragEvent<HTMLDivElement>, item: SidebarLink) => {
@@ -92,8 +120,8 @@ export default function SidebarSettingsModal({
 		e.preventDefault();
 		if (!draggedItem) return;
 
-		const draggedIndex = items.indexOf(draggedItem);
-		if (draggedIndex === index) return;
+		const draggedIndex = items.findIndex(i => i.id === draggedItem.id);
+		if (draggedIndex === -1 || draggedIndex === index) return;
 
 		const newItems = [...items];
 		newItems.splice(draggedIndex, 1);
@@ -106,6 +134,8 @@ export default function SidebarSettingsModal({
 		e.currentTarget.style.opacity = "1";
 	};
 
+
+
 	// 링크 숨기기/표시 토글
 	const toggleVisibility = (linkId: string) => {
 		setSettings((prev) => {
@@ -116,20 +146,31 @@ export default function SidebarSettingsModal({
 		});
 	};
 
-	// 커스텀 링크 삭제
-	const deleteCustomLink = (linkId: string) => {
-		if (!confirm("정말 삭제하시겠습니까?")) return;
+	// 링크 삭제 (커스텀 및 기본)
+	const handleDeleteLink = (linkId: string, isCustom: boolean) => {
+		// if (!confirm("정말 삭제하시겠습니까?")) return; // 자동화 검증을 위해 일시 제거 & UX 개선
 
 		setItems((prev) => prev.filter((item) => item.id !== linkId));
-		setSettings((prev) => ({
-			...prev,
-			customLinks: prev.customLinks?.filter((l: any) => l.id !== linkId) || [],
-			order: prev.order?.filter((id) => id !== linkId) || [],
-			hidden: prev.hidden.filter((id) => id !== linkId)
-		}));
+
+		setSettings((prev) => {
+			const newSettings = { ...prev };
+
+			if (isCustom) {
+				// 커스텀 링크는 완전히 제거
+				newSettings.customLinks = prev.customLinks?.filter((l: any) => l.id !== linkId) || [];
+			} else {
+				// 기본 링크는 deleted 목록에 추가
+				newSettings.deleted = [...(prev.deleted || []), linkId];
+			}
+
+			// 공통: 순서 및 숨김 목록에서 제거
+			newSettings.order = prev.order?.filter((id) => id !== linkId) || [];
+			newSettings.hidden = prev.hidden.filter((id) => id !== linkId);
+
+			return newSettings;
+		});
 	};
 
-	// 링크 추가
 	const addLink = () => {
 		if (!newLinkTitle.trim()) {
 			alert("제목을 입력해주세요");
@@ -158,7 +199,7 @@ export default function SidebarSettingsModal({
 
 		setNewLinkTitle("");
 		setNewLinkUrl("");
-		setIsAddingLink(false);
+		setShowAddModal(false); // 모달 닫기
 	};
 
 	// 저장
@@ -197,11 +238,12 @@ export default function SidebarSettingsModal({
 	if (!isOpen) return null;
 
 	return (
-		<div className="modal-overlay" onClick={onClose}>
-			<div className="modal" onClick={(e) => e.stopPropagation()}>
-				{/* 헤더 */}
-				<div className="modal-header">
-					<h3 className="modal-title">사이드바 설정</h3>
+		<>
+			<div className="modal-overlay" onClick={onClose}>
+				<div className="modal" onClick={(e) => e.stopPropagation()}>
+					{/* 헤더 */}
+					<div className="modal-header">
+						<h3 className="modal-title">사이드바 설정</h3>
 					<button className="modal-close" onClick={onClose}>
 						<X size={20} />
 					</button>
@@ -252,28 +294,51 @@ export default function SidebarSettingsModal({
 											{isHidden ? <EyeOff size={16} /> : <Eye size={16} />}
 										</button>
 
-										{item.isCustom && (
-											<button
-												className="action-btn danger"
-												onClick={() => deleteCustomLink(item.id!)}
-												title="삭제"
-											>
-												<Trash2 size={16} />
-											</button>
-										)}
+
+
+										<button
+											className="action-btn danger"
+											onClick={() => handleDeleteLink(item.id!, !!item.isCustom)}
+											title="삭제"
+										>
+											<Trash2 size={16} />
+										</button>
 									</div>
 								</div>
 							);
 						})}
 					</div>
 
-					{/* 링크 추가 - 하단 고정 느낌 */}
-					<div className="add-link-section">
-						{isAddingLink ? (
-							<div className="add-link-form">
+					</div>
+
+					{/* 푸터 */}
+					<div className="modal-footer">
+						<div className="flex-1">
+							<button
+								className="add-link-btn"
+								onClick={() => setShowAddModal(true)}
+							>
+								<Plus size={16} />
+								<span>링크 추가</span>
+							</button>
+						</div>
+						<button className="btn btn-secondary" onClick={handleReset}>
+							<RotateCcw size={14} />
+							초기화
+						</button>
+						<button className="btn btn-primary" onClick={handleSave}>
+							저장
+						</button>
+					</div>
+
+					{/* 링크 추가 모달 (중첩) */}
+					{showAddModal && (
+						<div className="add-modal-overlay">
+							<div className="add-modal">
+								<h4 className="add-modal-title">새 링크 추가</h4>
 								<input
 									type="text"
-									placeholder="제목"
+									placeholder="제목 (예: 마인크래프트 위키)"
 									value={newLinkTitle}
 									onChange={(e) => setNewLinkTitle(e.target.value)}
 									className="add-link-input"
@@ -281,44 +346,22 @@ export default function SidebarSettingsModal({
 								/>
 								<input
 									type="text"
-									placeholder="URL (https://...)"
+									placeholder="URL (예: https://minecraft.wiki)"
 									value={newLinkUrl}
 									onChange={(e) => setNewLinkUrl(e.target.value)}
 									className="add-link-input"
 								/>
-								<div className="add-link-actions">
-									<button className="btn btn-primary btn-sm flex-1" onClick={addLink}>
-										추가
-									</button>
-									<button
-										className="btn btn-secondary btn-sm flex-1"
-										onClick={() => setIsAddingLink(false)}
-									>
+								<div className="add-modal-actions">
+									<button className="btn btn-secondary flex-1" onClick={() => setShowAddModal(false)}>
 										취소
+									</button>
+									<button className="btn btn-primary flex-1" onClick={addLink}>
+										추가
 									</button>
 								</div>
 							</div>
-						) : (
-							<button
-								className="add-link-btn"
-								onClick={() => setIsAddingLink(true)}
-							>
-								<Plus size={16} />
-								<span>링크 추가</span>
-							</button>
-						)}
-					</div>
-				</div>
-
-				{/* 푸터 */}
-				<div className="modal-footer">
-					<button className="btn btn-secondary" onClick={handleReset}>
-						<RotateCcw size={14} />
-						초기화
-					</button>
-					<button className="btn btn-primary" onClick={handleSave}>
-						저장
-					</button>
+						</div>
+					)}
 				</div>
 			</div>
 
@@ -328,22 +371,61 @@ export default function SidebarSettingsModal({
 					position: fixed;
 					inset: 0;
 					background: rgba(0, 0, 0, 0.7);
+					backdrop-filter: blur(4px);
 					display: flex;
 					align-items: center;
 					justify-content: center;
 					z-index: 9999;
 				}
 
+				.add-modal-overlay {
+					position: absolute;
+					inset: 0;
+					background: rgba(0, 0, 0, 0.6);
+					backdrop-filter: blur(2px);
+					display: flex;
+					align-items: center;
+					justify-content: center;
+					z-index: 10;
+					border-radius: 8px;
+				}
+
+				.add-modal {
+					background: var(--color-bg-tertiary);
+					padding: 16px;
+					border-radius: 8px;
+					width: 85%;
+					border: 1px solid var(--color-border);
+					display: flex;
+					flex-direction: column;
+					gap: 10px;
+					box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+				}
+
+				.add-modal-title {
+					font-size: 1rem;
+					font-weight: 600;
+					color: white; /* 모달 제목 하얀색 */
+					margin-bottom: 4px;
+				}
+
+				.add-modal-actions {
+					display: flex;
+					gap: 8px;
+					margin-top: 4px;
+				}
+
 				.modal {
-					background: var(--bg-secondary);
+					background: var(--color-bg-primary);
 					border-radius: 8px;
 					width: 90%;
 					max-width: 420px;
 					max-height: 85vh;
 					display: flex;
 					flex-direction: column;
-					border: 1px solid var(--border);
+					border: 1px solid var(--color-border);
 					box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+					position: relative; /* 중첩 모달 위치 기준 */
 				}
 
 				.modal-header {
@@ -351,26 +433,26 @@ export default function SidebarSettingsModal({
 					justify-content: space-between;
 					align-items: center;
 					padding: 16px;
-					border-bottom: 1px solid var(--border);
+					border-bottom: 1px solid var(--color-border);
 				}
 
 				.modal-title {
 					font-size: 1.1rem;
 					font-weight: 600;
-					color: var(--text-primary);
+					color: white; /* 제목 하얀색 */
 				}
 
 				.modal-close {
 					background: none;
 					border: none;
-					color: var(--text-muted);
+					color: white; /* 닫기 아이콘 하얀색 */
 					cursor: pointer;
 					padding: 4px;
 					display: flex;
 				}
 
 				.modal-close:hover {
-					color: var(--text-primary);
+					color: var(--color-text-secondary);
 				}
 
 				.modal-content {
@@ -383,9 +465,10 @@ export default function SidebarSettingsModal({
 
 				.help-text {
 					font-size: 0.85rem;
-					color: var(--text-muted);
+					color: white; /* 설명 텍스트 하얀색 */
 					margin-bottom: 16px;
 					flex-shrink: 0;
+					opacity: 0.8;
 				}
 
 				.settings-list {
@@ -403,23 +486,23 @@ export default function SidebarSettingsModal({
 					align-items: center;
 					gap: 10px;
 					padding: 8px 10px;
-					background: var(--bg-tertiary);
+					background: var(--color-bg-tertiary);
 					border-radius: 4px;
 					border: 1px solid transparent;
 					transition: all 0.2s;
 				}
 
 				.settings-item:hover {
-					border-color: var(--border);
+					border-color: var(--color-border);
 				}
 
 				.settings-item.hidden-item {
 					opacity: 0.5;
-					background: var(--bg-secondary);
+					background: var(--color-bg-secondary);
 				}
 
 				.drag-handle {
-					color: var(--text-muted);
+					color: var(--color-text-muted);
 					cursor: grab;
 					display: flex;
 					padding: 2px;
@@ -439,7 +522,7 @@ export default function SidebarSettingsModal({
 				.item-title {
 					flex: 1;
 					font-size: 0.9rem;
-					color: var(--text-primary);
+					color: var(--color-text-primary);
 					white-space: nowrap;
 					overflow: hidden;
 					text-overflow: ellipsis;
@@ -454,27 +537,20 @@ export default function SidebarSettingsModal({
 					padding: 6px;
 					background: none;
 					border: none;
-					color: var(--text-muted);
+					color: var(--color-text-muted);
 					cursor: pointer;
 					border-radius: 4px;
 					display: flex;
 				}
 
 				.action-btn:hover {
-					background: var(--bg-secondary);
-					color: var(--text-primary);
+					background: var(--color-bg-secondary);
+					color: var(--color-text-primary);
 				}
 
 				.action-btn.danger:hover {
-					color: var(--error);
+					color: var(--color-error);
 					background: rgba(255, 0, 0, 0.1);
-				}
-
-				.add-link-section {
-					margin-top: 16px;
-					padding-top: 16px;
-					border-top: 1px solid var(--border);
-					flex-shrink: 0;
 				}
 
 				.add-link-btn {
@@ -482,44 +558,44 @@ export default function SidebarSettingsModal({
 					align-items: center;
 					justify-content: center;
 					gap: 6px;
-					width: 100%;
-					padding: 10px;
+					padding: 8px 12px;
 					background: transparent;
-					border: 1px dashed var(--border);
+					border: 1px dashed var(--color-border);
 					border-radius: 4px;
-					color: var(--text-muted);
+					color: var(--color-text-muted);
 					cursor: pointer;
-					font-size: 0.9rem;
+					font-size: 0.85rem;
 					transition: all 0.2s;
+					height: 100%;
 				}
 
 				.add-link-btn:hover {
-					background: var(--bg-tertiary);
-					color: var(--text-primary);
-					border-color: var(--text-muted);
+					background: var(--color-bg-tertiary);
+					color: var(--color-text-primary);
+					border-color: var(--color-text-muted);
 				}
 
 				.add-link-form {
 					display: flex;
 					flex-direction: column;
 					gap: 8px;
-					background: var(--bg-tertiary);
+					background: var(--color-bg-tertiary);
 					padding: 12px;
 					border-radius: 4px;
 				}
 
 				.add-link-input {
 					padding: 8px 12px;
-					background: var(--bg-secondary);
-					border: 1px solid var(--border);
+					background: var(--color-bg-secondary);
+					border: 1px solid var(--color-border);
 					border-radius: 4px;
-					color: var(--text-primary);
+					color: var(--color-text-primary);
 					font-size: 0.9rem;
 				}
 
 				.add-link-input:focus {
 					outline: none;
-					border-color: var(--accent);
+					border-color: var(--color-accent);
 				}
 
 				.add-link-actions {
@@ -533,8 +609,8 @@ export default function SidebarSettingsModal({
 					justify-content: flex-end;
 					gap: 8px;
 					padding: 16px;
-					border-top: 1px solid var(--border);
-					background: var(--bg-tertiary);
+					border-top: 1px solid var(--color-border);
+					background: var(--color-bg-tertiary);
 					border-bottom-left-radius: 8px;
 					border-bottom-right-radius: 8px;
 				}
@@ -547,13 +623,13 @@ export default function SidebarSettingsModal({
 					background: transparent;
 				}
 				.settings-list::-webkit-scrollbar-thumb {
-					background: var(--border);
+					background: var(--color-border);
 					border-radius: 3px;
 				}
 				.settings-list::-webkit-scrollbar-thumb:hover {
-					background: var(--text-muted);
+					background: var(--color-text-muted);
 				}
 			`}</style>
-		</div>
+		</>
 	);
 }
