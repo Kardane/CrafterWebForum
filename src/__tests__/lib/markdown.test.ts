@@ -15,6 +15,6 @@ describe("markdown utils", () => {
 	it("renders image markdown as image tag", () => {
 		const html = processMarkdown("![alt](https://example.com/a.png)");
 		expect(html).toContain("<img src=\"https://example.com/a.png\"");
+		expect(html).not.toContain("window.open");
 	});
 });
-
