@@ -40,22 +40,22 @@ export async function GET(
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
-		const comments = await prisma.comment.findMany({
-			where: {
-				postId,
-			},
-			include: {
-				author: {
-					select: {
-						id: true,
-						nickname: true,
-						minecraftUuid: true,
-						role: true,
+			const comments = await prisma.comment.findMany({
+				where: {
+					postId,
+				},
+				include: {
+					author: {
+						select: {
+							id: true,
+							nickname: true,
+							minecraftUuid: true,
+							role: true,
+						},
 					},
 				},
-			},
-			orderBy: [{ isPinned: "desc" }, { createdAt: "asc" }],
-		});
+				orderBy: [{ createdAt: "asc" }],
+			});
 		const commentsWithPostAuthorFlag = comments.map((comment) => ({
 			...comment,
 			isPostAuthor: comment.author.id === post.authorId,

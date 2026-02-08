@@ -76,7 +76,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 		);
 	}
 
-	const { post, comments } = data;
+	const { post, comments, readMarker } = data;
 	const totalCommentCount = countCommentsWithReplies(comments);
 	const sessionUserId = toSessionUserId(session.user.id);
 	const isOwner = sessionUserId === post.author_id;
@@ -158,9 +158,9 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 					</div>
 				</div>
 
-				<div className="mt-8">
-					<CommentSection postId={post.id} initialComments={comments} />
-				</div>
+					<div className="mt-8">
+						<CommentSection postId={post.id} initialComments={comments} readMarker={readMarker} />
+					</div>
 			</div>
 		</PostLikeStateProvider>
 	);

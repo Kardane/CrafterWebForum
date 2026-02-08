@@ -58,7 +58,7 @@ export async function GET(
 			},
 		});
 
-		// 댓글 조회 (고정 댓글 우선)
+		// 댓글 조회 (생성순 유지)
 		const comments = await prisma.comment.findMany({
 			where: {
 				postId: post.id,
@@ -73,7 +73,19 @@ export async function GET(
 					},
 				},
 			},
-			orderBy: [{ isPinned: 'desc' }, { createdAt: 'asc' }],
+			orderBy: [{ createdAt: 'asc' }],
+		});
+
+		const previousRead = await prisma.postRead.findUnique({
+			where: {
+				userId_postId: {
+					userId: sessionUserId,
+					postId: post.id,
+				},
+			},
+			select: {
+				lastReadCommentCount: true,
+			},
 		});
 
 		const commentsWithPostAuthorFlag = comments.map((comment) => ({
@@ -118,6 +130,10 @@ export async function GET(
 		return NextResponse.json({
 			post: responsePost,
 			comments: buildCommentTree(commentsWithPostAuthorFlag),
+			readMarker: {
+				lastReadCommentCount: previousRead?.lastReadCommentCount ?? 0,
+				totalCommentCount: comments.length,
+			},
 		});
 	} catch (error) {
 		console.error('[API] GET /api/posts/[id] error:', error);

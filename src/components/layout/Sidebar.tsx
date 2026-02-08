@@ -8,7 +8,7 @@ import classNames from "classnames";
 import { Settings, HelpCircle, Shield } from "lucide-react";
 import SidebarSettingsModal from "../sidebar/SidebarSettingsModal";
 import { DEFAULT_SETTINGS, getSidebarSettings, normalizeSidebarUrl } from "@/lib/sidebar-settings";
-import { SidebarLink, DEFAULT_LINKS } from "@/lib/sidebar-links";
+import { SidebarLink, DEFAULT_LINKS, compareSidebarLinks } from "@/lib/sidebar-links";
 import { isPrivilegedNickname } from "@/config/admin-policy";
 
 interface SidebarProps {
@@ -56,16 +56,7 @@ function buildSidebarLinks(settings = DEFAULT_SETTINGS): SidebarLink[] {
 			return orderA - orderB;
 		});
 	} else {
-		allLinks.sort((a, b) => {
-			const catA = a.category || "기타";
-			const catB = b.category || "기타";
-			const catCompare = catA.localeCompare(catB);
-			if (catCompare !== 0) return catCompare;
-
-			const orderA = a.sort_order ?? 9999;
-			const orderB = b.sort_order ?? 9999;
-			return orderA - orderB;
-		});
+		allLinks.sort(compareSidebarLinks);
 	}
 
 	if (settings.hidden) {

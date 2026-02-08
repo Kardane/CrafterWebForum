@@ -8,6 +8,55 @@ export interface SidebarLink {
 	isCustom?: boolean;
 }
 
+const CATEGORY_RANK: Record<string, number> = {
+	외부링크: 100,
+	"유용한 도구": 200,
+	"AI 도구": 300,
+	Custom: 900,
+	기타: 999
+};
+
+function compareTextDeterministic(a: string, b: string): number {
+	if (a === b) {
+		return 0;
+	}
+	return a < b ? -1 : 1;
+}
+
+/**
+ * 서버/클라이언트 환경에 상관없이 동일 결과를 보장하는 링크 정렬
+ * - localeCompare 대신 코드포인트 비교 사용
+ */
+export function compareSidebarLinks(a: SidebarLink, b: SidebarLink): number {
+	const catA = a.category || "기타";
+	const catB = b.category || "기타";
+	const categoryRankA = CATEGORY_RANK[catA] ?? 500;
+	const categoryRankB = CATEGORY_RANK[catB] ?? 500;
+	if (categoryRankA !== categoryRankB) {
+		return categoryRankA - categoryRankB;
+	}
+
+	const categoryNameCompare = compareTextDeterministic(catA, catB);
+	if (categoryNameCompare !== 0) {
+		return categoryNameCompare;
+	}
+
+	const orderA = a.sort_order ?? Number.MAX_SAFE_INTEGER;
+	const orderB = b.sort_order ?? Number.MAX_SAFE_INTEGER;
+	if (orderA !== orderB) {
+		return orderA - orderB;
+	}
+
+	const idA = a.id ?? "";
+	const idB = b.id ?? "";
+	const idCompare = compareTextDeterministic(idA, idB);
+	if (idCompare !== 0) {
+		return idCompare;
+	}
+
+	return compareTextDeterministic(a.title, b.title);
+}
+
 export const DEFAULT_LINKS: SidebarLink[] = [
 	{
 		id: "steve_gallery",

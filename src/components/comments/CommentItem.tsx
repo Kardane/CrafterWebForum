@@ -71,12 +71,17 @@ export default function CommentItem({
 	const { showToast } = useToast();
 	const [isEditing, setIsEditing] = useState(false);
 	const [copiedType, setCopiedType] = useState<CopiedType>(null);
+	const [isActionSuppressed, setIsActionSuppressed] = useState(false);
 	const copiedTimeoutRef = useRef<number | null>(null);
+	const suppressTimeoutRef = useRef<number | null>(null);
 
 	useEffect(
 		() => () => {
 			if (copiedTimeoutRef.current) {
 				window.clearTimeout(copiedTimeoutRef.current);
+			}
+			if (suppressTimeoutRef.current) {
+				window.clearTimeout(suppressTimeoutRef.current);
 			}
 		},
 		[]
@@ -99,6 +104,7 @@ export default function CommentItem({
 	const resolvedThreadRootId = threadRootId ?? comment.id;
 
 	const dismissToolbarFocus = () => {
+		setIsActionSuppressed(true);
 		const active = document.activeElement;
 		if (active instanceof HTMLElement && active.closest(`#comment-${comment.id}`)) {
 			active.blur();
@@ -107,6 +113,12 @@ export default function CommentItem({
 		if (selection && selection.rangeCount > 0) {
 			selection.removeAllRanges();
 		}
+		if (suppressTimeoutRef.current) {
+			window.clearTimeout(suppressTimeoutRef.current);
+		}
+		suppressTimeoutRef.current = window.setTimeout(() => {
+			setIsActionSuppressed(false);
+		}, 700);
 	};
 
 	const handleEditSubmit = (content: string) => {
@@ -164,53 +176,61 @@ export default function CommentItem({
 	};
 
 	return (
-		<div className="comment-wrapper" id={`comment-${comment.id}`}>
+		<div
+			className="comment-wrapper"
+			id={`comment-${comment.id}`}
+			onMouseLeave={() => {
+				setIsActionSuppressed(false);
+			}}
+		>
 			<div
 				className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""} ${isCompact ? "compact" : ""}`}
 			>
-				<div className={`comment-avatar ${isCompact ? "compact-spacer" : ""}`}>
-					{!isCompact &&
-						(comment.author.minecraftUuid ? (
-							<img
-								src={getMinecraftHeadUrl(comment.author.minecraftUuid, 36) || ""}
-								alt=""
-								className="avatar-img"
+				{replyToName && replyToCommentId && (
+					<div className="reply-context-line">
+						<div className="reply-curve-spacer" />
+						<div className="reply-curve" />
+						<button type="button" className="reply-snippet" onClick={handleReplyContextClick}>
+							<span className="reply-target">@{replyToName}</span>
+							{replyToPreview && <span className="reply-preview">{replyToPreview}</span>}
+						</button>
+					</div>
+				)}
+
+				<div className="comment-main-row">
+					<div className={`comment-avatar ${isCompact ? "compact-spacer" : ""}`}>
+						{!isCompact &&
+							(comment.author.minecraftUuid ? (
+								<img
+									src={getMinecraftHeadUrl(comment.author.minecraftUuid, 36) || ""}
+									alt=""
+									className="avatar-img"
+								/>
+							) : (
+								<div className="avatar-fallback">{comment.author.nickname[0].toUpperCase()}</div>
+							))}
+					</div>
+
+					<div className="comment-content">
+						{!isCompact && (
+							<div className="comment-header">
+								<span className="comment-author">{comment.author.nickname}</span>
+								{comment.isPostAuthor && <span className="comment-badge author">작성자</span>}
+								{comment.isPinned && <span className="comment-badge pinned">📌 고정됨</span>}
+							</div>
+						)}
+
+						{isEditing ? (
+							<CommentForm
+								onSubmit={handleEditSubmit}
+								onCancel={() => setIsEditing(false)}
+								initialValue={comment.content}
+								placeholder="댓글을 수정해줘"
+								disabled={disabled}
+								mode="edit"
 							/>
 						) : (
-							<div className="avatar-fallback">{comment.author.nickname[0].toUpperCase()}</div>
-						))}
-				</div>
-
-				<div className="comment-content">
-					{replyToName && replyToCommentId && (
-						<div className="reply-context-line">
-							<div className="reply-curve" />
-							<button type="button" className="reply-snippet" onClick={handleReplyContextClick}>
-								<span className="reply-target">@{replyToName}</span>
-								{replyToPreview && <span className="reply-preview">{replyToPreview}</span>}
-							</button>
-						</div>
-					)}
-
-					{!isCompact && (
-						<div className="comment-header">
-							<span className="comment-author">{comment.author.nickname}</span>
-							{comment.isPostAuthor && <span className="comment-badge author">작성자</span>}
-							{comment.isPinned && <span className="comment-badge pinned">📌 고정됨</span>}
-						</div>
-					)}
-
-					{isEditing ? (
-						<CommentForm
-							onSubmit={handleEditSubmit}
-							onCancel={() => setIsEditing(false)}
-							initialValue={comment.content}
-							placeholder="댓글을 수정해줘"
-							disabled={disabled}
-							mode="edit"
-						/>
-					) : (
-						<>
+							<>
 								{contentWithoutPoll && (
 									<div className="comment-content-row">
 										<div className="comment-body">
@@ -223,19 +243,20 @@ export default function CommentItem({
 									</div>
 								)}
 
-							{pollData && (
-								<PollCard
-									pollData={pollData}
-									commentId={comment.id}
-									onVote={(optionId) => onVote?.(comment.id, optionId)}
-								/>
-							)}
-						</>
-					)}
+								{pollData && (
+									<PollCard
+										pollData={pollData}
+										commentId={comment.id}
+										onVote={(optionId) => onVote?.(comment.id, optionId)}
+									/>
+								)}
+							</>
+						)}
+					</div>
 				</div>
 
 				{!isEditing && (
-					<div className="comment-actions">
+					<div className={`comment-actions ${isActionSuppressed ? "suppressed" : ""}`}>
 						<button
 							type="button"
 							className="action-btn"
@@ -281,12 +302,14 @@ export default function CommentItem({
 
 					.comment-item {
 						display: flex;
-						gap: 12px;
+						flex-direction: column;
+						gap: 0;
 						padding: 12px;
-					border-radius: 6px;
-					position: relative;
-					transition: background-color 0.15s;
-				}
+						border-radius: 6px;
+						position: relative;
+						transition: background-color 0.15s;
+						align-items: stretch;
+					}
 
 					.comment-item:hover {
 						background: rgba(0, 0, 0, 0.2);
@@ -297,11 +320,18 @@ export default function CommentItem({
 						padding-bottom: 8px;
 					}
 
-				.comment-item.is-highlighted {
-					background: color-mix(in srgb, var(--warning) 30%, #000 70%);
-					box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 60%, transparent);
-					animation: reply-highlight-pulse 1.2s ease;
-				}
+					.comment-main-row {
+						display: flex;
+						gap: 12px;
+						width: 100%;
+						align-items: flex-start;
+					}
+
+					.comment-item.is-highlighted {
+						background: rgba(255, 215, 64, 0.2);
+						box-shadow: inset 0 0 0 1px rgba(255, 222, 89, 0.8);
+						animation: reply-highlight-pulse 1.2s ease;
+					}
 
 				.comment-item.pinned {
 					background: rgba(139, 35, 50, 0.15);
@@ -314,11 +344,12 @@ export default function CommentItem({
 
 					.comment-avatar {
 						flex-shrink: 0;
+						margin-top: 1px;
 					}
 
 					.comment-avatar.compact-spacer {
 						width: 36px;
-						height: 8px;
+						height: 4px;
 					}
 
 				.avatar-img {
@@ -377,20 +408,23 @@ export default function CommentItem({
 					.reply-context-line {
 						display: flex;
 						align-items: flex-start;
-						margin-top: 2px;
-						margin-bottom: 4px;
+						margin-bottom: 2px;
 						position: relative;
-						padding-left: 2px;
+					}
+
+					.reply-curve-spacer {
+						width: 18px; /* 36px 아바타의 절반 */
+						flex-shrink: 0;
 					}
 
 					.reply-curve {
 						width: 14px;
-						height: 10px;
+						height: 12px;
 						border-left: 1.5px solid rgba(255, 255, 255, 0.4);
 						border-top: 1.5px solid rgba(255, 255, 255, 0.4);
 						border-top-left-radius: 6px;
 						margin-right: 6px;
-						margin-top: 6px;
+						margin-top: 8px;
 					}
 
 					.reply-snippet {
@@ -400,7 +434,7 @@ export default function CommentItem({
 						font-size: 0.8rem;
 						color: var(--text-muted);
 						cursor: pointer;
-						background: #1e1f22;
+						background: #2B2A28;
 						padding: 4px 10px;
 						border-radius: 6px;
 						white-space: nowrap;
@@ -424,7 +458,7 @@ export default function CommentItem({
 					}
 
 				.reply-snippet:hover {
-					background: #2b2d31;
+					background: #2B2A28;
 					color: var(--text-primary);
 				}
 
@@ -434,6 +468,8 @@ export default function CommentItem({
 						align-items: flex-start;
 						gap: 2px;
 						position: relative;
+						width: fit-content;
+						max-width: 100%;
 					}
 
 				.comment-body {
@@ -462,9 +498,9 @@ export default function CommentItem({
 						pointer-events: none;
 						font-family: inherit;
 						position: absolute;
-						left: 0;
+						right: 0;
 						bottom: 2px;
-						transform: translate(calc(-100% - 10px), 0);
+						transform: translate(calc(100% + 10px), 0);
 					}
 
 				.comment-wrapper:hover .comment-hover-time {
@@ -488,11 +524,16 @@ export default function CommentItem({
 					transition: opacity 0.15s ease;
 				}
 
-				.comment-wrapper:hover .comment-actions,
-				.comment-item:focus-within .comment-actions {
-					opacity: 1;
-					pointer-events: auto;
-				}
+					.comment-wrapper:hover .comment-actions,
+					.comment-item:focus-within .comment-actions {
+						opacity: 1;
+						pointer-events: auto;
+					}
+
+					.comment-actions.suppressed {
+						opacity: 0 !important;
+						pointer-events: none !important;
+					}
 
 				.action-btn {
 					padding: 6px 7px;
@@ -523,21 +564,21 @@ export default function CommentItem({
 					@media (max-width: 768px) {
 						.comment-hover-time {
 							font-size: 0.68rem;
-							transform: translate(calc(-100% - 6px), 0);
+							transform: translate(calc(100% + 6px), 0);
 						}
 					}
 
-				@keyframes reply-highlight-pulse {
-					0% {
-						box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 30%, transparent);
+					@keyframes reply-highlight-pulse {
+						0% {
+							box-shadow: inset 0 0 0 1px rgba(255, 222, 89, 0.55);
+						}
+						50% {
+							box-shadow: inset 0 0 0 2px rgba(255, 222, 89, 0.9);
+						}
+						100% {
+							box-shadow: inset 0 0 0 1px rgba(255, 222, 89, 0.55);
+						}
 					}
-					50% {
-						box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--warning) 70%, transparent);
-					}
-					100% {
-						box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 30%, transparent);
-					}
-				}
 			`}</style>
 		</div>
 	);

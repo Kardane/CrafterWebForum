@@ -4,6 +4,7 @@ const authMock = vi.fn();
 const postFindFirstMock = vi.fn();
 const likeFindFirstMock = vi.fn();
 const commentFindManyMock = vi.fn();
+const postReadFindUniqueMock = vi.fn();
 const postReadUpsertMock = vi.fn();
 
 vi.mock("@/auth", () => ({
@@ -21,10 +22,11 @@ vi.mock("@/lib/prisma", () => ({
 		comment: {
 			findMany: commentFindManyMock,
 		},
-		postRead: {
-			upsert: postReadUpsertMock,
+			postRead: {
+				findUnique: postReadFindUniqueMock,
+				upsert: postReadUpsertMock,
+			},
 		},
-	},
 }));
 
 describe("GET /api/posts/[id]", () => {
@@ -33,6 +35,7 @@ describe("GET /api/posts/[id]", () => {
 		postFindFirstMock.mockReset();
 		likeFindFirstMock.mockReset();
 		commentFindManyMock.mockReset();
+		postReadFindUniqueMock.mockReset();
 		postReadUpsertMock.mockReset();
 	});
 
@@ -65,7 +68,7 @@ describe("GET /api/posts/[id]", () => {
 			},
 		});
 		likeFindFirstMock.mockResolvedValue(null);
-		commentFindManyMock.mockResolvedValue([
+			commentFindManyMock.mockResolvedValue([
 			{
 				id: 100,
 				content: "parent",
@@ -94,8 +97,11 @@ describe("GET /api/posts/[id]", () => {
 						role: "user",
 					},
 				},
-			]);
-		postReadUpsertMock.mockResolvedValue({});
+				]);
+			postReadFindUniqueMock.mockResolvedValue({
+				lastReadCommentCount: 1,
+			});
+			postReadUpsertMock.mockResolvedValue({});
 
 		const { GET } = await import("@/app/api/posts/[id]/route");
 		const req = new Request("http://localhost/api/posts/10");
@@ -116,5 +122,9 @@ describe("GET /api/posts/[id]", () => {
 			expect(body.comments[0].isPostAuthor).toBe(false);
 			expect(body.comments[0].replies).toHaveLength(1);
 			expect(body.comments[0].replies[0].isPostAuthor).toBe(true);
+			expect(body.readMarker).toEqual({
+				lastReadCommentCount: 1,
+				totalCommentCount: 2,
+			});
 		});
 	});

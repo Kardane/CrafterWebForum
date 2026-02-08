@@ -20,6 +20,7 @@ interface PostCardProps {
 	tags: string[];
 	unreadCount?: number;
 	userLiked?: boolean;
+	onNavigate?: () => void;
 }
 
 export default function PostCard({
@@ -33,13 +34,20 @@ export default function PostCard({
 	tags,
 	unreadCount = 0,
 	userLiked,
+	onNavigate,
 }: PostCardProps) {
 	const thumb = extractFirstImage(content);
 	const preview = getPreviewText(content);
 	const timeAgo = formatDistanceToNow(new Date(createdAt), { addSuffix: true, locale: ko });
 
 	return (
-		<Link href={`/posts/${id}`} className="block">
+		<Link
+			href={`/posts/${id}`}
+			className="block"
+			onClick={() => {
+				onNavigate?.();
+			}}
+		>
 			<div className="bg-bg-secondary rounded-lg border border-bg-tertiary p-4 hover:border-accent hover:shadow-md transition-all duration-200 cursor-pointer flex gap-4 h-full">
 
 				<div className="flex-1 flex flex-col min-w-0">

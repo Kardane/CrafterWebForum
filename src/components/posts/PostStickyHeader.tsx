@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ArrowUp, MessageCircle } from "lucide-react";
+import { ArrowLeft, ArrowUp, MessageCircle, Pin } from "lucide-react";
 import LikeButton from "./LikeButton";
+import { OPEN_PINNED_COMMENTS_EVENT } from "@/constants/comments";
 
 interface PostStickyHeaderProps {
 	postId: number;
@@ -39,10 +40,12 @@ export default function PostStickyHeader({
 	topOffsetClassName = "top-header",
 	observerOffsetTop = 56,
 }: PostStickyHeaderProps) {
+	void triggerId;
+	void topOffsetClassName;
+	void observerOffsetTop;
+
 	return (
-		<div
-			className={`sticky top-0 z-[45] transition-opacity duration-200 opacity-100`}
-		>
+		<div className="sticky top-0 z-[45] transition-opacity duration-200 opacity-100">
 			<div className="rounded-b-lg border-x border-b border-border bg-bg-secondary/95 px-3 py-2 shadow-sm backdrop-blur">
 				<div className="flex items-center gap-3">
 					<Link href="/" className="btn btn-secondary btn-sm">
@@ -55,32 +58,42 @@ export default function PostStickyHeader({
 						<div className="truncate text-xs text-text-muted">
 							{authorName} · {formatPostDate(createdAt)}
 						</div>
+						</div>
+
+						<LikeButton
+							postId={postId}
+							initialLikes={initialLikes}
+							initialLiked={initialLiked}
+							variant="legacy"
+							className="!px-2.5 !py-1 !text-xs"
+						/>
+
+						<div className="flex items-center gap-1 text-xs text-text-secondary">
+							<MessageCircle size={14} />
+							<span>{commentCount}</span>
+						</div>
+
+						<button
+							type="button"
+							className="btn btn-secondary btn-sm"
+							onClick={() => window.dispatchEvent(new CustomEvent(OPEN_PINNED_COMMENTS_EVENT))}
+							title="고정 댓글 보기"
+						>
+							<Pin size={14} />
+							고정 댓글
+						</button>
+
+						<button
+							type="button"
+							className="btn btn-secondary btn-sm"
+							onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+							title="맨 위로"
+						>
+							<ArrowUp size={14} />
+							맨 위
+						</button>
 					</div>
-
-					<LikeButton
-						postId={postId}
-						initialLikes={initialLikes}
-						initialLiked={initialLiked}
-						variant="legacy"
-						className="!px-2.5 !py-1 !text-xs"
-					/>
-
-					<div className="flex items-center gap-1 text-xs text-text-secondary">
-						<MessageCircle size={14} />
-						<span>{commentCount}</span>
-					</div>
-
-					<button
-						type="button"
-						className="btn btn-secondary btn-sm"
-						onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-						title="맨 위로"
-					>
-						<ArrowUp size={14} />
-						맨 위
-					</button>
 				</div>
 			</div>
-		</div>
-	);
+		);
 }

@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import PostCard from "./PostCard";
 import { Button } from "@/components/ui/Button";
+import { readHomeScrollState, saveHomeScrollState } from "@/lib/scroll-restore";
 
 interface Post {
 	id: number;
@@ -28,11 +30,26 @@ interface PostListProps {
 export default function PostList({ posts, totalPages, currentPage }: PostListProps) {
 	const router = useRouter();
 	const searchParams = useSearchParams();
+	const searchQuery = searchParams.toString();
+
+	useEffect(() => {
+		const savedScrollY = readHomeScrollState(searchQuery);
+		if (savedScrollY === null) {
+			return;
+		}
+		requestAnimationFrame(() => {
+			window.scrollTo({ top: savedScrollY, behavior: "auto" });
+		});
+	}, [searchQuery]);
 
 	const handlePageChange = (page: number) => {
 		const params = new URLSearchParams(searchParams.toString());
 		params.set("page", page.toString());
 		router.push(`/?${params.toString()}`);
+	};
+
+	const handlePostNavigate = () => {
+		saveHomeScrollState(searchQuery, window.scrollY);
 	};
 
 	if (posts.length === 0) {
@@ -60,13 +77,14 @@ export default function PostList({ posts, totalPages, currentPage }: PostListPro
 						createdAt={post.createdAt}
 						viewCount={post.views}
 						likeCount={post.likes}
-						commentCount={post.commentCount}
-						tags={post.tags}
-						unreadCount={post.unreadCount}
-						userLiked={post.userLiked}
-					/>
-				))}
-			</div>
+							commentCount={post.commentCount}
+							tags={post.tags}
+							unreadCount={post.unreadCount}
+							userLiked={post.userLiked}
+							onNavigate={handlePostNavigate}
+						/>
+					))}
+				</div>
 
 			{/* 페이지네이션 */}
 			{totalPages > 1 && (

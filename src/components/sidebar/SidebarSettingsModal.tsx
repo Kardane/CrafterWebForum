@@ -10,7 +10,7 @@ import {
 	getFaviconUrl,
 	normalizeSidebarUrl,
 } from "@/lib/sidebar-settings";
-import { SidebarLink, DEFAULT_LINKS } from "@/lib/sidebar-links"; // DEFAULT_LINKS 임포트 수정
+import { SidebarLink, DEFAULT_LINKS, compareSidebarLinks } from "@/lib/sidebar-links"; // DEFAULT_LINKS 임포트 수정
 
 interface SidebarSettingsModalProps {
 	isOpen: boolean;
@@ -44,10 +44,10 @@ export default function SidebarSettingsModal({
 			const defaultItems = DEFAULT_LINKS;
 
 			// 커스텀 링크
-			const customItems = (currentSettings.customLinks || []).map((l: any) => ({
-				...l,
-				isCustom: true
-			}));
+				const customItems = (currentSettings.customLinks || []).map((l: SidebarLink) => ({
+					...l,
+					isCustom: true
+				}));
 
 			// 전체 병합
 			const allLinks = [...defaultItems, ...customItems];
@@ -65,29 +65,21 @@ export default function SidebarSettingsModal({
 			const filteredLinks = uniqueLinks.filter(l => !currentSettings.deleted?.includes(l.id!));
 
 			// 순서 정렬
-			if (currentSettings.order && currentSettings.order.length > 0) {
+				if (currentSettings.order && currentSettings.order.length > 0) {
 				const orderMap = new Map<string, number>();
 				currentSettings.order.forEach((id, index) => {
 					orderMap.set(id, index);
 				});
 
-				filteredLinks.sort((a, b) => {
-					const orderA = orderMap.get(a.id!) ?? 9999;
-					const orderB = orderMap.get(b.id!) ?? 9999;
-					return orderA - orderB;
-				});
-			} else {
-				// 기본 정렬: 카테고리 -> sort_order
-				filteredLinks.sort((a, b) => {
-					const catA = a.category || "기타";
-					const catB = b.category || "기타";
-					if (catA !== catB) return catA.localeCompare(catB);
-
-					const orderA = a.sort_order ?? 9999;
-					const orderB = b.sort_order ?? 9999;
-					return orderA - orderB;
-				});
-			}
+					filteredLinks.sort((a, b) => {
+						const orderA = orderMap.get(a.id!) ?? 9999;
+						const orderB = orderMap.get(b.id!) ?? 9999;
+						return orderA - orderB;
+					});
+				} else {
+					// 기본 정렬: SSR/CSR 동일 순서 보장
+					filteredLinks.sort(compareSidebarLinks);
+				}
 
 			setItems(filteredLinks);
 		}
@@ -158,7 +150,7 @@ export default function SidebarSettingsModal({
 
 			if (isCustom) {
 				// 커스텀 링크는 완전히 제거
-				newSettings.customLinks = prev.customLinks?.filter((l: any) => l.id !== linkId) || [];
+					newSettings.customLinks = prev.customLinks?.filter((l: SidebarLink) => l.id !== linkId) || [];
 			} else {
 				// 기본 링크는 deleted 목록에 추가
 				newSettings.deleted = [...(prev.deleted || []), linkId];
