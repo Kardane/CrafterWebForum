@@ -8,6 +8,14 @@ import { auth } from "@/auth.config";
  */
 export async function middleware(request: NextRequest) {
 	const { pathname } = request.nextUrl;
+
+	// 구 라우트(/post/:id) 접근 시 canonical 경로(/posts/:id)로 강제 이동
+	if (pathname.startsWith("/post/")) {
+		const redirectUrl = request.nextUrl.clone();
+		redirectUrl.pathname = pathname.replace(/^\/post\//, "/posts/");
+		return NextResponse.redirect(redirectUrl);
+	}
+
 	const session = await auth();
 
 	// 보호된 라우트 정의
