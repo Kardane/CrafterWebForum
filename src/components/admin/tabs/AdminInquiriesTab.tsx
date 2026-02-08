@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AdminInquiryRow } from "@/types/admin";
+import {
+	fetchAdminJson,
+	fetchAdminResponse,
+} from "@/components/admin/utils/fetch-admin";
 
 function formatDate(date: string) {
 	const parsed = new Date(date);
@@ -38,32 +42,21 @@ export default function AdminInquiriesTab() {
 	const loadInquiries = useCallback(async () => {
 		setLoading(true);
 		try {
-			const [activeRes, archivedRes] = await Promise.all([
-				fetch("/api/admin/inquiries", { cache: "no-store" }),
-				fetch("/api/admin/inquiries?archived=true", { cache: "no-store" }),
-			]);
-			if (
-				activeRes.status === 401 ||
-				archivedRes.status === 401 ||
-				activeRes.status === 403 ||
-				archivedRes.status === 403
-			) {
-				window.location.href = "/login?callbackUrl=/admin";
-				return;
-			}
-			if (!activeRes.ok || !archivedRes.ok) {
-				throw new Error("Failed to load inquiries");
-			}
 			const [activeData, archivedData] = await Promise.all([
-				activeRes.json(),
-				archivedRes.json(),
+				fetchAdminJson<{ inquiries?: AdminInquiryRow[] }>("/api/admin/inquiries"),
+				fetchAdminJson<{ inquiries?: AdminInquiryRow[] }>(
+					"/api/admin/inquiries?archived=true"
+				),
 			]);
 			setInquiries((activeData.inquiries ?? []) as AdminInquiryRow[]);
 			setArchivedInquiries((archivedData.inquiries ?? []) as AdminInquiryRow[]);
 			setError(null);
 		} catch (e) {
-			console.error(e);
-			setError("문의 목록을 불러오지 못했습니다");
+			const isAuthError = (e as Error).message === "AUTH_REQUIRED";
+			if (!isAuthError) {
+				console.error(e);
+				setError("문의 목록을 불러오지 못했습니다");
+			}
 		} finally {
 			setLoading(false);
 		}
@@ -74,26 +67,23 @@ export default function AdminInquiriesTab() {
 	}, [loadInquiries]);
 
 	const archiveInquiry = async (id: number) => {
-		const res = await fetch(`/api/admin/inquiries/${id}`, { method: "DELETE" });
-		if (!res.ok) throw new Error("Failed to delete inquiry");
+		await fetchAdminResponse(`/api/admin/inquiries/${id}`, { method: "DELETE" });
 		await loadInquiries();
 	};
 
 	const restoreInquiry = async (id: number) => {
-		const res = await fetch(`/api/admin/inquiries/${id}`, {
+		await fetchAdminResponse(`/api/admin/inquiries/${id}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ action: "restore" }),
 		});
-		if (!res.ok) throw new Error("Failed to restore inquiry");
 		await loadInquiries();
 	};
 
 	const permanentlyDeleteInquiry = async (id: number) => {
-		const res = await fetch(`/api/admin/inquiries/${id}?permanent=true`, {
+		await fetchAdminResponse(`/api/admin/inquiries/${id}?permanent=true`, {
 			method: "DELETE",
 		});
-		if (!res.ok) throw new Error("Failed to permanently delete inquiry");
 		await loadInquiries();
 	};
 
@@ -146,8 +136,10 @@ export default function AdminInquiriesTab() {
 													return;
 												}
 												void archiveInquiry(inquiry.id).catch((e) => {
-													console.error(e);
-													alert("문의 아카이브에 실패했습니다");
+													if ((e as Error).message !== "AUTH_REQUIRED") {
+														console.error(e);
+														alert("문의 아카이브에 실패했습니다");
+													}
 												});
 											}}
 										>
@@ -204,8 +196,10 @@ export default function AdminInquiriesTab() {
 												className="btn btn-secondary btn-sm"
 												onClick={() => {
 													void restoreInquiry(inquiry.id).catch((e) => {
-														console.error(e);
-														alert("문의 복구에 실패했습니다");
+														if ((e as Error).message !== "AUTH_REQUIRED") {
+															console.error(e);
+															alert("문의 복구에 실패했습니다");
+														}
 													});
 												}}
 											>
@@ -218,8 +212,10 @@ export default function AdminInquiriesTab() {
 														return;
 													}
 													void permanentlyDeleteInquiry(inquiry.id).catch((e) => {
-														console.error(e);
-														alert("문의 영구 삭제에 실패했습니다");
+														if ((e as Error).message !== "AUTH_REQUIRED") {
+															console.error(e);
+															alert("문의 영구 삭제에 실패했습니다");
+														}
 													});
 												}}
 											>

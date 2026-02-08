@@ -31,14 +31,16 @@ interface CommentItemProps {
 	comment: Comment;
 	replyToName?: string | null;
 	replyToCommentId?: number | null;
+	replyToPreview?: string | null;
 	onReplyRequest: (commentId: number, nickname: string) => void;
 	onNavigateToComment?: (commentId: number) => void;
 	onEdit: (commentId: number, content: string) => void;
-	onDelete: (commentId: number) => void;
+	onDelete: (commentId: number, event?: React.MouseEvent) => void;
 	onPin?: (commentId: number) => void;
 	onVote?: (commentId: number, optionId: number) => void;
 	disabled?: boolean;
 	threadRootId?: number;
+	isCompact?: boolean;
 	isHighlighted?: boolean;
 }
 
@@ -53,6 +55,7 @@ export default function CommentItem({
 	comment,
 	replyToName = null,
 	replyToCommentId = null,
+	replyToPreview = null,
 	onReplyRequest,
 	onNavigateToComment,
 	onEdit,
@@ -61,6 +64,7 @@ export default function CommentItem({
 	onVote,
 	disabled = false,
 	threadRootId,
+	isCompact = false,
 	isHighlighted = false,
 }: CommentItemProps) {
 	const { data: session } = useSession();
@@ -94,7 +98,23 @@ export default function CommentItem({
 	const contentWithoutPoll = comment.content.replace(/\[POLL_JSON\][\s\S]*?\[\/POLL_JSON\]/, "").trim();
 	const resolvedThreadRootId = threadRootId ?? comment.id;
 
+	const dismissToolbarFocus = () => {
+		const active = document.activeElement;
+		if (active instanceof HTMLElement && active.closest(`#comment-${comment.id}`)) {
+			active.blur();
+		}
+		const selection = window.getSelection();
+		if (selection && selection.rangeCount > 0) {
+			selection.removeAllRanges();
+		}
+	};
+
 	const handleEditSubmit = (content: string) => {
+		if (!content.trim()) {
+			onDelete(comment.id);
+			setIsEditing(false);
+			return;
+		}
 		onEdit(comment.id, content);
 		setIsEditing(false);
 	};
@@ -117,6 +137,8 @@ export default function CommentItem({
 		} catch (error) {
 			console.error("Failed to copy comment text:", error);
 			showToast({ type: "error", message: "복사 실패" });
+		} finally {
+			dismissToolbarFocus();
 		}
 	};
 
@@ -129,6 +151,8 @@ export default function CommentItem({
 		} catch (error) {
 			console.error("Failed to copy comment link:", error);
 			showToast({ type: "error", message: "복사 실패" });
+		} finally {
+			dismissToolbarFocus();
 		}
 	};
 
@@ -141,17 +165,20 @@ export default function CommentItem({
 
 	return (
 		<div className="comment-wrapper" id={`comment-${comment.id}`}>
-			<div className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""}`}>
-				<div className="comment-avatar">
-					{comment.author.minecraftUuid ? (
-						<img
-							src={getMinecraftHeadUrl(comment.author.minecraftUuid, 36) || ""}
-							alt=""
-							className="avatar-img"
-						/>
-					) : (
-						<div className="avatar-fallback">{comment.author.nickname[0].toUpperCase()}</div>
-					)}
+			<div
+				className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""} ${isCompact ? "compact" : ""}`}
+			>
+				<div className={`comment-avatar ${isCompact ? "compact-spacer" : ""}`}>
+					{!isCompact &&
+						(comment.author.minecraftUuid ? (
+							<img
+								src={getMinecraftHeadUrl(comment.author.minecraftUuid, 36) || ""}
+								alt=""
+								className="avatar-img"
+							/>
+						) : (
+							<div className="avatar-fallback">{comment.author.nickname[0].toUpperCase()}</div>
+						))}
 				</div>
 
 				<div className="comment-content">
@@ -159,16 +186,19 @@ export default function CommentItem({
 						<div className="reply-context-line">
 							<div className="reply-curve" />
 							<button type="button" className="reply-snippet" onClick={handleReplyContextClick}>
-								@{replyToName}
+								<span className="reply-target">@{replyToName}</span>
+								{replyToPreview && <span className="reply-preview">{replyToPreview}</span>}
 							</button>
 						</div>
 					)}
 
-					<div className="comment-header">
-						<span className="comment-author">{comment.author.nickname}</span>
-						{comment.isPostAuthor && <span className="comment-badge author">작성자</span>}
-						{comment.isPinned && <span className="comment-badge pinned">📌 고정됨</span>}
-					</div>
+					{!isCompact && (
+						<div className="comment-header">
+							<span className="comment-author">{comment.author.nickname}</span>
+							{comment.isPostAuthor && <span className="comment-badge author">작성자</span>}
+							{comment.isPinned && <span className="comment-badge pinned">📌 고정됨</span>}
+						</div>
+					)}
 
 					{isEditing ? (
 						<CommentForm
@@ -181,17 +211,17 @@ export default function CommentItem({
 						/>
 					) : (
 						<>
-							{contentWithoutPoll && (
-								<div className="comment-content-row">
-									<div className="comment-body">
-										<PostContent content={contentWithoutPoll} />
+								{contentWithoutPoll && (
+									<div className="comment-content-row">
+										<div className="comment-body">
+											<PostContent content={contentWithoutPoll} />
+										</div>
+										<span className="comment-hover-time" title={fullCreatedAtLabel}>
+											{createdAtLabel}
+											{comment.updatedAt !== comment.createdAt ? " (수정됨)" : ""}
+										</span>
 									</div>
-									<span className="comment-hover-time" title={fullCreatedAtLabel}>
-										{createdAtLabel}
-										{comment.updatedAt !== comment.createdAt ? " (수정됨)" : ""}
-									</span>
-								</div>
-							)}
+								)}
 
 							{pollData && (
 								<PollCard
@@ -225,7 +255,7 @@ export default function CommentItem({
 								<button type="button" className="action-btn" onClick={() => setIsEditing(true)} title="수정">
 									<Edit size={16} />
 								</button>
-								<button type="button" className="action-btn danger" onClick={() => onDelete(comment.id)} title="삭제">
+								<button type="button" className="action-btn danger" onClick={(e) => onDelete(comment.id, e)} title="삭제">
 									<Trash2 size={16} />
 								</button>
 							</>
@@ -249,18 +279,23 @@ export default function CommentItem({
 					margin-bottom: 4px;
 				}
 
-				.comment-item {
-					display: flex;
-					gap: 12px;
-					padding: 12px;
+					.comment-item {
+						display: flex;
+						gap: 12px;
+						padding: 12px;
 					border-radius: 6px;
 					position: relative;
 					transition: background-color 0.15s;
 				}
 
-				.comment-item:hover {
-					background: rgba(0, 0, 0, 0.2);
-				}
+					.comment-item:hover {
+						background: rgba(0, 0, 0, 0.2);
+					}
+
+					.comment-item.compact {
+						padding-top: 6px;
+						padding-bottom: 8px;
+					}
 
 				.comment-item.is-highlighted {
 					background: color-mix(in srgb, var(--warning) 30%, #000 70%);
@@ -277,9 +312,14 @@ export default function CommentItem({
 					background: rgba(139, 35, 50, 0.2);
 				}
 
-				.comment-avatar {
-					flex-shrink: 0;
-				}
+					.comment-avatar {
+						flex-shrink: 0;
+					}
+
+					.comment-avatar.compact-spacer {
+						width: 36px;
+						height: 8px;
+					}
 
 				.avatar-img {
 					width: 36px;
@@ -300,10 +340,10 @@ export default function CommentItem({
 					color: var(--text-muted);
 				}
 
-				.comment-content {
-					flex: 1;
-					min-width: 0;
-				}
+					.comment-content {
+						flex: 1;
+						min-width: 0;
+					}
 
 				.comment-header {
 					display: flex;
@@ -334,51 +374,67 @@ export default function CommentItem({
 					color: var(--bg-primary);
 				}
 
-				.reply-context-line {
-					display: flex;
-					align-items: center;
-					margin-top: 2px;
-					margin-bottom: 4px;
-					position: relative;
-					opacity: 0.8;
-				}
+					.reply-context-line {
+						display: flex;
+						align-items: flex-start;
+						margin-top: 2px;
+						margin-bottom: 4px;
+						position: relative;
+						padding-left: 2px;
+					}
 
-				.reply-curve {
-					width: 10px;
-					height: 12px;
-					border-left: 2px solid #ffffff;
-					border-top: 2px solid #ffffff;
-					border-top-left-radius: 6px;
-					margin-right: 8px;
-					margin-bottom: -10px;
-				}
+					.reply-curve {
+						width: 14px;
+						height: 10px;
+						border-left: 1.5px solid rgba(255, 255, 255, 0.4);
+						border-top: 1.5px solid rgba(255, 255, 255, 0.4);
+						border-top-left-radius: 6px;
+						margin-right: 6px;
+						margin-top: 6px;
+					}
 
-				.reply-snippet {
-					font-size: 0.85rem;
-					color: var(--text-muted);
-					cursor: pointer;
-					background: var(--bg-tertiary);
-					padding: 2px 8px;
-					border-radius: 4px;
-					white-space: nowrap;
-					overflow: hidden;
-					text-overflow: ellipsis;
-					max-width: 300px;
-					border: none;
-					transition: background 0.15s ease, color 0.15s ease;
-				}
+					.reply-snippet {
+						display: inline-flex;
+						align-items: center;
+						gap: 6px;
+						font-size: 0.8rem;
+						color: var(--text-muted);
+						cursor: pointer;
+						background: #1e1f22;
+						padding: 4px 10px;
+						border-radius: 6px;
+						white-space: nowrap;
+						overflow: hidden;
+						text-overflow: ellipsis;
+						max-width: min(100%, 520px);
+						border: 1px solid rgba(255, 255, 255, 0.05);
+						transition: background 0.15s ease, color 0.15s ease;
+						margin-bottom: 2px;
+					}
+
+					.reply-target {
+						color: var(--text-secondary);
+						font-weight: 600;
+						flex-shrink: 0;
+					}
+
+					.reply-preview {
+						overflow: hidden;
+						text-overflow: ellipsis;
+					}
 
 				.reply-snippet:hover {
-					background: var(--bg-secondary);
+					background: #2b2d31;
 					color: var(--text-primary);
 				}
 
-				.comment-content-row {
-					display: flex;
-					align-items: flex-start;
-					gap: 8px;
-					flex-wrap: wrap;
-				}
+					.comment-content-row {
+						display: flex;
+						flex-direction: column;
+						align-items: flex-start;
+						gap: 2px;
+						position: relative;
+					}
 
 				.comment-body {
 					color: var(--text-secondary);
@@ -396,16 +452,20 @@ export default function CommentItem({
 					margin-top: 0;
 				}
 
-				.comment-hover-time {
-					font-size: 0.7rem;
-					color: rgba(255, 255, 255, 0.5);
-					opacity: 0;
-					transition: opacity 0.2s ease;
-					user-select: none;
-					white-space: nowrap;
-					pointer-events: none;
-					margin-top: 2px;
-				}
+					.comment-hover-time {
+						font-size: 0.72rem;
+						color: rgba(255, 255, 255, 0.45);
+						opacity: 0;
+						transition: opacity 0.2s ease;
+						user-select: none;
+						white-space: nowrap;
+						pointer-events: none;
+						font-family: inherit;
+						position: absolute;
+						left: 0;
+						bottom: 2px;
+						transform: translate(calc(-100% - 10px), 0);
+					}
 
 				.comment-wrapper:hover .comment-hover-time {
 					opacity: 1;
@@ -453,12 +513,19 @@ export default function CommentItem({
 					color: var(--error);
 				}
 
-				@media (hover: none) {
-					.comment-actions {
-						opacity: 1;
-						pointer-events: auto;
+					@media (hover: none) {
+						.comment-actions {
+							opacity: 1;
+							pointer-events: auto;
+						}
 					}
-				}
+
+					@media (max-width: 768px) {
+						.comment-hover-time {
+							font-size: 0.68rem;
+							transform: translate(calc(-100% - 6px), 0);
+						}
+					}
 
 				@keyframes reply-highlight-pulse {
 					0% {

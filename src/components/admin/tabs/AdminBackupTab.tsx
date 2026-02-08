@@ -4,6 +4,10 @@ import { useCallback, useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ko } from "date-fns/locale";
 import { AdminBackupInfo } from "@/types/admin";
+import {
+	fetchAdminJson,
+	fetchAdminResponse,
+} from "@/components/admin/utils/fetch-admin";
 
 function formatDate(date: string) {
 	const parsed = new Date(date);
@@ -24,12 +28,14 @@ export default function AdminBackupTab() {
 
 	const loadLatestBackup = useCallback(async () => {
 		try {
-			const res = await fetch("/api/admin/backup", { cache: "no-store" });
-			if (!res.ok) throw new Error("Failed to load latest backup");
-			const data = (await res.json()) as { latestBackup?: AdminBackupInfo | null };
+			const data = await fetchAdminJson<{ latestBackup?: AdminBackupInfo | null }>(
+				"/api/admin/backup"
+			);
 			setLatestBackup(data.latestBackup ?? null);
 		} catch (error) {
-			console.error(error);
+			if ((error as Error).message !== "AUTH_REQUIRED") {
+				console.error(error);
+			}
 			setLatestBackup(null);
 		}
 	}, []);
@@ -42,11 +48,7 @@ export default function AdminBackupTab() {
 		setRunning(true);
 		setMessage(null);
 		try {
-			const res = await fetch("/api/admin/backup", { method: "POST" });
-			if (!res.ok) {
-				const errorData = (await res.json().catch(() => null)) as { error?: string } | null;
-				throw new Error(errorData?.error ?? "Backup failed");
-			}
+			const res = await fetchAdminResponse("/api/admin/backup", { method: "POST" });
 
 			const disposition = res.headers.get("content-disposition") ?? "";
 			const match = disposition.match(/filename="(.+)"/);
@@ -64,8 +66,10 @@ export default function AdminBackupTab() {
 			await loadLatestBackup();
 			setMessage(`백업 다운로드 완료: ${filename}`);
 		} catch (error) {
-			console.error(error);
-			setMessage((error as Error).message);
+			if ((error as Error).message !== "AUTH_REQUIRED") {
+				console.error(error);
+				setMessage((error as Error).message);
+			}
 		} finally {
 			setRunning(false);
 		}

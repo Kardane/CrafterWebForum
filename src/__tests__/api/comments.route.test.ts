@@ -75,3 +75,41 @@ describe("PATCH /api/comments/[id]", () => {
 		expect(body.comment.isPostAuthor).toBe(true);
 	});
 });
+
+describe("POST /api/comments/[id]/pin", () => {
+	beforeEach(() => {
+		vi.resetModules();
+		authMock.mockReset();
+		commentFindUniqueMock.mockReset();
+		commentUpdateMock.mockReset();
+		commentDeleteManyMock.mockReset();
+	});
+
+	it("returns 403 when caller is not admin", async () => {
+		authMock.mockResolvedValue({ user: { id: "7", role: "user", nickname: "tester" } });
+		const { POST } = await import("@/app/api/comments/[id]/pin/route");
+		const req = new Request("http://localhost/api/comments/1/pin", { method: "POST" });
+		const res = await POST(req as never, { params: Promise.resolve({ id: "1" }) });
+		expect(res.status).toBe(403);
+	});
+
+	it("toggles pin state for admin", async () => {
+		authMock.mockResolvedValue({ user: { id: "1", role: "admin", nickname: "admin" } });
+		commentFindUniqueMock.mockResolvedValue({ id: 10, isPinned: 0 });
+		commentUpdateMock.mockResolvedValue({ id: 10, isPinned: 1 });
+
+		const { POST } = await import("@/app/api/comments/[id]/pin/route");
+		const req = new Request("http://localhost/api/comments/10/pin", { method: "POST" });
+		const res = await POST(req as never, { params: Promise.resolve({ id: "10" }) });
+		const body = await res.json();
+
+		expect(res.status).toBe(200);
+		expect(commentUpdateMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: { id: 10 },
+				data: { isPinned: 1 },
+			})
+		);
+		expect(body.comment.isPinned).toBe(true);
+	});
+});

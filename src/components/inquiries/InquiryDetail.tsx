@@ -72,8 +72,8 @@ export default function InquiryDetail({
 					<h2 className="text-xl font-bold">{inquiry.title}</h2>
 					<span
 						className={`px-2 py-1 text-xs rounded font-medium ${inquiry.status === 'answered'
-								? 'bg-success text-white'
-								: 'bg-warning text-black'
+							? 'bg-success text-white'
+							: 'bg-warning text-black'
 							}`}
 					>
 						{inquiry.status === 'answered' ? '답변 완료' : '대기 중'}
@@ -96,8 +96,8 @@ export default function InquiryDetail({
 					<div
 						key={reply.id}
 						className={`p-4 rounded-lg border ${reply.author.role === 'admin'
-								? 'bg-bg-tertiary border-success/30 ml-4'
-								: 'bg-bg-secondary border-border'
+							? 'bg-bg-tertiary border-success/30 ml-4'
+							: 'bg-bg-secondary border-border'
 							}`}
 					>
 						<div className="flex justify-between items-center mb-2">
@@ -123,6 +123,17 @@ export default function InquiryDetail({
 					<textarea
 						value={replyContent}
 						onChange={(e) => setReplyContent(e.target.value)}
+						onKeyDown={(e) => {
+							// IME 조합 중에는 무시
+							if (e.nativeEvent.isComposing) return;
+							// 엔터키: 쉬프트 없이 누르면 전송
+							if (e.key === "Enter" && !e.shiftKey) {
+								e.preventDefault();
+								if (replyContent.trim() && !isSubmitting) {
+									void handleReplySubmit(e);
+								}
+							}
+						}}
 						className="input-base w-full h-32 mb-4"
 						placeholder="답변 내용을 입력하세요..."
 						required

@@ -7,7 +7,7 @@ import { useSession, signOut } from "next-auth/react";
 import classNames from "classnames";
 import { Settings, HelpCircle, Shield } from "lucide-react";
 import SidebarSettingsModal from "../sidebar/SidebarSettingsModal";
-import { getSidebarSettings } from "@/lib/sidebar-settings";
+import { DEFAULT_SETTINGS, getSidebarSettings, normalizeSidebarUrl } from "@/lib/sidebar-settings";
 import { SidebarLink, DEFAULT_LINKS } from "@/lib/sidebar-links";
 import { isPrivilegedNickname } from "@/config/admin-policy";
 
@@ -31,12 +31,20 @@ function getInitials(name: string): string {
 	return name ? name.charAt(0).toUpperCase() : "?";
 }
 
-function buildSidebarLinks(): SidebarLink[] {
-	const settings = getSidebarSettings();
-	const customLinks: SidebarLink[] = (settings.customLinks || []).map((link: unknown) => ({
-		...(link as SidebarLink),
-		isCustom: true,
-	}));
+function buildSidebarLinks(settings = DEFAULT_SETTINGS): SidebarLink[] {
+	const customLinks = (settings.customLinks || []).reduce<SidebarLink[]>((acc, link) => {
+		const normalizedUrl = normalizeSidebarUrl(link.url);
+		if (!normalizedUrl) {
+			return acc;
+		}
+
+		acc.push({
+			...link,
+			url: normalizedUrl,
+			isCustom: true,
+		});
+		return acc;
+	}, []);
 
 	let allLinks: SidebarLink[] = [...DEFAULT_LINKS, ...customLinks];
 
@@ -78,7 +86,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 	const router = useRouter();
 	const { data: session } = useSession();
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-	const [links, setLinks] = useState<SidebarLink[]>(() => buildSidebarLinks());
+	const [links, setLinks] = useState<SidebarLink[]>(() => buildSidebarLinks(DEFAULT_SETTINGS));
 	const [inquiryCount, setInquiryCount] = useState(0);
 
 	const user = session?.user;
@@ -88,8 +96,9 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
 	useEffect(() => {
 		const refreshLinks = () => {
-			setLinks(buildSidebarLinks());
+			setLinks(buildSidebarLinks(getSidebarSettings()));
 		};
+		const controller = new AbortController();
 
 		const loadInquiryCount = async () => {
 			if (!canAccessAdmin) {
@@ -100,19 +109,31 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 			try {
 				const res = await fetch("/api/inquiries/pending-count", {
 					cache: "no-store",
+					signal: controller.signal,
 				});
 
+				if (res.status === 401 || res.status === 403) {
+					setInquiryCount(0);
+					return;
+				}
+
 				if (!res.ok) {
-					throw new Error("Failed to load inquiry count");
+					setInquiryCount(0);
+					return;
 				}
 
 				const data = (await res.json()) as { count?: number };
 				setInquiryCount(Number(data.count ?? 0));
 			} catch (error) {
-				console.error("Failed to load inquiry count", error);
+				const abortError = error as { name?: string };
+				if (abortError.name === "AbortError") {
+					return;
+				}
 				setInquiryCount(0);
 			}
 		};
+
+		refreshLinks();
 		void loadInquiryCount();
 
 		const handleStorage = (event: StorageEvent) => {
@@ -124,13 +145,17 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 		window.addEventListener("sidebarSettingsChanged", refreshLinks);
 
 		return () => {
+			controller.abort();
 			window.removeEventListener("storage", handleStorage);
 			window.removeEventListener("sidebarSettingsChanged", refreshLinks);
 		};
 	}, [canAccessAdmin]);
 
 	const renderLink = (link: SidebarLink) => {
-		const isExternal = link.url.startsWith("http");
+		const isExternal = /^https?:\/\//i.test(link.url);
+		if (!isExternal && !link.url.startsWith("/")) {
+			return null;
+		}
 		const isActive = !isExternal && (pathname === link.url || (link.url !== "/" && pathname.startsWith(link.url)));
 		const itemClassName = classNames(
 			"mb-1 flex items-center gap-2 rounded px-2.5 py-2 text-sm transition-colors",

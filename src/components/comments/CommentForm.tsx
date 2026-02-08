@@ -17,6 +17,7 @@ interface CommentFormProps {
 	variant?: "composer" | "inline";
 	textareaId?: string;
 	mode?: "create" | "edit";
+	postId?: number;
 }
 
 interface UploadPayload {
@@ -36,6 +37,7 @@ export default function CommentForm({
 	variant = "inline",
 	textareaId,
 	mode = "create",
+	postId,
 }: CommentFormProps) {
 	const { showToast } = useToast();
 	const [content, setContent] = useState(initialValue);
@@ -53,9 +55,33 @@ export default function CommentForm({
 		setContent(initialValue);
 	}, [initialValue]);
 
+	// 임시 저장 불러오기
+	useEffect(() => {
+		if (postId && !isEditMode && !initialValue) {
+			const saved = localStorage.getItem(`comment_draft_${postId}`);
+			if (saved) {
+				setContent(saved);
+			}
+		}
+	}, [postId, isEditMode, initialValue]);
+
+	// 임시 저장 (디바운스 없이 즉시 저장)
+	useEffect(() => {
+		if (postId && !isEditMode && content && content !== initialValue) {
+			localStorage.setItem(`comment_draft_${postId}`, content);
+		} else if (postId && !isEditMode && !content) {
+			localStorage.removeItem(`comment_draft_${postId}`);
+		}
+	}, [content, postId, isEditMode, initialValue]);
+
 	useEffect(() => {
 		if (isEditMode) {
 			setIsMenuOpen(false);
+			if (textareaRef.current) {
+				textareaRef.current.focus();
+				const len = textareaRef.current.value.length;
+				textareaRef.current.setSelectionRange(len, len);
+			}
 		}
 	}, [isEditMode]);
 
@@ -88,8 +114,9 @@ export default function CommentForm({
 	};
 
 	const uploadFiles = async (files: File[]) => {
-		if (files.length === 0) return;
+		if (files.length === 0) return content;
 
+		let currentContent = content;
 		setIsUploading(true);
 		try {
 			for (const file of files) {
@@ -107,17 +134,25 @@ export default function CommentForm({
 					throw new Error(message);
 				}
 
-				appendUploadedContent(data);
+				const snippet =
+					data.type === "image"
+						? `![${data.originalName}](${data.url})`
+						: `[📦 ${data.originalName}](${data.url})`;
+
+				currentContent = currentContent + (currentContent ? "\n" : "") + snippet;
+				setContent(currentContent);
 			}
 
 			showToast({ type: "success", message: "파일 업로드 완료" });
 			setIsMenuOpen(false);
+			return currentContent;
 		} catch (error) {
 			console.error("Comment attachment upload error:", error);
 			showToast({
 				type: "error",
 				message: error instanceof Error ? error.message : "파일 업로드에 실패했습니다",
 			});
+			return currentContent;
 		} finally {
 			setIsUploading(false);
 		}
@@ -130,20 +165,51 @@ export default function CommentForm({
 		event.target.value = "";
 	};
 
-	const handleSubmit = async (event: React.FormEvent) => {
-		event.preventDefault();
+	const handlePaste = async (event: React.ClipboardEvent) => {
+		const items = event.clipboardData.items;
+		const files: File[] = [];
 
-		if (!content.trim()) {
+		for (let i = 0; i < items.length; i++) {
+			if (items[i].kind === "file") {
+				const file = items[i].getAsFile();
+				if (file && file.type.startsWith("image/")) {
+					files.push(file);
+				}
+			}
+		}
+
+		if (files.length > 0) {
+			event.preventDefault();
+			const updatedContent = await uploadFiles(files);
+			// 이미지 붙여넣기 시 자동 전송 (내용이 있는 경우만)
+			if (updatedContent.trim()) {
+				void handleFormSubmit(updatedContent);
+			}
+		}
+	};
+
+	const handleFormSubmit = async (overrideContent?: string) => {
+		const targetContent = overrideContent ?? content;
+		const trimmedContent = targetContent.trim();
+		if (!trimmedContent && !isEditMode) {
 			showToast({ type: "error", message: "댓글 내용을 입력해줘" });
 			return;
 		}
 
 		try {
-			await onSubmit(content);
+			await onSubmit(targetContent);
 			setContent("");
+			if (postId) {
+				localStorage.removeItem(`comment_draft_${postId}`);
+			}
 		} catch (error) {
 			console.error("Comment submit error:", error);
 		}
+	};
+
+	const handleSubmit = async (event: React.FormEvent) => {
+		event.preventDefault();
+		await handleFormSubmit();
 	};
 
 	const handlePollCreate = (pollData: PollData) => {
@@ -252,11 +318,31 @@ export default function CommentForm({
 						ref={textareaRef}
 						value={content}
 						onChange={(event) => setContent(event.target.value)}
+						onKeyDown={(event) => {
+							// IME 조합 중에는 무시
+							if (event.nativeEvent.isComposing) return;
+
+							// Escape 키: 취소 처리
+							if (event.key === "Escape" && onCancel) {
+								event.preventDefault();
+								onCancel();
+								return;
+							}
+
+							// 엔터키: 쉬프트 없이 누르면 전송
+							if (event.key === "Enter" && !event.shiftKey) {
+								event.preventDefault();
+								if ((content.trim() || isEditMode) && !disabled && !isUploading) {
+									void handleFormSubmit();
+								}
+							}
+						}}
 						placeholder={placeholder}
 						disabled={disabled}
 						className="comment-textarea"
 						rows={1}
 						onFocus={() => setIsMenuOpen(false)}
+						onPaste={handlePaste}
 					/>
 
 					<button type="submit" disabled={disabled || isUploading || !content.trim()} className="submit-btn">
@@ -422,7 +508,8 @@ export default function CommentForm({
 				}
 
 				.comment-form.edit-mode .comment-textarea {
-					background: color-mix(in srgb, var(--bg-tertiary) 92%, #000 8%);
+					background: rgba(0, 0, 0, 0.4);
+					border-color: rgba(255, 255, 255, 0.1);
 				}
 
 				.comment-textarea:focus {

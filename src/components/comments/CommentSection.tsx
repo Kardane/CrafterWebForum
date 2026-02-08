@@ -39,6 +39,33 @@ interface FlattenedComment {
 	threadRootId: number;
 	replyToName: string | null;
 	replyToCommentId: number | null;
+	replyToPreview: string | null;
+	isCompact: boolean;
+}
+
+const COMPACT_TIME_WINDOW_MS = 5 * 60 * 1000;
+const REPLY_PREVIEW_MAX_LENGTH = 88;
+
+function stripReplyPreviewContent(content: string): string {
+	return content
+		.replace(/\[POLL_JSON\][\s\S]*?\[\/POLL_JSON\]/g, " ")
+		.replace(/!\[[^\]]*]\(([^)]+)\)/g, "[이미지]")
+		.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
+		.replace(/`{1,3}[\s\S]*?`{1,3}/g, " ")
+		.replace(/[*_~>#-]/g, " ")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function toReplyPreview(content: string): string {
+	const plain = stripReplyPreviewContent(content);
+	if (!plain) {
+		return "본문 없음";
+	}
+	if (plain.length <= REPLY_PREVIEW_MAX_LENGTH) {
+		return plain;
+	}
+	return `${plain.slice(0, REPLY_PREVIEW_MAX_LENGTH)}…`;
 }
 
 function appendReplyToThread(nodes: Comment[], rootId: number, newComment: Comment): Comment[] {
@@ -91,6 +118,49 @@ function removeCommentFromTree(nodes: Comment[], targetId: number): Comment[] {
 		}));
 }
 
+function updateCommentPinnedInTree(nodes: Comment[], targetId: number, isPinned: boolean): Comment[] {
+	return nodes.map((node) => {
+		if (node.id === targetId) {
+			return {
+				...node,
+				isPinned,
+			};
+		}
+
+		if (node.replies.length === 0) {
+			return node;
+		}
+
+		return {
+			...node,
+			replies: updateCommentPinnedInTree(node.replies, targetId, isPinned),
+		};
+	});
+}
+
+function shouldCompactWithPrevious(previous: FlattenedComment | null, current: FlattenedComment): boolean {
+	if (!previous) {
+		return false;
+	}
+
+	if (previous.comment.isPinned || current.comment.isPinned) {
+		return false;
+	}
+	if (previous.threadRootId !== current.threadRootId) {
+		return false;
+	}
+	if (previous.comment.author.id !== current.comment.author.id) {
+		return false;
+	}
+
+	const previousMs = new Date(previous.comment.createdAt).getTime();
+	const currentMs = new Date(current.comment.createdAt).getTime();
+	if (!Number.isFinite(previousMs) || !Number.isFinite(currentMs) || currentMs < previousMs) {
+		return false;
+	}
+	return currentMs - previousMs <= COMPACT_TIME_WINDOW_MS;
+}
+
 function flattenComments(comments: Comment[]): FlattenedComment[] {
 	const flattened: FlattenedComment[] = [];
 
@@ -98,7 +168,8 @@ function flattenComments(comments: Comment[]): FlattenedComment[] {
 		nodes: Comment[],
 		rootId: number | null,
 		replyToName: string | null,
-		replyToCommentId: number | null
+		replyToCommentId: number | null,
+		replyToPreview: string | null
 	) => {
 		nodes.forEach((node) => {
 			const nextRootId = rootId ?? node.id;
@@ -107,21 +178,28 @@ function flattenComments(comments: Comment[]): FlattenedComment[] {
 				threadRootId: nextRootId,
 				replyToName,
 				replyToCommentId,
+				replyToPreview,
+				isCompact: false,
 			});
 			if (node.replies.length > 0) {
-				walk(node.replies, nextRootId, node.author.nickname, node.id);
+				walk(node.replies, nextRootId, node.author.nickname, node.id, toReplyPreview(node.content));
 			}
 		});
 	};
 
-	walk(comments, null, null, null);
+	walk(comments, null, null, null, null);
 
-	return flattened.sort((a, b) => {
+	const sorted = flattened.sort((a, b) => {
 		if (a.comment.isPinned !== b.comment.isPinned) {
 			return Number(b.comment.isPinned) - Number(a.comment.isPinned);
 		}
 		return new Date(a.comment.createdAt).getTime() - new Date(b.comment.createdAt).getTime();
 	});
+
+	return sorted.map((item, index) => ({
+		...item,
+		isCompact: shouldCompactWithPrevious(index > 0 ? sorted[index - 1] : null, item),
+	}));
 }
 
 export default function CommentSection({ postId, initialComments }: CommentSectionProps) {
@@ -219,14 +297,15 @@ export default function CommentSection({ postId, initialComments }: CommentSecti
 		}
 	};
 
-	const handleCommentDeleteConfirmed = async () => {
-		if (pendingDeleteId === null) {
+	const handleCommentDeleteConfirmed = async (commentId?: number) => {
+		const idToDelete = commentId ?? pendingDeleteId;
+		if (idToDelete === null) {
 			return;
 		}
 
 		setIsLoading(true);
 		try {
-			const response = await fetch(`/api/comments/${pendingDeleteId}`, {
+			const response = await fetch(`/api/comments/${idToDelete}`, {
 				method: "DELETE",
 			});
 
@@ -235,7 +314,7 @@ export default function CommentSection({ postId, initialComments }: CommentSecti
 				throw new Error(data.error || "Failed to delete comment");
 			}
 
-			setComments((prev) => removeCommentFromTree(prev, pendingDeleteId));
+			setComments((prev) => removeCommentFromTree(prev, idToDelete));
 			setPendingDeleteId(null);
 			showToast({ type: "success", message: "댓글 삭제 완료" });
 		} catch (error) {
@@ -263,6 +342,9 @@ export default function CommentSection({ postId, initialComments }: CommentSecti
 			return;
 		}
 
+		const { pathname, search } = window.location;
+		window.history.replaceState(null, "", `${pathname}${search}#comment-${commentId}`);
+
 		target.scrollIntoView({ behavior: "smooth", block: "center" });
 		setHighlightedCommentId(commentId);
 
@@ -274,31 +356,67 @@ export default function CommentSection({ postId, initialComments }: CommentSecti
 		}, 1600);
 	};
 
+	const handleCommentPinToggle = async (commentId: number) => {
+		setIsLoading(true);
+		try {
+			const response = await fetch(`/api/comments/${commentId}/pin`, {
+				method: "POST",
+			});
+			const data = (await response.json()) as {
+				error?: string;
+				comment?: { id: number; isPinned: boolean };
+			};
+			if (!response.ok || !data.comment) {
+				throw new Error(data.error || "Failed to toggle comment pin");
+			}
+
+			setComments((prev) => updateCommentPinnedInTree(prev, commentId, data.comment!.isPinned));
+			showToast({
+				type: "success",
+				message: data.comment.isPinned ? "댓글 고정 완료" : "댓글 고정 해제 완료",
+			});
+		} catch (error) {
+			console.error("Comment pin toggle error:", error);
+			showToast({ type: "error", message: "댓글 고정 처리 실패" });
+		} finally {
+			setIsLoading(false);
+		}
+	};
+
 	return (
 		<div className="comment-section">
 			<h2 className="text-xl font-bold">댓글 {flattenedComments.length}개</h2>
 
 			<div className="comment-stream" ref={streamRef}>
 				<div className="comment-list">
-					{flattenedComments.length === 0 ? (
-						<div className="py-8 text-center text-text-muted">첫 댓글 써줘</div>
-					) : (
-						flattenedComments.map((item) => (
-							<CommentItem
-								key={item.comment.id}
-								comment={item.comment}
-								replyToName={item.replyToName}
-								replyToCommentId={item.replyToCommentId}
-								threadRootId={item.threadRootId}
-								isHighlighted={highlightedCommentId === item.comment.id}
-								onNavigateToComment={handleNavigateToComment}
-								onReplyRequest={handleReplyRequest}
-								onEdit={handleCommentUpdate}
-								onDelete={(commentId) => setPendingDeleteId(commentId)}
-								disabled={isLoading}
-							/>
-						))
-					)}
+						{flattenedComments.length === 0 ? (
+							<div className="py-8 text-center text-text-muted">첫 댓글 써줘</div>
+						) : (
+							flattenedComments.map((item) => (
+								<CommentItem
+									key={item.comment.id}
+									comment={item.comment}
+									replyToName={item.replyToName}
+									replyToCommentId={item.replyToCommentId}
+									replyToPreview={item.replyToPreview}
+									threadRootId={item.threadRootId}
+									isCompact={item.isCompact}
+									isHighlighted={highlightedCommentId === item.comment.id}
+									onNavigateToComment={handleNavigateToComment}
+									onReplyRequest={handleReplyRequest}
+									onEdit={handleCommentUpdate}
+									onPin={handleCommentPinToggle}
+									onDelete={(commentId, event) => {
+										if (event?.shiftKey) {
+											void handleCommentDeleteConfirmed(commentId);
+										} else {
+											setPendingDeleteId(commentId);
+										}
+									}}
+									disabled={isLoading}
+								/>
+							))
+						)}
 					<div id="comment-feed-end" />
 				</div>
 			</div>
@@ -313,6 +431,7 @@ export default function CommentSection({ postId, initialComments }: CommentSecti
 						onCancel={replyTarget ? () => setReplyTarget(null) : undefined}
 						placeholder={replyTarget ? "답장 작성 중..." : "댓글을 입력해줘"}
 						textareaId="comment-composer-input"
+						postId={postId}
 					/>
 				</div>
 			</div>
@@ -323,16 +442,22 @@ export default function CommentSection({ postId, initialComments }: CommentSecti
 				title="댓글 삭제"
 				size="sm"
 				variant="sidebarLike"
-				footer={
-					<div className="flex justify-end gap-2">
-						<button type="button" className="btn btn-secondary btn-sm" onClick={() => setPendingDeleteId(null)}>
-							취소
-						</button>
-						<button type="button" className="btn btn-danger btn-sm" onClick={handleCommentDeleteConfirmed}>
-							삭제
-						</button>
-					</div>
-				}
+					footer={
+						<div className="flex justify-end gap-2">
+							<button type="button" className="btn btn-secondary btn-sm" onClick={() => setPendingDeleteId(null)}>
+								취소
+							</button>
+							<button
+								type="button"
+								className="btn btn-danger btn-sm"
+								onClick={() => {
+									void handleCommentDeleteConfirmed();
+								}}
+							>
+								삭제
+							</button>
+						</div>
+					}
 			>
 				<p className="text-sm text-text-secondary">선택한 댓글을 삭제할까</p>
 			</Modal>

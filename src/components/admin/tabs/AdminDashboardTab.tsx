@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import classNames from "classnames";
 import { AdminStats } from "@/types/admin";
 import AdminCoreStatsChart from "@/components/admin/charts/AdminCoreStatsChart";
+import { fetchAdminJson } from "@/components/admin/utils/fetch-admin";
 import {
 	ADMIN_TREND_RANGE_OPTIONS,
 	DEFAULT_ADMIN_TREND_RANGE,
@@ -21,24 +22,19 @@ export default function AdminDashboardTab() {
 		setLoading(true);
 		(async () => {
 			try {
-				const res = await fetch(`/api/admin/stats?range=${trendRange}`, { cache: "no-store" });
-				if (res.status === 401 || res.status === 403) {
-					if (!cancelled) {
-						window.location.href = "/login?callbackUrl=/admin";
-					}
-					return;
-				}
-				if (!res.ok) {
-					throw new Error("FAILED_TO_LOAD_STATS");
-				}
-				const data = await res.json();
+				const data = await fetchAdminJson<{ stats: AdminStats }>(
+					`/api/admin/stats?range=${trendRange}`
+				);
 				if (!cancelled) {
 					setStats(data.stats);
 					setError(null);
 				}
 			} catch (e) {
-				console.error(e);
-				if (!cancelled) {
+				const isAuthError = (e as Error).message === "AUTH_REQUIRED";
+				if (!isAuthError) {
+					console.error(e);
+				}
+				if (!cancelled && !isAuthError) {
 					setError("관리자 통계를 불러오지 못했습니다");
 				}
 			} finally {

@@ -15,6 +15,7 @@ export interface SidebarSettings {
 }
 
 const STORAGE_KEY = "sidebarSettings";
+const UNSAFE_PROTOCOLS = new Set(["javascript:", "data:", "vbscript:", "file:"]);
 
 /**
  * 기본 설정값
@@ -26,6 +27,37 @@ export const DEFAULT_SETTINGS: SidebarSettings = {
 	gridItems: [],
 	customLinks: []
 };
+
+/**
+ * 사이드바 링크 URL 정규화
+ * - 내부 링크는 `/`로 시작해야 함
+ * - 외부 링크는 http/https만 허용
+ */
+export function normalizeSidebarUrl(rawUrl: string): string | null {
+	const trimmed = rawUrl.trim();
+	if (!trimmed) {
+		return null;
+	}
+
+	if (trimmed.startsWith("/")) {
+		return trimmed;
+	}
+
+	const candidate = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+	try {
+		const parsed = new URL(candidate);
+		if (UNSAFE_PROTOCOLS.has(parsed.protocol)) {
+			return null;
+		}
+		if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+			return null;
+		}
+		return parsed.toString();
+	} catch {
+		return null;
+	}
+}
 
 /**
  * 설정 불러오기
@@ -132,13 +164,15 @@ export function toggleLinkVisibility(linkId: string): void {
  * Favicon URL 생성
  */
 export function getFaviconUrl(url: string): string {
+	const normalized = normalizeSidebarUrl(url);
+	if (!normalized || normalized.startsWith("/")) {
+		return "";
+	}
+
 	try {
-		if (!url.startsWith("http")) {
-			url = "https://" + url;
-		}
-		const domain = new URL(url).hostname;
+		const domain = new URL(normalized).hostname;
 		return `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-	} catch (e) {
+	} catch {
 		return "";
 	}
 }

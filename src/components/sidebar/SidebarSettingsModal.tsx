@@ -7,7 +7,8 @@ import {
 	getSidebarSettings,
 	saveSidebarSettings,
 	resetSidebarSettings,
-	getFaviconUrl
+	getFaviconUrl,
+	normalizeSidebarUrl,
 } from "@/lib/sidebar-settings";
 import { SidebarLink, DEFAULT_LINKS } from "@/lib/sidebar-links"; // DEFAULT_LINKS 임포트 수정
 
@@ -181,11 +182,17 @@ export default function SidebarSettingsModal({
 			return;
 		}
 
+		const normalizedUrl = normalizeSidebarUrl(newLinkUrl);
+		if (!normalizedUrl) {
+			alert("올바른 URL 형식이 아닙니다");
+			return;
+		}
+
 		const newLink: SidebarLink = {
 			id: `custom_${Date.now()}`,
 			title: newLinkTitle.trim(),
-			url: newLinkUrl.trim(),
-			icon_url: getFaviconUrl(newLinkUrl),
+			url: normalizedUrl,
+			icon_url: getFaviconUrl(normalizedUrl),
 			category: "Custom",
 			sort_order: 9999,
 			isCustom: true

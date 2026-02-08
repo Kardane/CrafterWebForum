@@ -3,6 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { AdminPostRow } from "@/types/admin";
+import {
+	fetchAdminJson,
+	fetchAdminResponse,
+} from "@/components/admin/utils/fetch-admin";
 
 function formatDate(date: string) {
 	const parsed = new Date(date);
@@ -19,23 +23,19 @@ export default function AdminPostsTab() {
 	const loadPosts = useCallback(async () => {
 		setLoading(true);
 		try {
-			const [activeRes, archivedRes] = await Promise.all([
-				fetch("/api/admin/posts", { cache: "no-store" }),
-				fetch("/api/admin/posts?archived=true", { cache: "no-store" }),
-			]);
-			if (!activeRes.ok || !archivedRes.ok) {
-				throw new Error("Failed to load posts");
-			}
 			const [activeData, archivedData] = await Promise.all([
-				activeRes.json(),
-				archivedRes.json(),
+				fetchAdminJson<{ posts?: AdminPostRow[] }>("/api/admin/posts"),
+				fetchAdminJson<{ posts?: AdminPostRow[] }>("/api/admin/posts?archived=true"),
 			]);
 			setPosts((activeData.posts ?? []) as AdminPostRow[]);
 			setArchivedPosts((archivedData.posts ?? []) as AdminPostRow[]);
 			setError(null);
 		} catch (e) {
-			console.error(e);
-			setError("포스트 목록을 불러오지 못했습니다");
+			const isAuthError = (e as Error).message === "AUTH_REQUIRED";
+			if (!isAuthError) {
+				console.error(e);
+				setError("포스트 목록을 불러오지 못했습니다");
+			}
 		} finally {
 			setLoading(false);
 		}
@@ -46,26 +46,23 @@ export default function AdminPostsTab() {
 	}, [loadPosts]);
 
 	const archivePost = async (id: number) => {
-		const res = await fetch(`/api/admin/posts/${id}`, { method: "DELETE" });
-		if (!res.ok) throw new Error("Failed to delete post");
+		await fetchAdminResponse(`/api/admin/posts/${id}`, { method: "DELETE" });
 		await loadPosts();
 	};
 
 	const restorePost = async (id: number) => {
-		const res = await fetch(`/api/admin/posts/${id}`, {
+		await fetchAdminResponse(`/api/admin/posts/${id}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ action: "restore" }),
 		});
-		if (!res.ok) throw new Error("Failed to restore post");
 		await loadPosts();
 	};
 
 	const permanentlyDeletePost = async (id: number) => {
-		const res = await fetch(`/api/admin/posts/${id}?permanent=true`, {
+		await fetchAdminResponse(`/api/admin/posts/${id}?permanent=true`, {
 			method: "DELETE",
 		});
-		if (!res.ok) throw new Error("Failed to permanently delete post");
 		await loadPosts();
 	};
 
@@ -112,8 +109,10 @@ export default function AdminPostsTab() {
 													return;
 												}
 												void archivePost(post.id).catch((e) => {
-													console.error(e);
-													alert("포스트 아카이브에 실패했습니다");
+													if ((e as Error).message !== "AUTH_REQUIRED") {
+														console.error(e);
+														alert("포스트 아카이브에 실패했습니다");
+													}
 												});
 											}}
 										>
@@ -162,8 +161,10 @@ export default function AdminPostsTab() {
 												className="btn btn-secondary btn-sm"
 												onClick={() => {
 													void restorePost(post.id).catch((e) => {
-														console.error(e);
-														alert("포스트 복구에 실패했습니다");
+														if ((e as Error).message !== "AUTH_REQUIRED") {
+															console.error(e);
+															alert("포스트 복구에 실패했습니다");
+														}
 													});
 												}}
 											>
@@ -176,8 +177,10 @@ export default function AdminPostsTab() {
 														return;
 													}
 													void permanentlyDeletePost(post.id).catch((e) => {
-														console.error(e);
-														alert("포스트 영구 삭제에 실패했습니다");
+														if ((e as Error).message !== "AUTH_REQUIRED") {
+															console.error(e);
+															alert("포스트 영구 삭제에 실패했습니다");
+														}
 													});
 												}}
 											>

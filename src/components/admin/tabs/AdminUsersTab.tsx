@@ -6,6 +6,10 @@ import { ko } from "date-fns/locale";
 import { MoreHorizontal, Check, X, Shield, Ban, Trash2 } from "lucide-react";
 import { AdminUserRow } from "@/types/admin";
 import { Modal } from "@/components/ui/Modal";
+import {
+	fetchAdminJson,
+	fetchAdminResponse,
+} from "@/components/admin/utils/fetch-admin";
 
 type PatchPayload = { role?: "admin" | "user"; isBanned?: 0 | 1 };
 type UserStatus = "정상" | "승인대기" | "차단";
@@ -67,14 +71,15 @@ export default function AdminUsersTab() {
 	const loadUsers = useCallback(async () => {
 		setLoading(true);
 		try {
-			const res = await fetch("/api/admin/users", { cache: "no-store" });
-			if (!res.ok) throw new Error("Failed to load users");
-			const data = await res.json();
+			const data = await fetchAdminJson<{ users: AdminUserRow[] }>("/api/admin/users");
 			setUsers(data.users);
 			setError(null);
 		} catch (e) {
-			console.error(e);
-			setError("유저 목록을 불러오지 못했습니다");
+			const isAuthError = (e as Error).message === "AUTH_REQUIRED";
+			if (!isAuthError) {
+				console.error(e);
+				setError("유저 목록을 불러오지 못했습니다");
+			}
 		} finally {
 			setLoading(false);
 		}
@@ -85,27 +90,23 @@ export default function AdminUsersTab() {
 	}, [loadUsers]);
 
 	const patchUser = async (id: number, payload: PatchPayload) => {
-		const res = await fetch(`/api/admin/users/${id}`, {
+		await fetchAdminResponse(`/api/admin/users/${id}`, {
 			method: "PATCH",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify(payload),
 		});
-		if (!res.ok) throw new Error("Failed to update user");
 	};
 
 	const approveUser = async (id: number) => {
-		const res = await fetch(`/api/admin/users/${id}/approve`, { method: "POST" });
-		if (!res.ok) throw new Error("Failed to approve user");
+		await fetchAdminResponse(`/api/admin/users/${id}/approve`, { method: "POST" });
 	};
 
 	const rejectUser = async (id: number) => {
-		const res = await fetch(`/api/admin/users/${id}/reject`, { method: "POST" });
-		if (!res.ok) throw new Error("Failed to reject user");
+		await fetchAdminResponse(`/api/admin/users/${id}/reject`, { method: "POST" });
 	};
 
 	const deleteUser = async (id: number) => {
-		const res = await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
-		if (!res.ok) throw new Error("Failed to delete user");
+		await fetchAdminResponse(`/api/admin/users/${id}`, { method: "DELETE" });
 	};
 
 	const runAction = async (action: () => Promise<void>, closeAfterAction = true) => {
@@ -117,8 +118,10 @@ export default function AdminUsersTab() {
 				setSelectedUserId(null);
 			}
 		} catch (e) {
-			console.error(e);
-			alert("요청 처리에 실패했습니다");
+			if ((e as Error).message !== "AUTH_REQUIRED") {
+				console.error(e);
+				alert("요청 처리에 실패했습니다");
+			}
 		} finally {
 			setIsActionLoading(false);
 		}
