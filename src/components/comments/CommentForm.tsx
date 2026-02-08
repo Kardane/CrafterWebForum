@@ -15,6 +15,8 @@ interface CommentFormProps {
 	onCancel?: () => void;
 	replyTo?: string;
 	variant?: "composer" | "inline";
+	textareaId?: string;
+	mode?: "create" | "edit";
 }
 
 interface UploadPayload {
@@ -32,6 +34,8 @@ export default function CommentForm({
 	onCancel,
 	replyTo,
 	variant = "inline",
+	textareaId,
+	mode = "create",
 }: CommentFormProps) {
 	const { showToast } = useToast();
 	const [content, setContent] = useState(initialValue);
@@ -41,11 +45,39 @@ export default function CommentForm({
 	const [isUploading, setIsUploading] = useState(false);
 	const [isDragActive, setIsDragActive] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const dragDepthRef = useRef(0);
+	const isEditMode = mode === "edit";
 
 	useEffect(() => {
 		setContent(initialValue);
 	}, [initialValue]);
+
+	useEffect(() => {
+		if (isEditMode) {
+			setIsMenuOpen(false);
+		}
+	}, [isEditMode]);
+
+	const resizeTextarea = () => {
+		const textarea = textareaRef.current;
+		if (!textarea) return;
+
+		const computed = window.getComputedStyle(textarea);
+		const lineHeight = Number.parseFloat(computed.lineHeight || "20") || 20;
+		const paddingTop = Number.parseFloat(computed.paddingTop || "0");
+		const paddingBottom = Number.parseFloat(computed.paddingBottom || "0");
+		const maxHeight = lineHeight * 5 + paddingTop + paddingBottom;
+
+		textarea.style.height = "auto";
+		const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+		textarea.style.height = `${nextHeight}px`;
+		textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+	};
+
+	useEffect(() => {
+		resizeTextarea();
+	}, [content, initialValue]);
 
 	const appendUploadedContent = (payload: UploadPayload) => {
 		const snippet =
@@ -159,7 +191,7 @@ export default function CommentForm({
 		<>
 			<form
 				onSubmit={handleSubmit}
-				className={`comment-form ${variant} ${isDragActive ? "drag-active" : ""}`}
+				className={`comment-form ${variant} ${isEditMode ? "edit-mode" : ""} ${isDragActive ? "drag-active" : ""}`}
 				onDragEnter={handleDragEnter}
 				onDragLeave={handleDragLeave}
 				onDragOver={handleDragOver}
@@ -179,47 +211,51 @@ export default function CommentForm({
 				)}
 
 				<div className="form-input-wrapper">
-					<div className="plus-btn-wrapper">
-						<button
-							type="button"
-							className={`plus-btn ${isMenuOpen ? "active" : ""}`}
-							onClick={() => setIsMenuOpen((prev) => !prev)}
-						>
-							<Plus size={18} />
-						</button>
+					{!isEditMode && (
+						<div className="plus-btn-wrapper">
+							<button
+								type="button"
+								className={`plus-btn ${isMenuOpen ? "active" : ""}`}
+								onClick={() => setIsMenuOpen((prev) => !prev)}
+							>
+								<Plus size={18} />
+							</button>
 
-						{isMenuOpen && (
-							<div className="plus-menu">
-								<button type="button" className="menu-item" onClick={() => fileInputRef.current?.click()}>
-									<Paperclip size={16} />
-									파일 첨부
-								</button>
-								<button type="button" className="menu-item" onClick={() => setIsPollModalOpen(true)}>
-									<BarChart3 size={16} />
-									투표 만들기
-								</button>
-								<button
-									type="button"
-									className="menu-item"
-									onClick={() => {
-										setIsSyntaxHelpOpen(true);
-										setIsMenuOpen(false);
-									}}
-								>
-									<HelpCircle size={16} />
-									문법 도움말
-								</button>
-							</div>
-						)}
-					</div>
+							{isMenuOpen && (
+								<div className="plus-menu">
+									<button type="button" className="menu-item" onClick={() => fileInputRef.current?.click()}>
+										<Paperclip size={16} />
+										파일 첨부
+									</button>
+									<button type="button" className="menu-item" onClick={() => setIsPollModalOpen(true)}>
+										<BarChart3 size={16} />
+										투표 만들기
+									</button>
+									<button
+										type="button"
+										className="menu-item"
+										onClick={() => {
+											setIsSyntaxHelpOpen(true);
+											setIsMenuOpen(false);
+										}}
+									>
+										<HelpCircle size={16} />
+										문법 도움말
+									</button>
+								</div>
+							)}
+						</div>
+					)}
 
 					<textarea
+						id={textareaId}
+						ref={textareaRef}
 						value={content}
 						onChange={(event) => setContent(event.target.value)}
 						placeholder={placeholder}
 						disabled={disabled}
 						className="comment-textarea"
-						rows={2}
+						rows={1}
 						onFocus={() => setIsMenuOpen(false)}
 					/>
 
@@ -257,11 +293,11 @@ export default function CommentForm({
 				}
 
 				.comment-form.composer {
-					padding: 10px 12px;
+					padding: 0 12px; /* 패딩 제거 (기존 4px -> 0px, 상하 총 8px 감소) */
 					background: var(--bg-secondary);
-					border: 1px solid var(--border);
+					border: none;
 					border-radius: 10px;
-					box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.28);
+					box-shadow: none;
 				}
 
 				.comment-form.inline {
@@ -300,7 +336,7 @@ export default function CommentForm({
 
 				.form-input-wrapper {
 					display: flex;
-					align-items: stretch;
+					align-items: flex-end;
 					gap: 8px;
 				}
 
@@ -310,9 +346,9 @@ export default function CommentForm({
 				}
 
 				.plus-btn {
-					width: 42px;
-					height: 42px;
-					background: var(--bg-primary);
+					width: 34px;
+					height: 34px;
+					background: var(--bg-secondary);
 					border: 1px solid var(--border);
 					border-radius: 999px;
 					display: flex;
@@ -333,14 +369,16 @@ export default function CommentForm({
 
 				.plus-menu {
 					position: absolute;
-					bottom: calc(100% + 8px);
-					left: 0;
-					background: var(--bg-primary);
+					bottom: 0;
+					left: calc(100% + 8px);
+					background: color-mix(in srgb, var(--color-bg-secondary) 95%, transparent);
+					backdrop-filter: blur(4px);
 					border: 1px solid var(--border);
 					border-radius: 8px;
 					padding: 4px;
 					min-width: 170px;
-					box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+					max-width: min(240px, calc(100vw - 64px));
+					box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
 					z-index: 40;
 				}
 
@@ -372,24 +410,30 @@ export default function CommentForm({
 					border-radius: 6px;
 					color: var(--text-primary);
 					font-size: 0.92rem;
+					line-height: 1.45;
 					resize: none;
-					min-height: 42px;
-					max-height: 180px;
-					overflow-y: auto;
+					min-height: calc(1.45em + 20px);
+					max-height: calc(1.45em * 5 + 20px);
+					overflow-y: hidden;
 				}
 
 				.comment-form.composer .comment-textarea {
-					background: #1f1c1a;
+					background: var(--bg-primary);
+				}
+
+				.comment-form.edit-mode .comment-textarea {
+					background: color-mix(in srgb, var(--bg-tertiary) 92%, #000 8%);
 				}
 
 				.comment-textarea:focus {
 					outline: none;
 					border-color: var(--accent);
+					box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 				}
 
 				.submit-btn {
-					padding: 0 16px;
-					min-height: 42px;
+					padding: 0 12px;
+					height: 34px;
 					background: var(--accent);
 					border: none;
 					border-radius: 6px;
@@ -433,13 +477,18 @@ export default function CommentForm({
 					}
 
 					.plus-btn {
-						width: 38px;
-						height: 38px;
+						width: 34px;
+						height: 34px;
+					}
+
+					.plus-menu {
+						left: 0;
+						bottom: calc(100% + 8px);
 					}
 
 					.submit-btn {
 						padding: 0 12px;
-						min-height: 38px;
+						height: 34px;
 					}
 				}
 			`}</style>
