@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import type { Session } from "next-auth";
 import { isPrivilegedNickname } from "@/config/admin-policy";
+import { prisma } from "@/lib/prisma";
+import { toSessionUserId } from "@/lib/session-user";
 
 export async function requireAdmin(): Promise<
 	| { session: Session }
@@ -12,8 +14,26 @@ export async function requireAdmin(): Promise<
 		return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 	}
 
-	const hasAdminRole = session.user.role === "admin";
-	const hasPrivilegedNickname = isPrivilegedNickname(session.user.nickname);
+	let role = session.user.role;
+	let nickname = session.user.nickname;
+	const sessionUserId = toSessionUserId(session.user.id);
+
+	if ((!role || !nickname) && sessionUserId) {
+		const dbUser = await prisma.user.findUnique({
+			where: { id: sessionUserId },
+			select: { role: true, nickname: true, deletedAt: true },
+		});
+		if (dbUser?.deletedAt) {
+			return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
+		}
+		if (dbUser) {
+			role = role ?? dbUser.role;
+			nickname = nickname ?? dbUser.nickname;
+		}
+	}
+
+	const hasAdminRole = role === "admin";
+	const hasPrivilegedNickname = isPrivilegedNickname(nickname);
 	if (!hasAdminRole && !hasPrivilegedNickname) {
 		return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
 	}

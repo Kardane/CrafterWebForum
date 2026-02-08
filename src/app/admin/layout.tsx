@@ -1,18 +1,15 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
-import { isPrivilegedNickname } from "@/config/admin-policy";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export default async function AdminLayout({
 	children,
 }: Readonly<{ children: React.ReactNode }>) {
-	const session = await auth();
-	if (!session?.user) {
-		redirect("/login?callbackUrl=/admin");
-	}
-	const hasAdminRole = session.user.role === "admin";
-	const hasPrivilegedNickname = isPrivilegedNickname(session.user.nickname);
-	if (!hasAdminRole && !hasPrivilegedNickname) {
+	const admin = await requireAdmin();
+	if ("response" in admin) {
+		if (admin.response.status === 401) {
+			redirect("/login?callbackUrl=/admin");
+		}
 		redirect("/");
 	}
 

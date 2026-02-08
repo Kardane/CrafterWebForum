@@ -22,7 +22,15 @@ export default function AdminDashboardTab() {
 		(async () => {
 			try {
 				const res = await fetch(`/api/admin/stats?range=${trendRange}`, { cache: "no-store" });
-				if (!res.ok) throw new Error("Failed to load stats");
+				if (res.status === 401) {
+					throw new Error("UNAUTHORIZED");
+				}
+				if (res.status === 403) {
+					throw new Error("FORBIDDEN");
+				}
+				if (!res.ok) {
+					throw new Error("FAILED_TO_LOAD_STATS");
+				}
 				const data = await res.json();
 				if (!cancelled) {
 					setStats(data.stats);
@@ -31,6 +39,14 @@ export default function AdminDashboardTab() {
 			} catch (e) {
 				console.error(e);
 				if (!cancelled) {
+					if (e instanceof Error && e.message === "UNAUTHORIZED") {
+						window.location.href = "/login?callbackUrl=/admin";
+						return;
+					}
+					if (e instanceof Error && e.message === "FORBIDDEN") {
+						setError("관리자 권한이 없습니다");
+						return;
+					}
 					setError("관리자 통계를 불러오지 못했습니다");
 				}
 			} finally {

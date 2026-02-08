@@ -51,6 +51,7 @@ next-env.d.ts
 /prisma/*.db
 /prisma/*.db-*
 /prisma/backups/
+/backups/
 
 # generated clients
 /src/generated/prisma
@@ -59,4 +60,3 @@ next-env.d.ts
 # uploaded files
 /public/uploads/**
 !/public/uploads/.gitkeep
-

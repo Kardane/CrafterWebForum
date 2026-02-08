@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/admin-auth";
 export const runtime = "nodejs";
 
 const BACKUP_COOLDOWN_MS = 10 * 60 * 1000;
+const BACKUPS_DIR = path.resolve(process.cwd(), "prisma", "backups");
 let lastBackupAt = 0;
 
 function resolveSqlitePath() {
@@ -77,8 +78,7 @@ export async function GET() {
 		const admin = await requireAdmin();
 		if ("response" in admin) return admin.response;
 
-		const backupsDir = path.resolve(process.cwd(), "backups");
-		const latestBackup = await getLatestBackupMeta(backupsDir);
+		const latestBackup = await getLatestBackupMeta(BACKUPS_DIR);
 		return NextResponse.json({ latestBackup });
 	} catch (error) {
 		console.error("[API] GET /api/admin/backup error:", error);
@@ -101,11 +101,10 @@ export async function POST() {
 		}
 
 		const sourceDb = resolveSqlitePath();
-		const backupsDir = path.resolve(process.cwd(), "backups");
 		const backupName = makeBackupName();
-		const backupPath = path.join(backupsDir, backupName);
+		const backupPath = path.join(BACKUPS_DIR, backupName);
 
-		await mkdir(backupsDir, { recursive: true });
+		await mkdir(BACKUPS_DIR, { recursive: true });
 		await copyFile(sourceDb, backupPath);
 
 		lastBackupAt = now;

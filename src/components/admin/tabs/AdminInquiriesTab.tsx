@@ -42,6 +42,12 @@ export default function AdminInquiriesTab() {
 				fetch("/api/admin/inquiries", { cache: "no-store" }),
 				fetch("/api/admin/inquiries?archived=true", { cache: "no-store" }),
 			]);
+			if (activeRes.status === 401 || archivedRes.status === 401) {
+				throw new Error("UNAUTHORIZED");
+			}
+			if (activeRes.status === 403 || archivedRes.status === 403) {
+				throw new Error("FORBIDDEN");
+			}
 			if (!activeRes.ok || !archivedRes.ok) {
 				throw new Error("Failed to load inquiries");
 			}
@@ -54,6 +60,14 @@ export default function AdminInquiriesTab() {
 			setError(null);
 		} catch (e) {
 			console.error(e);
+			if (e instanceof Error && e.message === "UNAUTHORIZED") {
+				window.location.href = "/login?callbackUrl=/admin";
+				return;
+			}
+			if (e instanceof Error && e.message === "FORBIDDEN") {
+				setError("관리자 권한이 없습니다");
+				return;
+			}
 			setError("문의 목록을 불러오지 못했습니다");
 		} finally {
 			setLoading(false);

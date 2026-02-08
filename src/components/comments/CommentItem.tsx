@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Reply, Copy, Link2, Edit, Trash2, Pin, Check, ArrowUpLeft } from "lucide-react";
+import { Reply, Copy, Link2, Edit, Trash2, Pin, Check } from "lucide-react";
 import PostContent from "../posts/PostContent";
 import CommentForm from "./CommentForm";
 import PollCard from "@/components/poll/PollCard";
@@ -155,11 +155,13 @@ export default function CommentItem({
 				</div>
 
 				<div className="comment-content">
-					{replyToName && (
-						<button type="button" className="comment-reply-context" onClick={handleReplyContextClick}>
-							<ArrowUpLeft size={12} />
-							<span>@{replyToName}</span>
-						</button>
+					{replyToName && replyToCommentId && (
+						<div className="reply-context-line">
+							<div className="reply-curve" />
+							<button type="button" className="reply-snippet" onClick={handleReplyContextClick}>
+								@{replyToName}
+							</button>
+						</div>
 					)}
 
 					<div className="comment-header">
@@ -257,7 +259,7 @@ export default function CommentItem({
 				}
 
 				.comment-item:hover {
-					background: color-mix(in srgb, var(--bg-tertiary) 84%, #000 16%);
+					background: rgba(0, 0, 0, 0.2);
 				}
 
 				.comment-item.is-highlighted {
@@ -332,25 +334,43 @@ export default function CommentItem({
 					color: var(--bg-primary);
 				}
 
-				.comment-reply-context {
-					display: inline-flex;
+				.reply-context-line {
+					display: flex;
 					align-items: center;
-					gap: 4px;
-					width: fit-content;
-					margin-bottom: 5px;
-					padding: 3px 7px;
-					border-radius: 4px;
-					font-size: 0.72rem;
-					color: color-mix(in srgb, var(--text-secondary) 85%, #fff 15%);
-					background: color-mix(in srgb, var(--bg-tertiary) 45%, #000 55%);
-					border: 1px solid color-mix(in srgb, var(--border) 65%, #000 35%);
-					cursor: pointer;
-					transition: background-color 0.15s ease, color 0.15s ease;
+					margin-top: 2px;
+					margin-bottom: 4px;
+					position: relative;
+					opacity: 0.8;
 				}
 
-				.comment-reply-context:hover {
-					background: color-mix(in srgb, var(--bg-tertiary) 25%, #000 75%);
-					color: #fff;
+				.reply-curve {
+					width: 10px;
+					height: 12px;
+					border-left: 2px solid #ffffff;
+					border-top: 2px solid #ffffff;
+					border-top-left-radius: 6px;
+					margin-right: 8px;
+					margin-bottom: -10px;
+				}
+
+				.reply-snippet {
+					font-size: 0.85rem;
+					color: var(--text-muted);
+					cursor: pointer;
+					background: var(--bg-tertiary);
+					padding: 2px 8px;
+					border-radius: 4px;
+					white-space: nowrap;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					max-width: 300px;
+					border: none;
+					transition: background 0.15s ease, color 0.15s ease;
+				}
+
+				.reply-snippet:hover {
+					background: var(--bg-secondary);
+					color: var(--text-primary);
 				}
 
 				.comment-content-row {
@@ -378,7 +398,7 @@ export default function CommentItem({
 
 				.comment-hover-time {
 					font-size: 0.7rem;
-					color: var(--text-muted);
+					color: rgba(255, 255, 255, 0.5);
 					opacity: 0;
 					transition: opacity 0.2s ease;
 					user-select: none;
@@ -425,8 +445,8 @@ export default function CommentItem({
 				}
 
 				.action-btn:hover {
-					background: color-mix(in srgb, var(--bg-primary) 25%, #000 75%);
-					color: #fff;
+					background: var(--border);
+					color: var(--text-primary);
 				}
 
 				.action-btn.danger:hover {
