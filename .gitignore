@@ -7,7 +7,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
-
+/legacy/
 # testing and reports
 /coverage
 /playwright-report/
@@ -26,7 +26,9 @@
 /logs/
 /.agent/
 /.agents/
-*.md
+/보고서/
+/AGENTS.md
+/walkthrough.md
 
 # debug
 npm-debug.log*
@@ -57,3 +59,4 @@ next-env.d.ts
 # uploaded files
 /public/uploads/**
 !/public/uploads/.gitkeep
+
