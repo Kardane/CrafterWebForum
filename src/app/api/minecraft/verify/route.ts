@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { enforceRateLimit } from "@/lib/rate-limit";
+import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
 
 
 /**
@@ -14,6 +16,11 @@ import { prisma } from "@/lib/prisma";
  */
 export async function POST(req: NextRequest) {
 	try {
+		const rateLimitedResponse = enforceRateLimit(req, RATE_LIMIT_POLICIES.minecraftVerify);
+		if (rateLimitedResponse) {
+			return rateLimitedResponse;
+		}
+
 		const body = await req.json();
 		const { code, uuid, nickname, ip } = body;
 

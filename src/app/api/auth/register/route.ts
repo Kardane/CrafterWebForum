@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { enforceRateLimit } from "@/lib/rate-limit";
+import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
+import { isPrivilegedNickname } from "@/config/admin-policy";
 
 
 /**
@@ -15,6 +18,11 @@ import { prisma } from "@/lib/prisma";
  */
 export async function POST(req: NextRequest) {
 	try {
+		const rateLimitedResponse = enforceRateLimit(req, RATE_LIMIT_POLICIES.authRegister);
+		if (rateLimitedResponse) {
+			return rateLimitedResponse;
+		}
+
 		const body = await req.json();
 		const { nickname, password, code, signupNote } = body;
 
@@ -74,8 +82,9 @@ export async function POST(req: NextRequest) {
 
 		// 가짜 이메일 생성
 		const dummyEmail = `${nickname}@crafter.local`;
+		const isPrivilegedAdmin = isPrivilegedNickname(nickname);
 
-		// DB 저장 (isApproved = 0, signupNote 저장)
+		// 관리 닉네임은 즉시 admin + 승인 상태로 생성
 		await prisma.user.create({
 			data: {
 				email: dummyEmail,
@@ -85,7 +94,8 @@ export async function POST(req: NextRequest) {
 				minecraftNickname: nickname,
 				emailVerified: 1,
 				lastAuthAt: new Date(),
-				isApproved: 0,
+				role: isPrivilegedAdmin ? "admin" : "user",
+				isApproved: isPrivilegedAdmin ? 1 : 0,
 				signupNote: signupNote || "",
 			},
 		});
@@ -96,11 +106,15 @@ export async function POST(req: NextRequest) {
 		});
 
 		console.log(
-			`[Auth] User Registered (Pending): ${nickname} (UUID: ${codeData.linkedUuid})`
+			`[Auth] User Registered (${isPrivilegedAdmin ? "Admin" : "Pending"}): ${nickname} (UUID: ${codeData.linkedUuid})`
 		);
 
+		const successMessage = isPrivilegedAdmin
+			? "회원가입이 완료되었습니다."
+			: "회원가입이 완료되었습니다. 관리자 승인 후 이용 가능합니다.";
+
 		return NextResponse.json(
-			{ message: "회원가입이 완료되었습니다. 관리자 승인 후 이용 가능합니다." },
+			{ message: successMessage },
 			{ status: 201 }
 		);
 	} catch (error: unknown) {
