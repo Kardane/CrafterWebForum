@@ -1,4 +1,4 @@
-import { PrismaClient } from "@/generated/client";
+import { PrismaClient } from "@prisma/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql";
 import env from "@/lib/env";
 import { isTursoDatabaseUrl } from "@/lib/database-url";

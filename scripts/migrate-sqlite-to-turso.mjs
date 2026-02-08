@@ -1,6 +1,6 @@
 import "dotenv/config";
 import path from "node:path";
-import { PrismaClient } from "../src/generated/client/index.js";
+import { PrismaClient } from "@prisma/client";
 import { PrismaLibSQL } from "@prisma/adapter-libsql";
 
 function parseArgs(argv) {
