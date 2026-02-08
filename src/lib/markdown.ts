@@ -90,7 +90,7 @@ export function processMarkdown(text: string): string {
 	// 3. 마크다운 이미지/링크 추출
 	const mdLinks: string[] = [];
 	html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
-		const imgTag = `<img src="${url}" alt="${alt}" class="md-image" onclick="window.open(this.src)" style="cursor:zoom-in; max-width:500px; max-height:500px; width:auto; height:auto; display:block; object-fit:contain;">`;
+		const imgTag = `<img src="${url}" alt="${alt}" class="md-image" loading="lazy" data-lightbox="image">`;
 		mdLinks.push(imgTag);
 		return `__MD_LINK_${mdLinks.length - 1}__`;
 	});

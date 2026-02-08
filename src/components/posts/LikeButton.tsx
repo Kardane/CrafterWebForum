@@ -1,8 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Star } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useOptionalPostLikeState } from './PostLikeStateProvider';
+
+interface ControlledLikeState {
+	likes: number;
+	liked: boolean;
+	isLoading: boolean;
+}
 
 interface LikeButtonProps {
 	postId: number;
@@ -10,6 +16,8 @@ interface LikeButtonProps {
 	initialLiked: boolean;
 	className?: string; // 추가 스타일
 	variant?: "default" | "ghost"; // 스타일 변형
+	state?: ControlledLikeState;
+	onToggle?: () => Promise<void> | void;
 }
 
 export default function LikeButton({
@@ -17,15 +25,57 @@ export default function LikeButton({
 	initialLikes,
 	initialLiked,
 	className = "",
-	variant = "default"
+	variant = "default",
+	state,
+	onToggle,
 }: LikeButtonProps) {
+	const sharedLikeState = useOptionalPostLikeState();
+	const useSharedLikeState =
+		!state &&
+		!onToggle &&
+		sharedLikeState !== null &&
+		sharedLikeState.postId === postId;
+
 	const [likes, setLikes] = useState(initialLikes);
 	const [liked, setLiked] = useState(initialLiked);
 	const [isLoading, setIsLoading] = useState(false);
-	const router = useRouter();
+
+	useEffect(() => {
+		if (!state && !useSharedLikeState) {
+			setLikes(initialLikes);
+			setLiked(initialLiked);
+			setIsLoading(false);
+		}
+	}, [initialLikes, initialLiked, state, useSharedLikeState]);
+
+	const resolvedLikes = state
+		? state.likes
+		: useSharedLikeState
+			? sharedLikeState.likes
+			: likes;
+	const resolvedLiked = state
+		? state.liked
+		: useSharedLikeState
+			? sharedLikeState.liked
+			: liked;
+	const resolvedIsLoading = state
+		? state.isLoading
+		: useSharedLikeState
+			? sharedLikeState.isLoading
+			: isLoading;
 
 	const handleToggleLike = async () => {
-		if (isLoading) return;
+		if (resolvedIsLoading) return;
+
+		if (state && onToggle) {
+			await onToggle();
+			return;
+		}
+
+		if (useSharedLikeState) {
+			await sharedLikeState.toggleLike();
+			return;
+		}
 
 		// 낙관적 업데이트
 		const prevLikes = likes;
@@ -60,22 +110,22 @@ export default function LikeButton({
 	// 스타일 클래스 결정
 	const baseClasses = "inline-flex items-center gap-1.5 transition-all duration-200 disabled:opacity-50";
 	const variantClasses = variant === "default"
-		? `px-3 py-1.5 rounded ${liked ? 'bg-accent text-white' : 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary'}`
-		: `${liked ? 'text-accent font-bold' : 'text-text-muted hover:text-text-primary'}`;
+		? "px-3 py-1.5 rounded-md bg-accent text-white hover:bg-accent-hover"
+		: `${resolvedLiked ? 'text-accent font-bold' : 'text-text-muted hover:text-text-primary'}`;
 
 	return (
 		<button
 			onClick={handleToggleLike}
-			disabled={isLoading}
+			disabled={resolvedIsLoading}
 			className={`${baseClasses} ${variantClasses} ${className}`}
 		>
 			<Star
 				className="w-4 h-4"
-				fill={liked ? 'currentColor' : 'none'}
-				stroke="currentColor"
+				fill={resolvedLiked ? '#FEE75C' : 'none'}
+				stroke={resolvedLiked ? '#FEE75C' : 'currentColor'}
 				strokeWidth={2}
 			/>
-			<span className="text-sm font-medium">{likes}</span>
+			<span className="text-sm font-medium">{resolvedLikes}</span>
 		</button>
 	);
 }

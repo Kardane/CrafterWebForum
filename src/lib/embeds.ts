@@ -8,6 +8,43 @@ export interface EmbedLink {
 	type: 'youtube' | 'streamable' | 'github' | 'gitlab' | 'modrinth' | 'curseforge' | 'spigot' | 'other';
 }
 
+interface ProtectedHtmlResult {
+	protectedHtml: string;
+	restoreHtml: (html: string) => string;
+}
+
+function escapeHtml(text: string): string {
+	return text
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&#039;");
+}
+
+/**
+ * 이미 렌더링된 HTML 블록을 잠시 보호해 URL 정규식이 속성값을 다시 변환하지 않게 방지
+ */
+function protectRenderedHtml(html: string): ProtectedHtmlResult {
+	const fragments: string[] = [];
+	const protectedHtml = html.replace(
+		/<pre[\s\S]*?<\/pre>|<code[\s\S]*?<\/code>|<a\b[\s\S]*?<\/a>|<img\b[^>]*>|<iframe[\s\S]*?<\/iframe>|<video[\s\S]*?<\/video>|<audio[\s\S]*?<\/audio>/gi,
+		(fragment) => {
+			fragments.push(fragment);
+			return `__HTML_FRAGMENT_${fragments.length - 1}__`;
+		}
+	);
+
+	return {
+		protectedHtml,
+		restoreHtml: (nextHtml: string) =>
+			nextHtml.replace(/__HTML_FRAGMENT_(\d+)__/g, (match, index) => {
+				const parsedIndex = Number(index);
+				return fragments[parsedIndex] ?? "";
+			}),
+	};
+}
+
 /**
  * YouTube 임베드 HTML 생성
  */
@@ -39,6 +76,63 @@ export function createStreamableEmbed(videoId: string): string {
 			allowfullscreen>
 		</iframe>
 	</div>`;
+}
+
+function buildExternalCardByUrl(rawUrl: string): string {
+	const safeUrl = rawUrl.trim();
+
+	try {
+		const parsed = new URL(safeUrl);
+		const hostname = parsed.hostname.replace(/^www\./, "");
+		const segments = parsed.pathname.split("/").filter(Boolean);
+
+		let badge = hostname;
+		let title = hostname;
+		let subtitle = parsed.pathname === "/" ? safeUrl : parsed.pathname;
+
+		if (hostname === "github.com") {
+			badge = "GitHub";
+			if (segments.length === 1) {
+				title = `@${segments[0]}`;
+				subtitle = "GitHub 프로필";
+			} else if (segments.length >= 2) {
+				const [owner, repo, section, sectionId] = segments;
+				title = `${owner}/${repo}`;
+				subtitle = "GitHub 저장소";
+				if (section === "issues" && sectionId) {
+					subtitle = `Issue #${sectionId}`;
+				} else if (section === "pull" && sectionId) {
+					subtitle = `Pull Request #${sectionId}`;
+				} else if (section === "releases") {
+					subtitle = "릴리스";
+				}
+			}
+		} else if (hostname === "gitlab.com" || hostname === "codeberg.org") {
+			badge = hostname === "gitlab.com" ? "GitLab" : "Codeberg";
+			title = segments.slice(0, 2).join("/") || hostname;
+			subtitle = segments.length > 2 ? `/${segments.slice(2).join("/")}` : "프로젝트 링크";
+		} else if (hostname === "modrinth.com") {
+			badge = "Modrinth";
+			title = segments.slice(0, 2).join("/") || "Modrinth 링크";
+			subtitle = segments.length > 2 ? `/${segments.slice(2).join("/")}` : "모드/플러그인";
+		} else if (hostname === "curseforge.com") {
+			badge = "CurseForge";
+			title = segments.slice(0, 3).join("/") || "CurseForge 링크";
+			subtitle = "프로젝트 페이지";
+		} else if (hostname === "spigotmc.org") {
+			badge = "Spigot";
+			title = segments.find((segment) => segment !== "resources") ?? "리소스";
+			subtitle = "Spigot 리소스";
+		}
+
+		return `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="external-link-card">
+			<span class="external-link-card__badge">${escapeHtml(badge)}</span>
+			<span class="external-link-card__title">${escapeHtml(title)}</span>
+			<span class="external-link-card__subtitle">${escapeHtml(subtitle)}</span>
+		</a>`;
+	} catch {
+		return `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer" class="link-text">${escapeHtml(safeUrl)}</a>`;
+	}
 }
 
 /**
@@ -75,45 +169,23 @@ export function processYouTubeEmbeds(html: string): string {
 }
 
 /**
- * GitHub/GitLab/Modrinth 등 외부 링크를 플레이스홀더로 변환
- * (실제 카드 렌더링은 클라이언트에서 처리)
+ * 외부 링크를 카드 형태로 렌더링
  */
 export function processExternalLinks(html: string): string {
-	const ghLinks: Array<{ url: string }> = [];
+	const externalLinks: string[] = [];
 
-	// GitHub, GitLab, Codeberg, Modrinth
 	html = html.replace(
-		/https?:\/\/(?:www\.)?(github\.com|gitlab\.com|codeberg\.org|modrinth\.com)\/([a-zA-Z0-9\-_.]+)(?:\/([^\s<"']+))?(?=$|[\s<])/gi,
+		/https?:\/\/(?:www\.)?(github\.com|gitlab\.com|codeberg\.org|modrinth\.com|curseforge\.com|spigotmc\.org)\/[^\s<"']+/gi,
 		(match) => {
-			const cleanUrl = match.trim().replace(/[.,]$/, '');
-			ghLinks.push({ url: cleanUrl });
-			return `__GH_LINK_${ghLinks.length - 1}__`;
+			const cleanUrl = match.trim().replace(/[.,]$/, "");
+			externalLinks.push(cleanUrl);
+			return `__EXT_LINK_${externalLinks.length - 1}__`;
 		}
 	);
 
-	// CurseForge
-	html = html.replace(
-		/https?:\/\/(?:www\.)?curseforge\.com\/([a-zA-Z0-9\-_.]+)\/([a-zA-Z0-9\-_.]+)\/([a-zA-Z0-9\-_.]+)(?=$|[\s<])/gi,
-		(match, game, category, slug) => {
-			const cleanUrl = `https://www.curseforge.com/${game}/${category}/${slug}`;
-			ghLinks.push({ url: cleanUrl });
-			return `__GH_LINK_${ghLinks.length - 1}__`;
-		}
-	);
-
-	// Spigot
-	html = html.replace(
-		/https?:\/\/(?:www\.)?spigotmc\.org\/resources\/([^\/]+\.[0-9]+)\/?(?=$|[\s<])/gi,
-		(match) => {
-			ghLinks.push({ url: match.trim() });
-			return `__GH_LINK_${ghLinks.length - 1}__`;
-		}
-	);
-
-	// 복원 (플레이스홀더 + 폴백 링크)
-	html = html.replace(/__GH_LINK_(\d+)__/g, (match, index) => {
-		const link = ghLinks[parseInt(index)];
-		return `<div class="github-embed-placeholder" data-url="${link.url}" style="display:none;"></div><a href="${link.url}" target="_blank" class="link-text github-fallback">${link.url}</a>`;
+	html = html.replace(/__EXT_LINK_(\d+)__/g, (match, index) => {
+		const link = externalLinks[parseInt(index, 10)];
+		return buildExternalCardByUrl(link);
 	});
 
 	return html;
@@ -152,26 +224,26 @@ export function processUploadedFiles(html: string): string {
  * 일반 이미지 링크 자동 임베드
  */
 export function processImageLinks(html: string): string {
-	html = html.replace(/(https?:\/\/[^\s<"']+)/gi, (match) => {
+	html = html.replace(/(^|[\s>(])(https?:\/\/[^\s<"']+)/gi, (match, prefix, url) => {
 		if (
-			match.includes('embed-container') ||
-			match.includes('iframe') ||
-			match.includes('<img') ||
-			match.includes('<video') ||
-			match.includes('<audio') ||
-			match.includes('file-download') ||
-			match.includes('/uploads/') ||
-			match.includes('__MD_LINK_') ||
-			match.includes('__GH_LINK_') ||
-			match.includes('\x1FCODE') ||
-			match.includes('__YT_EMBED_')
+			url.includes('embed-container') ||
+			url.includes('iframe') ||
+			url.includes('<img') ||
+			url.includes('<video') ||
+			url.includes('<audio') ||
+			url.includes('file-download') ||
+			url.includes('/uploads/') ||
+			url.includes('__MD_LINK_') ||
+			url.includes('__GH_LINK_') ||
+			url.includes('\x1FCODE') ||
+			url.includes('__YT_EMBED_')
 		)
-			return match;
+			return `${prefix}${url}`;
 
-		if (/\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(match)) {
-			return `<div class="embed-container"><img src="${match}" alt="image" loading="lazy"></div>`;
+		if (/\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url)) {
+			return `${prefix}<div class="embed-container"><img src="${url}" alt="image" loading="lazy"></div>`;
 		}
-		return `<a href="${match}" target="_blank" class="link-text">${match}</a>`;
+		return `${prefix}<a href="${url}" target="_blank" class="link-text">${url}</a>`;
 	});
 
 	return html;
@@ -181,9 +253,11 @@ export function processImageLinks(html: string): string {
  * 모든 임베드 처리를 통합 실행
  */
 export function processAllEmbeds(html: string): string {
-	html = processYouTubeEmbeds(html);
-	html = processExternalLinks(html);
-	html = processUploadedFiles(html);
-	html = processImageLinks(html);
-	return html;
+	const { protectedHtml, restoreHtml } = protectRenderedHtml(html);
+	let nextHtml = protectedHtml;
+	nextHtml = processYouTubeEmbeds(nextHtml);
+	nextHtml = processExternalLinks(nextHtml);
+	nextHtml = processUploadedFiles(nextHtml);
+	nextHtml = processImageLinks(nextHtml);
+	return restoreHtml(nextHtml);
 }
