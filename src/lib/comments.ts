@@ -13,6 +13,7 @@ export interface CommentTreeNode {
 	isPinned: boolean;
 	parentId: number | null;
 	author: CommentTreeAuthor;
+	isPostAuthor: boolean;
 	replies: CommentTreeNode[];
 }
 
@@ -24,6 +25,7 @@ interface CommentWithAuthor {
 	isPinned: number | boolean;
 	parentId: number | null;
 	author: CommentTreeAuthor;
+	isPostAuthor?: boolean;
 }
 
 export function buildCommentTree(comments: CommentWithAuthor[]): CommentTreeNode[] {
@@ -39,6 +41,7 @@ export function buildCommentTree(comments: CommentWithAuthor[]): CommentTreeNode
 			isPinned: Boolean(comment.isPinned),
 			parentId: comment.parentId,
 			author: comment.author,
+			isPostAuthor: Boolean(comment.isPostAuthor),
 			replies: [],
 		};
 

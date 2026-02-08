@@ -47,7 +47,7 @@ describe("GET /api/posts/[id]", () => {
 	});
 
 	it("returns nested comment tree with author object", async () => {
-		authMock.mockResolvedValue({ user: { id: 1 } });
+		authMock.mockResolvedValue({ user: { id: "1" } });
 		postFindFirstMock.mockResolvedValue({
 			id: 10,
 			title: "title",
@@ -80,21 +80,21 @@ describe("GET /api/posts/[id]", () => {
 					role: "user",
 				},
 			},
-			{
-				id: 101,
-				content: "child",
-				createdAt: new Date("2026-01-01T02:01:00.000Z"),
-				updatedAt: new Date("2026-01-01T02:01:00.000Z"),
-				isPinned: 0,
-				parentId: 100,
-				author: {
-					id: 3,
-					nickname: "bob",
-					minecraftUuid: "uuid-3",
-					role: "admin",
+				{
+					id: 101,
+					content: "child",
+					createdAt: new Date("2026-01-01T02:01:00.000Z"),
+					updatedAt: new Date("2026-01-01T02:01:00.000Z"),
+					isPinned: 0,
+					parentId: 100,
+					author: {
+						id: 1,
+						nickname: "writer",
+						minecraftUuid: "uuid-1",
+						role: "user",
+					},
 				},
-			},
-		]);
+			]);
 		postReadUpsertMock.mockResolvedValue({});
 
 		const { GET } = await import("@/app/api/posts/[id]/route");
@@ -103,14 +103,18 @@ describe("GET /api/posts/[id]", () => {
 		const body = await res.json();
 
 		expect(res.status).toBe(200);
-		expect(body.comments).toHaveLength(1);
-		expect(body.comments[0].author).toEqual({
-			id: 2,
-			nickname: "alice",
-			minecraftUuid: null,
-			role: "user",
+		expect(likeFindFirstMock).toHaveBeenCalledWith({
+			where: { postId: 10, userId: 1 },
 		});
-		expect(body.comments[0].replies).toHaveLength(1);
-		expect(body.comments[0].replies[0].author.role).toBe("admin");
+		expect(body.comments).toHaveLength(1);
+			expect(body.comments[0].author).toEqual({
+				id: 2,
+				nickname: "alice",
+				minecraftUuid: null,
+				role: "user",
+			});
+			expect(body.comments[0].isPostAuthor).toBe(false);
+			expect(body.comments[0].replies).toHaveLength(1);
+			expect(body.comments[0].replies[0].isPostAuthor).toBe(true);
+		});
 	});
-});

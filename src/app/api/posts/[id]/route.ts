@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { buildCommentTree } from '@/lib/comments';
+import { toSessionUserId } from '@/lib/session-user';
 
 /**
  * GET /api/posts/[id]
@@ -19,8 +20,13 @@ export async function GET(
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const postId = parseInt(id);
-		if (isNaN(postId)) {
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
+
+		const postId = parseInt(id, 10);
+		if (Number.isNaN(postId)) {
 			return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
 		}
 
@@ -45,15 +51,14 @@ export async function GET(
 			return NextResponse.json({ error: 'Post not found' }, { status: 404 });
 		}
 
-		// 좋아요 여부 확인
 		const userLiked = await prisma.like.findFirst({
 			where: {
 				postId: post.id,
-				userId: session.user.id,
+				userId: sessionUserId,
 			},
 		});
 
-		// 댓글 조회 (고정된 댓글 우선)
+		// 댓글 조회 (고정 댓글 우선)
 		const comments = await prisma.comment.findMany({
 			where: {
 				postId: post.id,
@@ -71,11 +76,16 @@ export async function GET(
 			orderBy: [{ isPinned: 'desc' }, { createdAt: 'asc' }],
 		});
 
+		const commentsWithPostAuthorFlag = comments.map((comment) => ({
+			...comment,
+			isPostAuthor: comment.author.id === post.authorId,
+		}));
+
 		// 읽음 상태 업데이트
 		await prisma.postRead.upsert({
 			where: {
 				userId_postId: {
-					userId: session.user.id,
+					userId: sessionUserId,
 					postId: post.id,
 				},
 			},
@@ -84,13 +94,12 @@ export async function GET(
 				updatedAt: new Date(),
 			},
 			create: {
-				userId: session.user.id,
+				userId: sessionUserId,
 				postId: post.id,
 				lastReadCommentCount: comments.length,
 			},
 		});
 
-		// 응답 데이터 구성
 		const responsePost = {
 			id: post.id,
 			title: post.title,
@@ -106,7 +115,10 @@ export async function GET(
 			user_liked: !!userLiked,
 		};
 
-		return NextResponse.json({ post: responsePost, comments: buildCommentTree(comments) });
+		return NextResponse.json({
+			post: responsePost,
+			comments: buildCommentTree(commentsWithPostAuthorFlag),
+		});
 	} catch (error) {
 		console.error('[API] GET /api/posts/[id] error:', error);
 		return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -121,7 +133,6 @@ export async function PATCH(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
-	void request;
 	try {
 		const { id } = await params;
 		const session = await auth();
@@ -129,8 +140,13 @@ export async function PATCH(
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const postId = parseInt(id);
-		if (isNaN(postId)) {
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
+
+		const postId = parseInt(id, 10);
+		if (Number.isNaN(postId)) {
 			return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
 		}
 
@@ -141,7 +157,6 @@ export async function PATCH(
 			return NextResponse.json({ error: 'Title and content are required' }, { status: 400 });
 		}
 
-		// 게시글 존재 및 권한 확인
 		const post = await prisma.post.findFirst({
 			where: {
 				id: postId,
@@ -153,11 +168,10 @@ export async function PATCH(
 			return NextResponse.json({ error: 'Post not found' }, { status: 404 });
 		}
 
-		if (post.authorId !== session.user.id) {
+		if (post.authorId !== sessionUserId) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
-		// 게시글 수정
 		await prisma.post.update({
 			where: { id: postId },
 			data: {
@@ -191,12 +205,16 @@ export async function DELETE(
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const postId = parseInt(id);
-		if (isNaN(postId)) {
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
+
+		const postId = parseInt(id, 10);
+		if (Number.isNaN(postId)) {
 			return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
 		}
 
-		// 게시글 존재 및 권한 확인
 		const post = await prisma.post.findFirst({
 			where: {
 				id: postId,
@@ -208,11 +226,10 @@ export async function DELETE(
 			return NextResponse.json({ error: 'Post not found' }, { status: 404 });
 		}
 
-		if (post.authorId !== session.user.id && session.user.role !== 'admin') {
+		if (post.authorId !== sessionUserId && session.user.role !== 'admin') {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
-		// Soft Delete
 		await prisma.post.update({
 			where: { id: postId },
 			data: {

@@ -50,7 +50,7 @@ describe("POST /api/posts", () => {
 	});
 
 	it("uses session user id instead of client authorId", async () => {
-		authMock.mockResolvedValue({ user: { id: 5 } });
+		authMock.mockResolvedValue({ user: { id: "5" } });
 		postCreateMock.mockResolvedValue({ id: 123 });
 
 		const { POST } = await import("@/app/api/posts/route");
@@ -70,10 +70,10 @@ describe("POST /api/posts", () => {
 		expect(postCreateMock).toHaveBeenCalledTimes(1);
 		expect(postCreateMock).toHaveBeenCalledWith({
 			data: {
-				title: "secure title",
-				content: "secure content",
-				tags: "[\"news\"]",
-				authorId: 5,
+					title: "secure title",
+					content: "secure content",
+					tags: "[\"news\"]",
+					authorId: 5,
 			},
 		});
 	});

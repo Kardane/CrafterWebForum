@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { toSessionUserId } from '@/lib/session-user';
 
 
 /**
@@ -17,8 +18,12 @@ export async function POST(
 		if (!session?.user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
 
-		const postId = parseInt(id);
+		const postId = parseInt(id, 10);
 		if (isNaN(postId)) {
 			return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
 		}
@@ -39,7 +44,7 @@ export async function POST(
 		const existing = await prisma.like.findFirst({
 			where: {
 				postId,
-				userId: session.user.id,
+				userId: sessionUserId,
 			},
 		});
 
@@ -70,7 +75,7 @@ export async function POST(
 			await prisma.like.create({
 				data: {
 					postId,
-					userId: session.user.id,
+					userId: sessionUserId,
 				},
 			});
 

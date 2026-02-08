@@ -2,6 +2,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { buildCommentTree } from "@/lib/comments";
+import { toSessionUserId } from "@/lib/session-user";
 
 /**
  * GET /api/posts/[id]/comments
@@ -16,6 +17,10 @@ export async function GET(
 		const { id } = await params;
 		const session = await auth();
 		if (!session?.user) {
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		}
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
 			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 		}
 
@@ -51,8 +56,12 @@ export async function GET(
 			},
 			orderBy: [{ isPinned: "desc" }, { createdAt: "asc" }],
 		});
+		const commentsWithPostAuthorFlag = comments.map((comment) => ({
+			...comment,
+			isPostAuthor: comment.author.id === post.authorId,
+		}));
 
-		return NextResponse.json({ comments: buildCommentTree(comments) });
+		return NextResponse.json({ comments: buildCommentTree(commentsWithPostAuthorFlag) });
 	} catch (error) {
 		console.error("[API] GET /api/posts/[id]/comments error:", error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -73,17 +82,34 @@ export async function POST(
 		if (!session?.user) {
 			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 		}
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		}
 
 		const postId = parseInt(id, 10);
 		if (Number.isNaN(postId)) {
 			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
-		const body = await request.json();
-		const { content, parentId } = body;
+		const body = (await request.json()) as {
+			content?: unknown;
+			parentId?: unknown;
+		};
+		const content = typeof body.content === "string" ? body.content.trim() : "";
+		const normalizedParentId =
+			body.parentId === null || body.parentId === undefined
+				? null
+				: Number(body.parentId);
 
-		if (!content || !content.trim()) {
+		if (!content) {
 			return NextResponse.json({ error: "Content is required" }, { status: 400 });
+		}
+		if (
+			normalizedParentId !== null &&
+			(!Number.isInteger(normalizedParentId) || normalizedParentId <= 0)
+		) {
+			return NextResponse.json({ error: "Invalid parent comment ID" }, { status: 400 });
 		}
 
 		const post = await prisma.post.findFirst({
@@ -97,10 +123,10 @@ export async function POST(
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
-		if (parentId) {
+		if (normalizedParentId !== null) {
 			const parentComment = await prisma.comment.findFirst({
 				where: {
-					id: parentId,
+					id: normalizedParentId,
 					postId,
 				},
 			});
@@ -114,8 +140,8 @@ export async function POST(
 			data: {
 				content,
 				postId,
-				authorId: session.user.id,
-				parentId: parentId || null,
+				authorId: sessionUserId,
+				parentId: normalizedParentId,
 			},
 			include: {
 				author: {
@@ -136,7 +162,7 @@ export async function POST(
 		await prisma.postRead.upsert({
 			where: {
 				userId_postId: {
-					userId: session.user.id,
+					userId: sessionUserId,
 					postId,
 				},
 			},
@@ -145,7 +171,7 @@ export async function POST(
 				updatedAt: new Date(),
 			},
 			create: {
-				userId: session.user.id,
+				userId: sessionUserId,
 				postId,
 				lastReadCommentCount: commentCount,
 			},
@@ -159,12 +185,13 @@ export async function POST(
 				content: comment.content,
 				createdAt: comment.createdAt,
 				updatedAt: comment.updatedAt,
-				isPinned: Boolean(comment.isPinned),
-				parentId: comment.parentId,
-				author: comment.author,
-				replies: [],
-			},
-		});
+					isPinned: Boolean(comment.isPinned),
+					parentId: comment.parentId,
+					author: comment.author,
+					isPostAuthor: comment.author.id === post.authorId,
+					replies: [],
+				},
+			});
 	} catch (error) {
 		console.error("[API] POST /api/posts/[id]/comments error:", error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });

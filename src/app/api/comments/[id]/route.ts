@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { toSessionUserId } from '@/lib/session-user';
 
 
 /**
@@ -17,8 +18,12 @@ export async function PATCH(
 		if (!session?.user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
 
-		const commentId = parseInt(id);
+		const commentId = parseInt(id, 10);
 		if (isNaN(commentId)) {
 			return NextResponse.json({ error: 'Invalid comment ID' }, { status: 400 });
 		}
@@ -39,7 +44,7 @@ export async function PATCH(
 			return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
 		}
 
-		if (comment.authorId !== session.user.id) {
+		if (comment.authorId !== sessionUserId) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
@@ -59,6 +64,11 @@ export async function PATCH(
 						role: true,
 					},
 				},
+				post: {
+					select: {
+						authorId: true,
+					},
+				},
 			},
 		});
 
@@ -70,11 +80,12 @@ export async function PATCH(
 				content: updated.content,
 				createdAt: updated.createdAt,
 				updatedAt: updated.updatedAt,
-				isPinned: updated.isPinned,
-				parentId: updated.parentId,
-				author: updated.author,
-			},
-		});
+					isPinned: updated.isPinned,
+					parentId: updated.parentId,
+					author: updated.author,
+					isPostAuthor: updated.author.id === updated.post.authorId,
+				},
+			});
 	} catch (error) {
 		console.error('[API] PATCH /api/comments/[id] error:', error);
 		return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -95,8 +106,12 @@ export async function DELETE(
 		if (!session?.user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
 
-		const commentId = parseInt(id);
+		const commentId = parseInt(id, 10);
 		if (isNaN(commentId)) {
 			return NextResponse.json({ error: 'Invalid comment ID' }, { status: 400 });
 		}
@@ -110,7 +125,7 @@ export async function DELETE(
 			return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
 		}
 
-		if (comment.authorId !== session.user.id && session.user.role !== 'admin') {
+		if (comment.authorId !== sessionUserId && session.user.role !== 'admin') {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
