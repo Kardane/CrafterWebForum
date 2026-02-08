@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Reply, Copy, Link2, Edit, Trash2, Pin, Check, CornerDownRight } from "lucide-react";
+import { Reply, Copy, Link2, Edit, Trash2, Pin, Check, ArrowUpLeft } from "lucide-react";
 import PostContent from "../posts/PostContent";
 import CommentForm from "./CommentForm";
 import PollCard from "@/components/poll/PollCard";
@@ -30,13 +30,16 @@ interface Comment {
 interface CommentItemProps {
 	comment: Comment;
 	replyToName?: string | null;
+	replyToCommentId?: number | null;
 	onReplyRequest: (commentId: number, nickname: string) => void;
+	onNavigateToComment?: (commentId: number) => void;
 	onEdit: (commentId: number, content: string) => void;
 	onDelete: (commentId: number) => void;
 	onPin?: (commentId: number) => void;
 	onVote?: (commentId: number, optionId: number) => void;
 	disabled?: boolean;
 	threadRootId?: number;
+	isHighlighted?: boolean;
 }
 
 function getMinecraftHeadUrl(uuid: string | null, size = 36): string | null {
@@ -49,13 +52,16 @@ type CopiedType = "text" | "link" | null;
 export default function CommentItem({
 	comment,
 	replyToName = null,
+	replyToCommentId = null,
 	onReplyRequest,
+	onNavigateToComment,
 	onEdit,
 	onDelete,
 	onPin,
 	onVote,
 	disabled = false,
 	threadRootId,
+	isHighlighted = false,
 }: CommentItemProps) {
 	const { data: session } = useSession();
 	const { showToast } = useToast();
@@ -126,9 +132,16 @@ export default function CommentItem({
 		}
 	};
 
+	const handleReplyContextClick = () => {
+		if (replyToCommentId === null || !onNavigateToComment) {
+			return;
+		}
+		onNavigateToComment(replyToCommentId);
+	};
+
 	return (
 		<div className="comment-wrapper" id={`comment-${comment.id}`}>
-			<div className={`comment-item ${comment.isPinned ? "pinned" : ""}`}>
+			<div className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""}`}>
 				<div className="comment-avatar">
 					{comment.author.minecraftUuid ? (
 						<img
@@ -142,18 +155,18 @@ export default function CommentItem({
 				</div>
 
 				<div className="comment-content">
+					{replyToName && (
+						<button type="button" className="comment-reply-context" onClick={handleReplyContextClick}>
+							<ArrowUpLeft size={12} />
+							<span>@{replyToName}</span>
+						</button>
+					)}
+
 					<div className="comment-header">
 						<span className="comment-author">{comment.author.nickname}</span>
 						{comment.isPostAuthor && <span className="comment-badge author">작성자</span>}
 						{comment.isPinned && <span className="comment-badge pinned">📌 고정됨</span>}
 					</div>
-
-					{replyToName && (
-						<div className="comment-reply-context">
-							<CornerDownRight size={12} />
-							<span>@{replyToName}에게 답장</span>
-						</div>
-					)}
 
 					{isEditing ? (
 						<CommentForm
@@ -162,6 +175,7 @@ export default function CommentItem({
 							initialValue={comment.content}
 							placeholder="댓글을 수정해줘"
 							disabled={disabled}
+							mode="edit"
 						/>
 					) : (
 						<>
@@ -246,6 +260,12 @@ export default function CommentItem({
 					background: color-mix(in srgb, var(--bg-tertiary) 84%, #000 16%);
 				}
 
+				.comment-item.is-highlighted {
+					background: color-mix(in srgb, var(--warning) 30%, #000 70%);
+					box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 60%, transparent);
+					animation: reply-highlight-pulse 1.2s ease;
+				}
+
 				.comment-item.pinned {
 					background: rgba(139, 35, 50, 0.15);
 					border-left: 3px solid var(--accent);
@@ -316,12 +336,21 @@ export default function CommentItem({
 					display: inline-flex;
 					align-items: center;
 					gap: 4px;
+					width: fit-content;
 					margin-bottom: 5px;
-					padding: 2px 6px;
+					padding: 3px 7px;
 					border-radius: 4px;
 					font-size: 0.72rem;
-					color: var(--text-muted);
-					background: color-mix(in srgb, var(--bg-tertiary) 75%, #000 25%);
+					color: color-mix(in srgb, var(--text-secondary) 85%, #fff 15%);
+					background: color-mix(in srgb, var(--bg-tertiary) 45%, #000 55%);
+					border: 1px solid color-mix(in srgb, var(--border) 65%, #000 35%);
+					cursor: pointer;
+					transition: background-color 0.15s ease, color 0.15s ease;
+				}
+
+				.comment-reply-context:hover {
+					background: color-mix(in srgb, var(--bg-tertiary) 25%, #000 75%);
+					color: #fff;
 				}
 
 				.comment-content-row {
@@ -349,7 +378,7 @@ export default function CommentItem({
 
 				.comment-hover-time {
 					font-size: 0.7rem;
-					color: color-mix(in srgb, var(--text-muted) 60%, #000 40%);
+					color: color-mix(in srgb, var(--text-muted) 95%, transparent);
 					opacity: 0;
 					transition: opacity 0.15s ease;
 					user-select: none;
@@ -407,6 +436,18 @@ export default function CommentItem({
 					.comment-actions {
 						opacity: 1;
 						pointer-events: auto;
+					}
+				}
+
+				@keyframes reply-highlight-pulse {
+					0% {
+						box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 30%, transparent);
+					}
+					50% {
+						box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--warning) 70%, transparent);
+					}
+					100% {
+						box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warning) 30%, transparent);
 					}
 				}
 			`}</style>
