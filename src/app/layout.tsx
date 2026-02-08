@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "@/styles/globals.css";
 import MainLayout from "@/components/layout/MainLayout";
 import SessionProvider from "@/components/providers/SessionProvider";
+import { ToastProvider } from "@/components/ui/ToastProvider";
 // ^ 별도 파일로 분리 필요
 
 
@@ -19,7 +20,9 @@ export default function RootLayout({
 		<html lang="ko">
 			<body className="antialiased bg-bg-primary text-text-primary">
 				<SessionProvider>
-					<MainLayout>{children}</MainLayout>
+					<ToastProvider>
+						<MainLayout>{children}</MainLayout>
+					</ToastProvider>
 				</SessionProvider>
 			</body>
 		</html>
