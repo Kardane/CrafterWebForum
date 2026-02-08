@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@/generated/client";
+import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
 
-const prisma = new PrismaClient();
 
 function makeIdentitySuffix(id: number) {
 	return `_rejected_${id}_${Date.now()}`;

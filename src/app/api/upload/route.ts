@@ -2,7 +2,7 @@ import path from "node:path";
 import { unlink, writeFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { PrismaClient } from "@/generated/client";
+import { prisma } from "@/lib/prisma";
 import { createThumbnail, optimizeImage } from "@/lib/image-optimizer";
 import {
 	createStoredFileName,
@@ -12,7 +12,6 @@ import {
 	validateUploadFile,
 } from "@/lib/upload";
 
-const prisma = new PrismaClient();
 
 export const runtime = "nodejs";
 
