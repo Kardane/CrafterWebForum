@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { PrismaClient } from '@/generated/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '@/lib/prisma';
+import { buildCommentTree } from '@/lib/comments';
 
 /**
  * GET /api/posts/[id]
@@ -12,6 +11,7 @@ export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
+	void request;
 	try {
 		const { id } = await params;
 		const session = await auth();
@@ -64,6 +64,7 @@ export async function GET(
 						id: true,
 						nickname: true,
 						minecraftUuid: true,
+						role: true,
 					},
 				},
 			},
@@ -105,18 +106,7 @@ export async function GET(
 			user_liked: !!userLiked,
 		};
 
-		return NextResponse.json({
-			post: responsePost,
-			comments: comments.map((c) => ({
-				id: c.id,
-				content: c.content,
-				createdAt: c.createdAt,
-				author_id: c.authorId,
-				author_name: c.author.nickname,
-				author_uuid: c.author.minecraftUuid,
-				is_pinned: c.isPinned,
-			})),
-		});
+		return NextResponse.json({ post: responsePost, comments: buildCommentTree(comments) });
 	} catch (error) {
 		console.error('[API] GET /api/posts/[id] error:', error);
 		return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -131,6 +121,7 @@ export async function PATCH(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
+	void request;
 	try {
 		const { id } = await params;
 		const session = await auth();
@@ -192,6 +183,7 @@ export async function DELETE(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
+	void request;
 	try {
 		const { id } = await params;
 		const session = await auth();

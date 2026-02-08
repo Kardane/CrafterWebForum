@@ -1,24 +1,7 @@
 ﻿import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { PrismaClient } from "@/generated/client";
-
-const prisma = new PrismaClient();
-
-interface CommentTreeNode {
-	id: number;
-	content: string;
-	createdAt: Date;
-	updatedAt: Date;
-	isPinned: number;
-	parentId: number | null;
-	author: {
-		id: number;
-		nickname: string;
-		minecraftUuid: string | null;
-		role: string;
-	};
-	replies: CommentTreeNode[];
-}
+import { prisma } from "@/lib/prisma";
+import { buildCommentTree } from "@/lib/comments";
 
 /**
  * GET /api/posts/[id]/comments
@@ -69,44 +52,7 @@ export async function GET(
 			orderBy: [{ isPinned: "desc" }, { createdAt: "asc" }],
 		});
 
-		const commentMap = new Map<number, CommentTreeNode>();
-		const rootComments: CommentTreeNode[] = [];
-
-		comments.forEach((comment) => {
-			const commentData: CommentTreeNode = {
-				id: comment.id,
-				content: comment.content,
-				createdAt: comment.createdAt,
-				updatedAt: comment.updatedAt,
-				isPinned: comment.isPinned,
-				parentId: comment.parentId,
-				author: {
-					id: comment.author.id,
-					nickname: comment.author.nickname,
-					minecraftUuid: comment.author.minecraftUuid,
-					role: comment.author.role,
-				},
-				replies: [],
-			};
-
-			commentMap.set(comment.id, commentData);
-
-			if (comment.parentId === null) {
-				rootComments.push(commentData);
-			}
-		});
-
-		comments.forEach((comment) => {
-			if (comment.parentId !== null) {
-				const parent = commentMap.get(comment.parentId);
-				const child = commentMap.get(comment.id);
-				if (parent && child) {
-					parent.replies.push(child);
-				}
-			}
-		});
-
-		return NextResponse.json({ comments: rootComments });
+		return NextResponse.json({ comments: buildCommentTree(comments) });
 	} catch (error) {
 		console.error("[API] GET /api/posts/[id]/comments error:", error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -213,7 +159,7 @@ export async function POST(
 				content: comment.content,
 				createdAt: comment.createdAt,
 				updatedAt: comment.updatedAt,
-				isPinned: comment.isPinned,
+				isPinned: Boolean(comment.isPinned),
 				parentId: comment.parentId,
 				author: comment.author,
 				replies: [],
