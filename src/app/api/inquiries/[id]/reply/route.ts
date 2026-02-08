@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { toSessionUserId } from '@/lib/session-user';
+import { isPrivilegedNickname } from '@/config/admin-policy';
 
 
 /**
@@ -19,6 +21,10 @@ export async function POST(
 		if (!session?.user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
 		if (isNaN(inquiryId)) {
 			return NextResponse.json({ error: 'Invalid inquiry ID' }, { status: 400 });
 		}
@@ -31,8 +37,8 @@ export async function POST(
 		}
 
 		// 문의 존재 여부 및 권한 확인
-		const inquiry = await prisma.inquiry.findUnique({
-			where: { id: inquiryId },
+		const inquiry = await prisma.inquiry.findFirst({
+			where: { id: inquiryId, archivedAt: null },
 		});
 
 		if (!inquiry) {
@@ -40,7 +46,9 @@ export async function POST(
 		}
 
 		// 관리자 또는 원작자만 답변 가능
-		if (session.user.role !== 'admin' && inquiry.authorId !== session.user.id) {
+		const canAccessAdmin =
+			session.user.role === 'admin' || isPrivilegedNickname(session.user.nickname);
+		if (!canAccessAdmin && inquiry.authorId !== sessionUserId) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 
@@ -49,7 +57,7 @@ export async function POST(
 			data: {
 				content,
 				inquiryId: inquiryId,
-				authorId: session.user.id,
+				authorId: sessionUserId,
 			},
 			include: {
 				author: {
@@ -63,7 +71,7 @@ export async function POST(
 		});
 
 		// 관리자가 답변했으면 상태를 'answered'로 변경
-		if (session.user.role === 'admin') {
+		if (canAccessAdmin) {
 			await prisma.inquiry.update({
 				where: { id: inquiryId },
 				data: { status: 'answered' },

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { toSessionUserId } from '@/lib/session-user';
+import { isPrivilegedNickname } from '@/config/admin-policy';
 
 
 /**
@@ -19,12 +21,16 @@ export async function GET(
 		if (!session?.user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
 		if (isNaN(inquiryId)) {
 			return NextResponse.json({ error: 'Invalid inquiry ID' }, { status: 400 });
 		}
 
-		const inquiry = await prisma.inquiry.findUnique({
-			where: { id: inquiryId },
+		const inquiry = await prisma.inquiry.findFirst({
+			where: { id: inquiryId, archivedAt: null },
 			include: {
 				author: {
 					select: {
@@ -52,7 +58,9 @@ export async function GET(
 		}
 
 		// 권한 검증: 본인 또는 관리자만 조회 가능
-		if (inquiry.authorId !== session.user.id && session.user.role !== 'admin') {
+		const canAccessAdmin =
+			session.user.role === 'admin' || isPrivilegedNickname(session.user.nickname);
+		if (inquiry.authorId !== sessionUserId && !canAccessAdmin) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 

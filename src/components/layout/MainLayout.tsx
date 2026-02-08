@@ -15,10 +15,11 @@ export default function MainLayout({ children }: MainLayoutProps) {
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
 	// 로그인/회원가입 페이지에서는 사이드바 숨김
-	const isAuthPage = ["/login", "/register"].includes(pathname);
-	const isPostDetailPage = /^\/posts\/\d+$/.test(pathname);
+	const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
+	const isPostDetailPage = pathname.includes("/posts/") && !pathname.includes("/new") && !pathname.includes("/edit");
+	const isComposerPage = pathname.includes("/new") || pathname.includes("/inquiries/new");
 	const showSidebar = !isAuthPage;
-	const showHeader = !isAuthPage && !isPostDetailPage;
+	const showHeader = !isAuthPage && !isPostDetailPage && !isComposerPage;
 
 	return (
 		<div className="min-h-screen bg-bg-primary text-text-primary font-sans flex text-sm md:text-base">
@@ -38,8 +39,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
 				<main className={classNames(
 					"flex-1",
 					{
-						"px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-4": !isAuthPage && !isPostDetailPage,
-						"px-3 pb-4 pt-0 md:px-5 md:pb-6 md:pt-1": isPostDetailPage,
+						"px-4 pb-4 pt-2 md:px-6 md:pb-6 md:pt-4": !isAuthPage && !isPostDetailPage && !isComposerPage,
+						"px-3 pb-4 pt-0 md:px-5 md:pb-6 md:pt-0": isPostDetailPage,
+						"px-3 pb-5 pt-1 md:px-5 md:pb-7 md:pt-2": isComposerPage,
 					}
 				)}>
 					{children}

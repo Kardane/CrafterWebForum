@@ -1,4 +1,3 @@
-import Link from "next/link";
 import PostFilters from "@/components/posts/PostFilters";
 import PostList from "@/components/posts/PostList";
 
@@ -44,15 +43,8 @@ export default async function Home(props: PageProps) {
 
 	return (
 		<div className="max-w-4xl mx-auto">
-			{/* 필터 및 검색 (여기에 새 포스트 버튼 포함됨) */}
-
-			{/* 필터 및 검색 */}
-			<PostFilters />
-
-			{/* 게시글 목록 */}
-			<div className="flex justify-end mb-2 text-sm text-text-muted font-medium">
-				총 {data.metadata.total?.toLocaleString()}개 포스트
-			</div>
+			{/* 필터 및 검색 (총 포스트 수 포함) */}
+			<PostFilters totalPosts={Number(data.metadata.total ?? 0)} />
 
 			<div className="min-h-[500px]">
 				<PostList

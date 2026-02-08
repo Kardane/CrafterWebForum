@@ -25,9 +25,6 @@ export default async function AdminLayout({
 					</Link>
 					<div>
 						<h1 className="text-2xl font-bold">관리자 패널</h1>
-						<span className="text-sm text-text-muted">
-							{session.user.nickname} ({session.user.role})
-						</span>
 					</div>
 				</div>
 			</div>

@@ -40,7 +40,7 @@ export default function PostCard({
 
 	return (
 		<Link href={`/posts/${id}`} className="block">
-			<div className="bg-bg-secondary rounded-lg border border-bg-tertiary p-4 hover:border-border transition-colors duration-200 cursor-pointer flex gap-4 h-full">
+			<div className="bg-bg-secondary rounded-lg border border-bg-tertiary p-4 hover:border-accent hover:shadow-md transition-all duration-200 cursor-pointer flex gap-4 h-full">
 
 				<div className="flex-1 flex flex-col min-w-0">
 					<div className="flex flex-col gap-1 mb-2">
@@ -48,7 +48,7 @@ export default function PostCard({
 							{tags.map((tag) => (
 								<span
 									key={tag}
-									className="px-2 py-0.5 rounded text-[11px] font-medium bg-bg-tertiary text-text-secondary"
+									className="px-2 py-[2px] rounded text-[10px] font-medium bg-bg-tertiary text-text-secondary"
 								>
 									{tag}
 								</span>
@@ -71,13 +71,13 @@ export default function PostCard({
 							}}
 							className="flex items-center"
 						>
-								<LikeButton
-									postId={id}
-									initialLikes={likeCount}
-									initialLiked={!!userLiked}
-									variant="default"
-									className="!px-2 !py-0.5 !rounded-md h-auto text-xs"
-								/>
+							<LikeButton
+								postId={id}
+								initialLikes={likeCount}
+								initialLiked={!!userLiked}
+								variant="legacy"
+								className="!px-2 !py-0.5 !rounded-md h-auto text-xs"
+							/>
 						</div>
 						<div className="flex items-center gap-1">
 							<MessageSquare size={14} />

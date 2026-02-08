@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import InquiryDetail from "@/components/inquiries/InquiryDetail";
 import { useSession } from "next-auth/react";
+import Link from "next/link";
 
 interface InquiryResponse {
 	inquiry: {
@@ -87,7 +88,10 @@ export default function InquiryDetailPage() {
 
 	return (
 		<div className="max-w-4xl mx-auto p-6">
-			<div className="mb-6">
+			<div className="mb-6 flex items-center gap-3">
+				<Link href="/" className="btn btn-secondary btn-sm">
+					← 메인
+				</Link>
 				<button
 					onClick={() => router.back()}
 					className="text-text-muted hover:text-text-primary transition-colors flex items-center gap-1"

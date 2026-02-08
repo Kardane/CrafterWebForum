@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDeprecationHeaders } from "@/lib/deprecation";
 import { getUserProfile } from "@/lib/user-service";
+import { toSessionUserId } from "@/lib/session-user";
 
 /**
  * 사용자 프로필 정보 API
@@ -24,7 +25,15 @@ export async function GET() {
 			);
 		}
 
-		const profile = await getUserProfile(session.user.id);
+		const userId = toSessionUserId(session.user.id);
+		if (!userId) {
+			return NextResponse.json(
+				{ error: "unauthorized" },
+				{ status: 401 }
+			);
+		}
+
+		const profile = await getUserProfile(userId);
 		if (!profile) {
 			return NextResponse.json(
 				{ error: "not_found" },

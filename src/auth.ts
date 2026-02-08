@@ -73,6 +73,7 @@ export const authConfig: NextAuthConfig = {
 						nickname: user.nickname,
 						role: user.role,
 						isApproved: user.isApproved,
+						minecraftUuid: user.minecraftUuid,
 					};
 				} catch (error) {
 					console.error("[Auth] Authorization error:", error);
@@ -91,6 +92,7 @@ export const authConfig: NextAuthConfig = {
 				token.nickname = user.nickname;
 				token.role = user.role;
 				token.isApproved = user.isApproved;
+				token.minecraftUuid = user.minecraftUuid;
 			}
 			return token;
 		},
@@ -106,6 +108,7 @@ export const authConfig: NextAuthConfig = {
 						nickname: token.nickname as string,
 						role: token.role as string,
 						isApproved: token.isApproved as number,
+						minecraftUuid: (token.minecraftUuid as string | null) ?? null,
 					},
 				};
 			}

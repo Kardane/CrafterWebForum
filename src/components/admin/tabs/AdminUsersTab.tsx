@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ko } from "date-fns/locale";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Check, X, Shield, Ban, Trash2 } from "lucide-react";
 import { AdminUserRow } from "@/types/admin";
 import { Modal } from "@/components/ui/Modal";
 
@@ -195,27 +195,29 @@ export default function AdminUsersTab() {
 						{selectedUser.deletedAt ? (
 							<p className="text-sm text-text-muted">삭제된 계정은 추가 작업을 진행할 수 없습니다</p>
 						) : (
-							<div className="grid gap-2">
+							<div className="grid gap-2.5">
 								{selectedUser.isApproved === 0 ? (
 									<>
 										<button
 											type="button"
-											className="btn btn-success"
+											className="btn btn-success flex items-center justify-center gap-2 py-2.5"
 											disabled={isActionLoading}
 											onClick={() => {
 												void runAction(() => approveUser(selectedUser.id));
 											}}
 										>
+											<Check size={16} />
 											승인
 										</button>
 										<button
 											type="button"
-											className="btn btn-danger"
+											className="btn btn-danger flex items-center justify-center gap-2 py-2.5"
 											disabled={isActionLoading}
 											onClick={() => {
 												void runAction(() => rejectUser(selectedUser.id));
 											}}
 										>
+											<X size={16} />
 											거절
 										</button>
 									</>
@@ -223,7 +225,7 @@ export default function AdminUsersTab() {
 									<>
 										<button
 											type="button"
-											className="btn btn-secondary"
+											className="btn btn-secondary flex items-center justify-center gap-2 py-2.5"
 											disabled={isActionLoading}
 											onClick={() => {
 												void runAction(() =>
@@ -233,12 +235,13 @@ export default function AdminUsersTab() {
 												);
 											}}
 										>
+											<Shield size={16} className={selectedUser.role === "admin" ? "text-error" : "text-success"} />
 											{selectedUser.role === "admin" ? "일반 사용자로 변경" : "관리자 권한 부여"}
 										</button>
 
 										<button
 											type="button"
-											className="btn btn-secondary"
+											className="btn btn-secondary flex items-center justify-center gap-2 py-2.5"
 											disabled={isActionLoading}
 											onClick={() => {
 												void runAction(() =>
@@ -248,17 +251,19 @@ export default function AdminUsersTab() {
 												);
 											}}
 										>
+											<Ban size={16} className={selectedUser.isBanned === 1 ? "text-success" : "text-error"} />
 											{selectedUser.isBanned === 1 ? "차단 해제" : "차단"}
 										</button>
 
 										<button
 											type="button"
-											className="btn btn-danger"
+											className="btn btn-danger flex items-center justify-center gap-2 py-2.5"
 											disabled={isActionLoading}
 											onClick={() => {
 												void runAction(() => deleteUser(selectedUser.id));
 											}}
 										>
+											<Trash2 size={16} />
 											삭제
 										</button>
 									</>

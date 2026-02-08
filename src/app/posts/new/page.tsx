@@ -1,36 +1,38 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { ArrowLeft, Image as ImageIcon, FileText, X } from "lucide-react";
-import Link from "next/link";
+import { FileImage, HelpCircle } from "lucide-react";
+import ComposerPageLayout from "@/components/editor/ComposerPageLayout";
+import MarkdownHelpModal from "@/components/comments/MarkdownHelpModal";
+import { useToast } from "@/components/ui/useToast";
+import { POST_TAGS } from "@/constants/post-tags";
 
-/**
- * 포스트 작성 페이지 - Tailwind CSS 재구현
- */
+interface UploadPayload {
+	success: boolean;
+	type: "image" | "file";
+	url: string;
+	originalName: string;
+	error?: string;
+}
+
 export default function NewPostPage() {
 	const router = useRouter();
 	const { data: session } = useSession();
+	const { showToast } = useToast();
+	const fileInputRef = useRef<HTMLInputElement>(null);
+
 	const [title, setTitle] = useState("");
 	const [content, setContent] = useState("");
 	const [selectedTags, setSelectedTags] = useState<string[]>([]);
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [isDragging, setIsDragging] = useState(false);
+	const [isUploading, setIsUploading] = useState(false);
+	const [isDragActive, setIsDragActive] = useState(false);
+	const [isMarkdownHelpOpen, setIsMarkdownHelpOpen] = useState(false);
 
-	// 사용 가능한 태그 목록
-	const availableTags = [
-		"플러그인",
-		"모드",
-		"데이터팩",
-		"리소스팩",
-		"Skript",
-		"질문",
-		"공유",
-		"토론"
-	];
+	const dragDepthRef = useRef(0);
 
-	// 임시 저장 복원
 	useEffect(() => {
 		const savedTitle = localStorage.getItem("draft_post_title");
 		const savedContent = localStorage.getItem("draft_post_content");
@@ -41,236 +43,238 @@ export default function NewPostPage() {
 		if (savedTags) {
 			try {
 				const tags = JSON.parse(savedTags);
-				if (Array.isArray(tags)) setSelectedTags(tags);
-			} catch (e) {
-				console.error("Failed to parse saved tags", e);
+				if (Array.isArray(tags)) {
+					setSelectedTags(tags.filter((tag): tag is string => typeof tag === "string"));
+				}
+			} catch (error) {
+				console.error("Failed to parse saved draft tags:", error);
 			}
 		}
 	}, []);
 
-	// 임시 저장
-	const saveDraft = () => {
+	useEffect(() => {
 		localStorage.setItem("draft_post_title", title);
 		localStorage.setItem("draft_post_content", content);
 		localStorage.setItem("draft_post_tags", JSON.stringify(selectedTags));
-	};
+	}, [title, content, selectedTags]);
 
-	// 임시 저장 삭제
 	const clearDraft = () => {
 		localStorage.removeItem("draft_post_title");
 		localStorage.removeItem("draft_post_content");
 		localStorage.removeItem("draft_post_tags");
 	};
 
-	// 태그 토글
 	const toggleTag = (tag: string) => {
 		if (selectedTags.includes(tag)) {
-			setSelectedTags(selectedTags.filter((t) => t !== tag));
-		} else {
-			if (selectedTags.length >= 5) {
-				alert("태그는 최대 5개까지 선택할 수 있습니다");
-				return;
+			setSelectedTags((prev) => prev.filter((item) => item !== tag));
+			return;
+		}
+
+		if (selectedTags.length >= 5) {
+			showToast({ type: "error", message: "태그는 최대 5개까지 가능" });
+			return;
+		}
+
+		setSelectedTags((prev) => [...prev, tag]);
+	};
+
+	const appendUploadedContent = (payload: UploadPayload) => {
+		const snippet =
+			payload.type === "image"
+				? `![${payload.originalName}](${payload.url})`
+				: `[📦 ${payload.originalName}](${payload.url})`;
+
+		setContent((prev) => {
+			if (!prev.trim()) {
+				return snippet;
 			}
-			setSelectedTags([...selectedTags, tag]);
+			return `${prev}\n${snippet}`;
+		});
+	};
+
+	const uploadFiles = async (files: File[]) => {
+		if (files.length === 0) {
+			return;
 		}
-	};
 
-	// 드래그 앤 드롭 핸들러
-	const handleDragEnter = (e: React.DragEvent) => {
-		e.preventDefault();
-		setIsDragging(true);
-	};
-
-	const handleDragLeave = (e: React.DragEvent) => {
-		e.preventDefault();
-		// 자식 요소로 들어갈 때 깜빡임 방지용 로직 필요시 추가 (여기서는 간단히 처리)
-		if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-		setIsDragging(false);
-	};
-
-	const handleDragOver = (e: React.DragEvent) => {
-		e.preventDefault();
-	};
-
-	const handleDrop = async (e: React.DragEvent) => {
-		e.preventDefault();
-		setIsDragging(false);
-
-		const file = e.dataTransfer.files[0];
-		if (file && file.type.startsWith("image/")) {
-			await uploadImage(file);
-		}
-	};
-
-	// 이미지 업로드
-	const uploadImage = async (file: File) => {
-		const formData = new FormData();
-		formData.append("file", file);
-
+		setIsUploading(true);
 		try {
-			const res = await fetch("/api/upload", {
-				method: "POST",
-				body: formData
-			});
+			for (const file of files) {
+				const formData = new FormData();
+				formData.append("file", file);
 
-			const data = await res.json();
+				const response = await fetch("/api/upload", {
+					method: "POST",
+					body: formData,
+				});
+				const data = (await response.json()) as UploadPayload | { error: string };
 
-			if (data.url) {
-				// 커서 위치에 이미지 URL 삽입
-				const textarea = document.getElementById("content") as HTMLTextAreaElement;
-				const start = textarea.selectionStart;
-				const end = textarea.selectionEnd;
-				const newText = `\n${data.url}\n`;
+				if (!response.ok || !("url" in data)) {
+					const message = "error" in data ? data.error : "파일 업로드 실패";
+					throw new Error(message);
+				}
 
-				setContent(
-					content.substring(0, start) + newText + content.substring(end)
-				);
-
-				alert("이미지가 업로드되었습니다");
-			} else {
-				alert(data.error || "업로드 실패");
+				appendUploadedContent(data);
 			}
+			showToast({ type: "success", message: "파일 업로드 완료" });
 		} catch (error) {
 			console.error("Upload error:", error);
-			alert("업로드 중 오류가 발생했습니다");
+			showToast({
+				type: "error",
+				message: error instanceof Error ? error.message : "파일 업로드 실패",
+			});
+		} finally {
+			setIsUploading(false);
 		}
 	};
 
-	// 파일 선택 핸들러
-	const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-		const file = e.target.files?.[0];
-		if (file && file.type.startsWith("image/")) {
-			await uploadImage(file);
+	const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
+		const files = event.target.files;
+		if (!files || files.length === 0) {
+			return;
 		}
-		e.target.value = "";
+
+		await uploadFiles(Array.from(files));
+		event.target.value = "";
 	};
 
-	// 제출
-	const handleSubmit = async (e: React.FormEvent) => {
-		e.preventDefault();
+	const handleDragEnter = (event: DragEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		event.stopPropagation();
+		dragDepthRef.current += 1;
+		setIsDragActive(true);
+	};
+
+	const handleDragLeave = (event: DragEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		event.stopPropagation();
+		dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+		if (dragDepthRef.current === 0) {
+			setIsDragActive(false);
+		}
+	};
+
+	const handleDragOver = (event: DragEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		event.stopPropagation();
+	};
+
+	const handleDrop = (event: DragEvent<HTMLFormElement>) => {
+		event.preventDefault();
+		event.stopPropagation();
+		dragDepthRef.current = 0;
+		setIsDragActive(false);
+		const files = Array.from(event.dataTransfer.files ?? []);
+		void uploadFiles(files);
+	};
+
+	const handleSubmit = async (event: React.FormEvent) => {
+		event.preventDefault();
 
 		if (!title.trim() || !content.trim()) {
-			alert("제목과 내용을 입력해주세요");
+			showToast({ type: "error", message: "제목과 내용을 입력해줘" });
 			return;
 		}
 
 		if (selectedTags.length === 0) {
-			alert("태그를 최소 1개 이상 선택해주세요");
+			showToast({ type: "error", message: "태그를 최소 1개 선택해줘" });
 			return;
 		}
 
-		if (!session?.user?.id) {
-			alert("로그인이 필요합니다");
+		if (!session?.user) {
+			showToast({ type: "error", message: "로그인이 필요함" });
 			return;
 		}
 
 		setIsSubmitting(true);
-
 		try {
-			// authorId는 이제 서버 세션에서 처리하거나 API에서 검증
-			const res = await fetch("/api/posts", {
+			const response = await fetch("/api/posts", {
 				method: "POST",
 				headers: {
-					"Content-Type": "application/json"
+					"Content-Type": "application/json",
 				},
 				body: JSON.stringify({
 					title,
 					content,
 					tags: selectedTags,
-					authorId: session.user.id
-				})
+				}),
 			});
 
-			const data = await res.json();
-
-			if (!res.ok) {
-				throw new Error(data.error || "Failed to create post");
+			const data = (await response.json()) as { postId?: number; error?: string };
+			if (!response.ok || !data.postId) {
+				throw new Error(data.error || "포스트 생성 실패");
 			}
 
 			clearDraft();
-			// alert("포스트가 작성되었습니다"); // NextJS 전환에서는 굳이 alert 안 띄워도 됨
+			showToast({ type: "success", message: "포스트 작성 완료" });
 			router.push(`/posts/${data.postId}`);
 		} catch (error) {
 			console.error("Post creation error:", error);
-			alert("포스트 작성에 실패했습니다");
+			showToast({
+				type: "error",
+				message: error instanceof Error ? error.message : "포스트 작성 실패",
+			});
 		} finally {
 			setIsSubmitting(false);
 		}
 	};
 
-	// 입력 변경 시 임시 저장
-	useEffect(() => {
-		saveDraft();
-	}, [title, content, selectedTags]);
-
 	return (
-		<div className="max-w-4xl mx-auto p-4 md:p-6 pb-24 relative min-h-screen">
-			{/* 헤더 */}
-			<div className="flex items-center gap-4 mb-8">
-				<Link
-					href="/"
-					className="flex items-center gap-2 text-text-muted hover:text-text-primary transition-colors bg-bg-secondary px-3 py-1.5 rounded-md text-sm"
-				>
-					<ArrowLeft size={16} />
-					목록으로
-				</Link>
-				<h1 className="text-2xl font-bold text-text-primary">새 포스트 작성</h1>
-			</div>
-
-			{/* 드래그 오버레이 */}
-			{isDragging && (
-				<div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 backdrop-blur-sm">
-					<div className="text-white text-xl font-bold flex flex-col items-center gap-4 animate-bounce">
-						<ImageIcon size={48} />
-						<span>이미지를 여기에 놓으세요</span>
-					</div>
-				</div>
-			)}
-
-			{/* 폼 */}
+		<ComposerPageLayout
+			title="새 포스트 작성"
+			description="드래그 앤 드롭 또는 첨부 버튼으로 파일을 올리고 마크다운으로 내용을 작성"
+		>
 			<form
 				onSubmit={handleSubmit}
-				className="flex flex-col gap-6"
+				className={`relative flex flex-col gap-5 ${isDragActive ? "ring-2 ring-accent rounded-xl" : ""}`}
 				onDragEnter={handleDragEnter}
 				onDragLeave={handleDragLeave}
 				onDragOver={handleDragOver}
 				onDrop={handleDrop}
 			>
-				{/* 제목 */}
-				<div>
-					<label htmlFor="title" className="block text-sm font-semibold text-text-secondary mb-2">
+				{isDragActive && (
+					<div className="absolute inset-0 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-accent bg-black/55 backdrop-blur-sm">
+						<div className="flex items-center gap-2 text-sm font-semibold text-white">
+							<FileImage size={18} />
+							파일을 놓으면 바로 업로드됨
+						</div>
+					</div>
+				)}
+
+				<div className="space-y-2">
+					<label htmlFor="title" className="text-sm font-semibold text-text-secondary">
 						제목
 					</label>
 					<input
-						type="text"
 						id="title"
-						className="w-full px-4 py-3 bg-bg-secondary border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all"
-						placeholder="제목을 입력하세요"
-						maxLength={100}
+						type="text"
 						value={title}
-						onChange={(e) => setTitle(e.target.value)}
+						onChange={(event) => setTitle(event.target.value)}
+						className="input-base"
+						placeholder="포스트 제목을 입력"
+						maxLength={100}
 						required
 					/>
 				</div>
 
-				{/* 태그 */}
-				<div>
-					<label className="block text-sm font-semibold text-text-secondary mb-2 flex justify-between">
-						<span>태그 선택</span>
-						<span className="text-xs text-text-muted font-normal">{selectedTags.length} / 5</span>
-					</label>
-					<div className="flex flex-wrap gap-2 p-3 bg-bg-tertiary rounded-lg border border-border/50">
-						{availableTags.map((tag) => {
+				<div className="space-y-2">
+					<div className="flex items-center justify-between">
+						<label className="text-sm font-semibold text-text-secondary">태그</label>
+						<span className="text-xs text-text-muted">{selectedTags.length} / 5</span>
+					</div>
+					<div className="flex flex-wrap gap-2 rounded-lg border border-border bg-bg-tertiary/80 p-3">
+						{POST_TAGS.map((tag) => {
 							const isSelected = selectedTags.includes(tag);
 							return (
 								<button
 									key={tag}
 									type="button"
-									className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border ${isSelected
-											? "bg-accent text-white border-accent shadow-md shadow-accent/20"
-											: "bg-bg-secondary text-text-secondary border-border hover:border-text-muted hover:bg-bg-tertiary"
-										}`}
 									onClick={() => toggleTag(tag)}
+									className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+										isSelected
+											? "border-accent bg-accent text-white"
+											: "border-border bg-bg-secondary text-text-secondary hover:bg-bg-primary hover:text-text-primary"
+									}`}
 								>
 									{tag}
 								</button>
@@ -279,100 +283,71 @@ export default function NewPostPage() {
 					</div>
 				</div>
 
-				{/* 내용 */}
-				<div className="flex-1 flex flex-col">
-					<div className="flex justify-between items-center mb-2">
-						<label htmlFor="content" className="block text-sm font-semibold text-text-secondary">
+				<div className="space-y-2">
+					<div className="flex flex-wrap items-center justify-between gap-2">
+						<label htmlFor="content" className="text-sm font-semibold text-text-secondary">
 							내용
 						</label>
-						<button
-							type="button"
-							className="text-xs flex items-center gap-1.5 text-accent hover:text-accent-hover font-medium px-2 py-1 rounded bg-accent/10 hover:bg-accent/20 transition-colors"
-							onClick={() => document.getElementById("imageUpload")?.click()}
-						>
-							<ImageIcon size={14} />
-							이미지 업로드
-						</button>
-					</div>
-
-					<div className="relative">
-						<textarea
-							id="content"
-							className="w-full min-h-[400px] px-4 py-3 bg-bg-secondary border border-border rounded-lg text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent resize-y transition-all font-mono leading-relaxed"
-							placeholder="내용을 입력하세요. 마크다운을 지원합니다."
-							value={content}
-							onChange={(e) => setContent(e.target.value)}
-							required
-						/>
-						{isDragging && (
-							<div className="absolute inset-0 bg-accent/10 border-2 border-dashed border-accent rounded-lg flex items-center justify-center pointer-events-none">
-								<span className="text-accent font-semibold">여기에 이미지를 놓으세요</span>
-							</div>
-						)}
-					</div>
-
-					{/* 마크다운 도움말 */}
-					<details className="mt-3 group">
-						<summary className="flex items-center gap-2 cursor-pointer text-sm text-text-muted hover:text-text-primary transition-colors select-none w-fit">
-							<FileText size={14} />
-							<span>마크다운 문법 가이드</span>
-						</summary>
-						<div className="mt-2 p-4 bg-bg-tertiary rounded-lg text-sm text-text-secondary border border-border grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2">
-							<div className="flex justify-between">
-								<code>**굵게**</code> <span><strong>굵게</strong></span>
-							</div>
-							<div className="flex justify-between">
-								<code>*이탤릭*</code> <span><em>이탤릭</em></span>
-							</div>
-							<div className="flex justify-between">
-								<code># 제목</code> <span>제목 (H1~H6)</span>
-							</div>
-							<div className="flex justify-between">
-								<code>`코드`</code> <span><code>코드</code></span>
-							</div>
-							<div className="flex justify-between">
-								<code>[링크](URL)</code> <span><span className="text-accent underline">링크</span></span>
-							</div>
-							<div className="flex justify-between">
-								<code>&gt; 인용</code> <span>인용문</span>
-							</div>
+						<div className="flex flex-wrap items-center gap-2">
+							<button
+								type="button"
+								onClick={() => setIsMarkdownHelpOpen(true)}
+								className="btn btn-secondary btn-sm"
+							>
+								<HelpCircle size={14} />
+								마크다운 가이드
+							</button>
+							<button
+								type="button"
+								onClick={() => fileInputRef.current?.click()}
+								className="btn btn-secondary btn-sm"
+								disabled={isUploading}
+							>
+								<FileImage size={14} />
+								{isUploading ? "업로드 중" : "파일 첨부"}
+							</button>
 						</div>
-					</details>
+					</div>
+					<textarea
+						id="content"
+						value={content}
+						onChange={(event) => setContent(event.target.value)}
+						className="input-base min-h-[360px] resize-y py-3 font-mono leading-relaxed"
+						placeholder="내용을 입력해줘\n이미지/파일은 첨부하거나 드래그해서 올릴 수 있음"
+						required
+					/>
 				</div>
 
-				{/* 하단 액션 버튼 */}
-				<div className="flex justify-end gap-3 mt-4 pt-4 border-t border-border">
-					<Link
-						href="/"
-						className="px-6 py-2.5 rounded-lg text-text-secondary hover:bg-bg-tertiary transition-colors font-medium text-sm"
+				<div className="mt-1 flex items-center justify-end gap-2 border-t border-border pt-4">
+					<button
+						type="button"
+						onClick={() => router.push("/")}
+						className="btn btn-secondary"
 					>
 						취소
-					</Link>
+					</button>
 					<button
 						type="submit"
-						disabled={isSubmitting}
-						className="px-8 py-2.5 rounded-lg bg-accent hover:bg-accent-hover text-white font-semibold shadow-lg shadow-accent/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+						disabled={isSubmitting || isUploading}
+						className="btn btn-primary"
 					>
-						{isSubmitting ? (
-							<>
-								<span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-								작성 중...
-							</>
-						) : (
-							"포스트 등록"
-						)}
+						{isSubmitting ? "작성 중" : "포스트 등록"}
 					</button>
 				</div>
+
+				<input
+					ref={fileInputRef}
+					type="file"
+					className="hidden"
+					onChange={handleFileSelect}
+					multiple
+				/>
 			</form>
 
-			{/* 숨겨진 파일 입력 */}
-			<input
-				type="file"
-				id="imageUpload"
-				accept="image/*"
-				className="hidden"
-				onChange={handleFileSelect}
+			<MarkdownHelpModal
+				isOpen={isMarkdownHelpOpen}
+				onClose={() => setIsMarkdownHelpOpen(false)}
 			/>
-		</div>
+		</ComposerPageLayout>
 	);
 }

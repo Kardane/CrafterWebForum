@@ -168,12 +168,14 @@ model Inquiry {
   content   String
   status    String   @default("pending") // "pending" | "answered" | "closed"
   createdAt DateTime @default(now())
+  archivedAt DateTime?
 
   // Relations
   author  User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
   replies InquiryReply[]
 
   @@index([authorId])
+  @@index([archivedAt])
 }
 
 // ============================================

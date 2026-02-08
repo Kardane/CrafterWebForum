@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import path from "path";
-import { mkdir, copyFile, readFile } from "fs/promises";
+import { mkdir, copyFile, readFile, readdir, stat } from "fs/promises";
 import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
@@ -31,6 +31,59 @@ function makeBackupName() {
 	const mi = String(now.getMinutes()).padStart(2, "0");
 	const ss = String(now.getSeconds()).padStart(2, "0");
 	return `backup-${yyyy}${mm}${dd}-${hh}${mi}${ss}.db`;
+}
+
+async function getLatestBackupMeta(backupsDir: string) {
+	try {
+		const entries = await readdir(backupsDir, { withFileTypes: true });
+		const backupFiles = entries
+			.filter((entry) => entry.isFile() && entry.name.startsWith("backup-") && entry.name.endsWith(".db"));
+
+		if (backupFiles.length === 0) {
+			return null;
+		}
+
+		const backups = await Promise.all(
+			backupFiles.map(async (file) => {
+				const filePath = path.join(backupsDir, file.name);
+				const fileStat = await stat(filePath);
+				return {
+					filename: file.name,
+					createdAt: fileStat.mtime.toISOString(),
+					size: fileStat.size,
+					mtimeMs: fileStat.mtimeMs,
+				};
+			})
+		);
+
+		backups.sort((a, b) => b.mtimeMs - a.mtimeMs);
+		const latest = backups[0];
+		return {
+			filename: latest.filename,
+			createdAt: latest.createdAt,
+			size: latest.size,
+		};
+	} catch (error) {
+		const fsError = error as NodeJS.ErrnoException;
+		if (fsError.code === "ENOENT") {
+			return null;
+		}
+		throw error;
+	}
+}
+
+export async function GET() {
+	try {
+		const admin = await requireAdmin();
+		if ("response" in admin) return admin.response;
+
+		const backupsDir = path.resolve(process.cwd(), "backups");
+		const latestBackup = await getLatestBackupMeta(backupsDir);
+		return NextResponse.json({ latestBackup });
+	} catch (error) {
+		console.error("[API] GET /api/admin/backup error:", error);
+		return NextResponse.json({ error: "Failed to load backup info" }, { status: 500 });
+	}
 }
 
 export async function POST() {
@@ -74,4 +127,3 @@ export async function POST() {
 		return NextResponse.json({ error: "Backup failed" }, { status: 500 });
 	}
 }
-

@@ -87,7 +87,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 			initialLikes={post.likes}
 			initialLiked={post.user_liked}
 		>
-			<div className="max-w-4xl mx-auto px-2 pb-6 pt-1 md:px-4">
+			<div className="max-w-4xl mx-auto px-2 pb-6 pt-0 md:px-4">
 				<PostStickyHeader
 					postId={post.id}
 					title={post.title}
@@ -96,58 +96,51 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 					initialLikes={post.likes}
 					initialLiked={post.user_liked}
 					commentCount={totalCommentCount}
-					triggerId="post-header-trigger"
-					topOffsetClassName="top-12"
-					observerOffsetTop={48}
 				/>
-				<div id="post-header-trigger" className="h-px" />
-
-				<div className="flex items-center justify-between mb-6">
-					<Link href="/" className="btn btn-secondary btn-sm">
-						<ArrowLeft size={16} />
-						목록
-					</Link>
+				<div className="mt-4 mb-6 relative">
 					{isOwner && (
-						<Link href={`/posts/${post.id}/edit`} className="btn btn-secondary btn-sm">
-							수정
-						</Link>
-					)}
-				</div>
-
-				<div className="mb-6">
-					<h1 className="text-2xl md:text-[2rem] font-bold text-text-primary mb-4 leading-[1.3]">
-						{post.title}
-					</h1>
-
-					{post.tags && post.tags.length > 0 && (
-						<div className="flex flex-wrap gap-2 mb-4">
-							{post.tags.map((tag: string) => (
-								<span
-									key={tag}
-									className="inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold bg-[#4a4d52] text-white"
-								>
-									{tag}
-								</span>
-							))}
+						<div className="absolute right-0 top-0">
+							<Link href={`/posts/${post.id}/edit`} className="btn btn-secondary btn-sm">
+								수정
+							</Link>
 						</div>
 					)}
 
-					<div className="flex items-center gap-3 py-3 border-b border-border">
-						{post.author_uuid ? (
-							<img
-								src={getMinecraftHeadUrl(post.author_uuid, 40) || ""}
-								alt=""
-								className="w-10 h-10 rounded-[4px] [image-rendering:pixelated]"
-							/>
-						) : (
-							<div className="w-10 h-10 rounded-[4px] bg-bg-tertiary flex items-center justify-center font-semibold text-text-muted">
-								{post.author_name[0].toUpperCase()}
+					<div className="mb-6">
+						<h1 className="text-2xl md:text-[2rem] font-bold text-text-primary mb-4 leading-[1.3]">
+							{post.title}
+						</h1>
+
+						{post.tags && post.tags.length > 0 && (
+							<div className="flex flex-wrap gap-2 mb-4">
+								{post.tags.map((tag: string) => (
+									<span
+										key={tag}
+										className="inline-flex items-center rounded px-2 py-[2px] text-[11px] font-semibold bg-bg-secondary text-white"
+									>
+										{tag}
+									</span>
+								))}
 							</div>
 						)}
-						<div className="flex-1">
-							<div className="font-semibold text-text-primary text-base">{post.author_name}</div>
-							<div className="text-[0.85rem] text-text-muted mt-0.5">
-								{new Date(post.createdAt).toLocaleString("ko-KR")}
+
+						<div className="flex items-center gap-3 py-3 border-b border-border">
+							{post.author_uuid ? (
+								<img
+									src={getMinecraftHeadUrl(post.author_uuid, 40) || ""}
+									alt=""
+									className="w-10 h-10 rounded-[4px] [image-rendering:pixelated]"
+								/>
+							) : (
+								<div className="w-10 h-10 rounded-[4px] bg-bg-tertiary flex items-center justify-center font-semibold text-text-muted">
+									{post.author_name[0].toUpperCase()}
+								</div>
+							)}
+							<div className="flex-1">
+								<div className="font-semibold text-text-primary text-base">{post.author_name}</div>
+								<div className="text-[0.85rem] text-text-muted mt-0.5">
+									{new Date(post.createdAt).toLocaleString("ko-KR")}
+								</div>
 							</div>
 						</div>
 					</div>

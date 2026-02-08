@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth.config";
+import { isPrivilegedNickname } from "@/config/admin-policy";
 
 /**
  * NextAuth.js 미들웨어
@@ -34,7 +35,14 @@ export async function middleware(request: NextRequest) {
 
 	// Admin 라우트: Admin 역할 필수
 	if (isAdminRoute && session?.user) {
-		if (session.user.role !== "admin") {
+		const role = (session.user as { role?: string }).role;
+		const nickname = (session.user as { nickname?: string }).nickname;
+		if (!role && !nickname) {
+			return NextResponse.next();
+		}
+		const hasAdminRole = role === "admin";
+		const hasPrivilegedNickname = isPrivilegedNickname(nickname);
+		if (!hasAdminRole && !hasPrivilegedNickname) {
 			return NextResponse.json(
 				{ error: "Forbidden: Admin access required" },
 				{ status: 403 }

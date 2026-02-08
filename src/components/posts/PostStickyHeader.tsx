@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowUp, MessageCircle } from "lucide-react";
 import LikeButton from "./LikeButton";
@@ -40,38 +39,11 @@ export default function PostStickyHeader({
 	topOffsetClassName = "top-header",
 	observerOffsetTop = 56,
 }: PostStickyHeaderProps) {
-	const [isVisible, setIsVisible] = useState(false);
-
-	useEffect(() => {
-		const handleScroll = () => {
-			const trigger = document.getElementById(triggerId);
-			if (!trigger) {
-				setIsVisible(window.scrollY > 220);
-				return;
-			}
-
-			const triggerTop = trigger.getBoundingClientRect().top;
-			const scrolledEnough = window.scrollY > 120;
-			setIsVisible(scrolledEnough && triggerTop <= observerOffsetTop + 4);
-		};
-
-		handleScroll();
-		window.addEventListener("scroll", handleScroll, { passive: true });
-		window.addEventListener("resize", handleScroll);
-		return () => {
-			window.removeEventListener("scroll", handleScroll);
-			window.removeEventListener("resize", handleScroll);
-		};
-	}, [triggerId, observerOffsetTop]);
-
 	return (
 		<div
-			className={`sticky ${topOffsetClassName} z-[45] mb-3 transition-all duration-200 ${isVisible
-					? "opacity-100 translate-y-0"
-					: "opacity-0 -translate-y-2 pointer-events-none"
-				}`}
+			className={`sticky top-0 z-[45] transition-opacity duration-200 opacity-100`}
 		>
-			<div className="rounded-md border border-border bg-bg-secondary/95 px-3 py-2 shadow-[0_6px_20px_rgba(0,0,0,0.25)] backdrop-blur">
+			<div className="rounded-b-lg border-x border-b border-border bg-bg-secondary/95 px-3 py-2 shadow-sm backdrop-blur">
 				<div className="flex items-center gap-3">
 					<Link href="/" className="btn btn-secondary btn-sm">
 						<ArrowLeft size={14} />

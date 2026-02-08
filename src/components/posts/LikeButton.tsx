@@ -15,7 +15,7 @@ interface LikeButtonProps {
 	initialLikes: number;
 	initialLiked: boolean;
 	className?: string; // 추가 스타일
-	variant?: "default" | "ghost"; // 스타일 변형
+	variant?: "default" | "ghost" | "legacy"; // 스타일 변형
 	state?: ControlledLikeState;
 	onToggle?: () => Promise<void> | void;
 }
@@ -110,8 +110,27 @@ export default function LikeButton({
 	// 스타일 클래스 결정
 	const baseClasses = "inline-flex items-center gap-1.5 transition-all duration-200 disabled:opacity-50";
 	const variantClasses = variant === "default"
-		? "px-3 py-1.5 rounded-md bg-accent text-white hover:bg-accent-hover"
-		: `${resolvedLiked ? 'text-accent font-bold' : 'text-text-muted hover:text-text-primary'}`;
+		? `px-3 py-1.5 rounded-md border ${resolvedLiked
+			? "bg-[#2f3338] border-[#484d54] text-white hover:bg-[#3a3f45]"
+			: "bg-[#25292f] border-[#3f444b] text-text-secondary hover:bg-[#31363d] hover:text-white"
+		}`
+		: variant === "legacy"
+			? `rounded px-2 py-1 border border-transparent ${resolvedLiked
+				? "text-warning hover:bg-bg-tertiary"
+				: "text-text-muted hover:bg-bg-tertiary hover:text-warning"
+			}`
+			: `${resolvedLiked ? "text-accent font-bold" : "text-text-muted hover:text-text-primary"}`;
+
+	const iconFill = resolvedLiked
+		? variant === "legacy"
+			? "currentColor"
+			: "#a8b2bd"
+		: "none";
+	const iconStroke = resolvedLiked
+		? variant === "legacy"
+			? "currentColor"
+			: "#a8b2bd"
+		: "currentColor";
 
 	return (
 		<button
@@ -121,8 +140,8 @@ export default function LikeButton({
 		>
 			<Star
 				className="w-4 h-4"
-				fill={resolvedLiked ? '#FEE75C' : 'none'}
-				stroke={resolvedLiked ? '#FEE75C' : 'currentColor'}
+				fill={iconFill}
+				stroke={iconStroke}
 				strokeWidth={2}
 			/>
 			<span className="text-sm font-medium">{resolvedLikes}</span>

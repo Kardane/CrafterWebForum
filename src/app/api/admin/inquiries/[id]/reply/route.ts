@@ -27,6 +27,12 @@ export async function POST(
 		if (!inquiry) {
 			return NextResponse.json({ error: "Inquiry not found" }, { status: 404 });
 		}
+		if (inquiry.archivedAt) {
+			return NextResponse.json(
+				{ error: "Archived inquiry cannot be replied" },
+				{ status: 409 }
+			);
+		}
 
 		const reply = await prisma.inquiryReply.create({
 			data: {
@@ -55,4 +61,3 @@ export async function POST(
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
-

@@ -1,3 +1,10 @@
+export interface AdminCoreTrendPoint {
+	date: string;
+	users: number;
+	posts: number;
+	comments: number;
+}
+
 export interface AdminStats {
 	users: number;
 	posts: number;
@@ -5,6 +12,7 @@ export interface AdminStats {
 	inquiries: number;
 	pendingUsers: number;
 	pendingInquiries: number;
+	coreTrend: AdminCoreTrendPoint[];
 }
 
 export interface AdminUserRow {
@@ -35,7 +43,13 @@ export interface AdminInquiryRow {
 	title: string;
 	status: string;
 	createdAt: string;
+	archivedAt: string | null;
 	authorId: number;
 	authorName: string;
 }
 
+export interface AdminBackupInfo {
+	filename: string;
+	createdAt: string;
+	size: number;
+}

@@ -39,9 +39,6 @@ export default function AdminTabNav({ activeTab }: AdminTabNavProps) {
 									: "border-border bg-bg-tertiary text-text-secondary hover:bg-bg-secondary hover:text-text-primary"
 							)}
 						>
-							<span className="text-[11px] font-semibold text-text-muted">
-								{String(index + 1).padStart(2, "0")}
-							</span>
 							<span>{tab.label}</span>
 						</Link>
 					);

@@ -27,10 +27,15 @@ export default function InquiriesPage() {
 
 	return (
 		<div className="max-w-4xl mx-auto p-6">
-			<header className="flex justify-between items-center mb-6">
-				<h1 className="text-2xl font-bold flex items-center gap-2">
-					<span>💬</span> 문의하기
-				</h1>
+			<header className="mb-6 flex flex-wrap items-center justify-between gap-3">
+				<div className="flex items-center gap-2">
+					<Link href="/" className="btn btn-secondary btn-sm">
+						← 메인
+					</Link>
+					<h1 className="text-2xl font-bold flex items-center gap-2">
+						<span>💬</span> 문의하기
+					</h1>
+				</div>
 				<Link href="/inquiries/new" className="btn btn-primary">
 					+ 새 문의
 				</Link>

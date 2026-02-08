@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { toSessionUserId } from '@/lib/session-user';
+import { isPrivilegedNickname } from '@/config/admin-policy';
 
 
 /**
@@ -8,15 +10,24 @@ import { prisma } from '@/lib/prisma';
  * 내 문의 목록 조회 (관리자는 전체 목록)
  */
 export async function GET(request: NextRequest) {
+	void request;
 	try {
 		const session = await auth();
 		if (!session?.user) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const where = session.user.role === 'admin'
-			? {}
-			: { authorId: session.user.id };
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
+
+		const canAccessAllInquiries =
+			session.user.role === 'admin' || isPrivilegedNickname(session.user.nickname);
+
+		const where = canAccessAllInquiries
+			? { archivedAt: null }
+			: { authorId: sessionUserId, archivedAt: null };
 
 		const inquiries = await prisma.inquiry.findMany({
 			where,
@@ -39,6 +50,7 @@ export async function GET(request: NextRequest) {
 			title: inquiry.title,
 			status: inquiry.status,
 			createdAt: inquiry.createdAt,
+			authorId: inquiry.authorId,
 			authorName: inquiry.author.nickname,
 			replyCount: inquiry._count.replies,
 		}));
@@ -61,6 +73,11 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
+		const sessionUserId = toSessionUserId(session.user.id);
+		if (!sessionUserId) {
+			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		}
+
 		const body = await request.json();
 		const { title, content } = body;
 
@@ -75,7 +92,7 @@ export async function POST(request: NextRequest) {
 			data: {
 				title,
 				content,
-				authorId: session.user.id,
+				authorId: sessionUserId,
 			},
 		});
 

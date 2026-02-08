@@ -378,9 +378,9 @@ export default function CommentItem({
 
 				.comment-hover-time {
 					font-size: 0.7rem;
-					color: color-mix(in srgb, var(--text-muted) 95%, transparent);
+					color: var(--text-muted);
 					opacity: 0;
-					transition: opacity 0.15s ease;
+					transition: opacity 0.2s ease;
 					user-select: none;
 					white-space: nowrap;
 					pointer-events: none;
@@ -421,6 +421,7 @@ export default function CommentItem({
 					color: var(--text-muted);
 					cursor: pointer;
 					border-radius: 4px;
+					transition: background 0.2s ease, color 0.15s ease;
 				}
 
 				.action-btn:hover {
