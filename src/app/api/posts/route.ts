@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma, PrismaClient } from "@/generated/client";
+import { Prisma } from "@/generated/client";
+import { prisma } from "@/lib/prisma";
 import { auth } from "@/auth";
-
-const prisma = new PrismaClient();
 
 export const dynamic = 'force-dynamic'; // 항상 최신 데이터 조회
 
@@ -144,33 +143,45 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(request: NextRequest) {
 	try {
-		// 인증 확인은 middleware에서 처리되므로 여기서는 생략 가능
-		// 하지만 명시적으로 체크하려면 auth() 호출
-		const body = await request.json();
-		const { title, content, tags, authorId } = body;
-
-		if (!title || !content || !authorId) {
-			return NextResponse.json({ error: 'Title, content, and authorId are required' }, { status: 400 });
+		const session = await auth();
+		if (!session?.user?.id) {
+			return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 		}
+
+		const body = await request.json() as {
+			title?: unknown;
+			content?: unknown;
+			tags?: unknown;
+		};
+
+		const title = typeof body.title === "string" ? body.title.trim() : "";
+		const content = typeof body.content === "string" ? body.content.trim() : "";
+		if (!title || !content) {
+			return NextResponse.json({ error: "validation_error" }, { status: 400 });
+		}
+
+		const tags = Array.isArray(body.tags)
+			? body.tags.filter((tag): tag is string => typeof tag === "string" && tag.trim().length > 0)
+			: [];
 
 		// 게시글 생성
 		const post = await prisma.post.create({
 			data: {
 				title,
 				content,
-				tags: JSON.stringify(tags || []),
-				authorId,
+				tags: JSON.stringify(tags),
+				authorId: session.user.id,
 			},
 		});
 
 		return NextResponse.json({
 			success: true,
-			message: 'Post created successfully',
+			message: "created",
 			postId: post.id,
 		});
-	} catch (error) {
-		console.error('[API] POST /api/posts error:', error);
-		return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+	} catch (error: unknown) {
+		console.error("[API] POST /api/posts error:", error);
+		return NextResponse.json({ error: "internal_server_error" }, { status: 500 });
 	}
 }
 
