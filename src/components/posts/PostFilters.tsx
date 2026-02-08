@@ -8,15 +8,16 @@ import { Input } from "@/components/ui/Input";
 
 // TODO: API로 가져오도록 변경 가능
 const AVAILABLE_TAGS = [
-	"플러그인", "모드", "데이터팩", "리소스팩", "Skript", "질문", "공유", "토론"
+	"질문", "플러그인", "Skript", "모드", "모드팩", "데이터팩", "리소스팩",
+	"프로그램", "바닐라", "장타서버", "단타서버", "해드립니다", "기타"
 ];
 
 const SORT_OPTIONS = [
+	{ value: "activity", label: "최근 활동순" },
 	{ value: "newest", label: "최신순" },
 	{ value: "oldest", label: "오래된순" },
 	{ value: "likes", label: "추천순" },
 	{ value: "comments", label: "댓글순" },
-	{ value: "activity", label: "최근 활동순" },
 ];
 
 import Link from "next/link";
@@ -27,7 +28,7 @@ export default function PostFilters() {
 	const searchParams = useSearchParams();
 
 	const currentTag = searchParams.get("tag") || "";
-	const currentSort = searchParams.get("sort") || "newest";
+	const currentSort = searchParams.get("sort") || "activity";
 	const currentSearch = searchParams.get("search") || "";
 
 	const [searchTerm, setSearchTerm] = useState(currentSearch);
@@ -54,7 +55,7 @@ export default function PostFilters() {
 	};
 
 	return (
-		<div className="flex flex-col gap-4 mb-6">
+		<div className="flex flex-col gap-4 mb-2">
 			<div className="flex flex-col md:flex-row gap-2 justify-between items-start md:items-center">
 				{/* 좌측: 새 포스트 + 검색창 */}
 				<div className="flex w-full md:w-auto gap-2">
@@ -67,16 +68,16 @@ export default function PostFilters() {
 						<span className="sm:hidden">작성</span>
 					</Link>
 
-					<form onSubmit={handleSearch} className="flex-1 flex max-w-md">
+					<form onSubmit={handleSearch} className="flex-1 flex w-full md:max-w-md">
 						<Input
 							placeholder="포스트 검색..."
 							value={searchTerm}
 							onChange={(e) => setSearchTerm(e.target.value)}
-							className="rounded-l-md rounded-r-none border-r-0 focus:ring-0"
+							className="rounded-l-md rounded-r-none border-r-0 focus:ring-0 flex-1 min-w-0"
 						/>
 						<button
 							type="submit"
-							className="bg-accent hover:bg-accent-hover text-white px-4 rounded-r-md font-medium text-sm transition-colors"
+							className="bg-accent hover:bg-accent-hover text-white px-4 py-2 rounded-r-md font-medium text-sm transition-colors w-24 flex-shrink-0"
 						>
 							검색
 						</button>
@@ -139,9 +140,9 @@ export default function PostFilters() {
 				{AVAILABLE_TAGS.map(tag => (
 					<button
 						key={tag}
-						onClick={() => updateParams("tag", tag)}
+						onClick={() => updateParams("tag", currentTag === tag ? "" : tag)}
 						className={classNames(
-							"px-3 py-1.5 rounded-xl text-sm font-medium transition-colors border",
+							"px-3 py-1.5 rounded-xl text-sm font-medium transition-colors border cursor-pointer",
 							currentTag === tag
 								? "bg-accent text-white border-accent"
 								: "bg-bg-tertiary text-text-secondary border-transparent hover:bg-bg-secondary"

@@ -282,10 +282,12 @@ export default function RegisterPage() {
 				)}
 
 				{/* 푸터 */}
-				<div className="auth-footer">
-					<p>
+				<div className="auth-footer text-center mt-6">
+					<p className="text-sm text-gray-400">
 						이미 계정이 있으신가요?{" "}
-						<Link href="/login">로그인</Link>
+						<Link href="/login" style={{ color: '#ff4444' }}>
+							로그인
+						</Link>
 					</p>
 				</div>
 			</div>
@@ -422,10 +424,10 @@ export default function RegisterPage() {
 					color: var(--text-secondary);
 				}
 
-				.form-input {
+				.auth-form .form-input {
 					width: 100%;
 					padding: 10px 12px;
-					background: var(--bg-tertiary);
+					background: rgba(0, 0, 0, 0.3) !important;
 					border: 1px solid var(--border);
 					border-radius: 4px;
 					color: var(--text-primary);
@@ -465,7 +467,7 @@ export default function RegisterPage() {
 				}
 
 				.auth-footer a {
-					color: var(--accent);
+					color: #ff4444 !important;
 					text-decoration: none;
 				}
 

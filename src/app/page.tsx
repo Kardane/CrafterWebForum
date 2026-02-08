@@ -50,10 +50,11 @@ export default async function Home(props: PageProps) {
 			<PostFilters />
 
 			{/* 게시글 목록 */}
-			<div className="relative min-h-[500px]">
-				<div className="absolute right-0 top-[-40px] text-sm text-text-muted font-medium">
-					총 {data.metadata.total?.toLocaleString()}개 포스트
-				</div>
+			<div className="flex justify-end mb-2 text-sm text-text-muted font-medium">
+				총 {data.metadata.total?.toLocaleString()}개 포스트
+			</div>
+
+			<div className="min-h-[500px]">
 				<PostList
 					posts={data.posts || []}
 					totalPages={data.metadata.totalPages || 0}

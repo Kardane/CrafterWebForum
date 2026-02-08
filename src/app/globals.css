@@ -24,3 +24,12 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Auth Link Override */
+.auth-footer a {
+  color: #ff4444 !important;
+  text-decoration: none;
+}
+.auth-footer a:hover {
+  text-decoration: underline;
+}

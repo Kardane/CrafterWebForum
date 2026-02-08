@@ -6,7 +6,6 @@ import { ko } from "date-fns/locale";
 import { MessageSquare } from "lucide-react";
 import LikeButton from "./LikeButton";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
-import classNames from "classnames";
 
 interface PostCardProps {
 	id: number;
@@ -28,7 +27,6 @@ export default function PostCard({
 	title,
 	content,
 	authorName,
-	authorUuid,
 	createdAt,
 	likeCount,
 	commentCount,
@@ -41,7 +39,7 @@ export default function PostCard({
 	const timeAgo = formatDistanceToNow(new Date(createdAt), { addSuffix: true, locale: ko });
 
 	return (
-		<Link href={`/post/${id}`} className="block">
+		<Link href={`/posts/${id}`} className="block">
 			<div className="bg-bg-secondary rounded-lg border border-bg-tertiary p-4 hover:border-border transition-colors duration-200 cursor-pointer flex gap-4 h-full">
 
 				<div className="flex-1 flex flex-col min-w-0">
@@ -73,13 +71,13 @@ export default function PostCard({
 							}}
 							className="flex items-center"
 						>
-							<LikeButton
-								postId={id}
-								initialLikes={likeCount}
-								initialLiked={!!userLiked}
-								variant="ghost"
-								className="!p-0 !bg-transparent gap-1 hover:text-accent h-auto text-xs"
-							/>
+								<LikeButton
+									postId={id}
+									initialLikes={likeCount}
+									initialLiked={!!userLiked}
+									variant="default"
+									className="!px-2 !py-0.5 !rounded-md h-auto text-xs"
+								/>
 						</div>
 						<div className="flex items-center gap-1">
 							<MessageSquare size={14} />

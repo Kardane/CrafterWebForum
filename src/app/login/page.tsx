@@ -134,7 +134,7 @@ export default function LoginPage() {
 				<div className="auth-footer">
 					<p>
 						계정이 없으신가요?{" "}
-						<Link href="/register">회원가입</Link>
+						<Link href="/register" style={{ color: '#ff4444' }}>회원가입</Link>
 					</p>
 				</div>
 			</div>
@@ -205,10 +205,10 @@ export default function LoginPage() {
 					color: var(--text-secondary);
 				}
 
-				.form-input {
+				.auth-form .form-input {
 					width: 100%;
 					padding: 10px 12px;
-					background: var(--bg-tertiary);
+					background: rgba(0, 0, 0, 0.3) !important;
 					border: 1px solid var(--border);
 					border-radius: 4px;
 					color: var(--text-primary);
@@ -246,7 +246,7 @@ export default function LoginPage() {
 				}
 
 				.auth-footer a {
-					color: var(--accent);
+					color: #ff4444 !important;
 					text-decoration: none;
 				}
 
