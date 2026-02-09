@@ -13,6 +13,7 @@ interface Post {
 	authorName: string;
 	authorUuid?: string;
 	createdAt: string;
+	updatedAt: string;
 	views: number;
 	likes: number;
 	commentCount: number;
@@ -75,16 +76,17 @@ export default function PostList({ posts, totalPages, currentPage }: PostListPro
 						authorName={post.authorName}
 						authorUuid={post.authorUuid}
 						createdAt={post.createdAt}
+						updatedAt={post.updatedAt}
 						viewCount={post.views}
 						likeCount={post.likes}
-							commentCount={post.commentCount}
-							tags={post.tags}
-							unreadCount={post.unreadCount}
-							userLiked={post.userLiked}
-							onNavigate={handlePostNavigate}
-						/>
-					))}
-				</div>
+						commentCount={post.commentCount}
+						tags={post.tags}
+						unreadCount={post.unreadCount}
+						userLiked={post.userLiked}
+						onNavigate={handlePostNavigate}
+					/>
+				))}
+			</div>
 
 			{/* 페이지네이션 */}
 			{totalPages > 1 && (
