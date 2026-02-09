@@ -2,7 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
+import { z } from "zod";
 
+const verifyBodySchema = z.object({
+	code: z
+		.string()
+		.trim()
+		.regex(/^\d{6,7}$/, { message: "invalid_code_format" }),
+	uuid: z.string().trim().min(1, { message: "missing_uuid" }),
+	nickname: z.string().trim().min(1, { message: "missing_nickname" }).max(32),
+	ip: z.string().trim().min(1, { message: "missing_ip" }).max(128),
+});
+
+const REAUTH_MARKER_PREFIX = "reauth:";
+
+function normalizeIp(value: string): string {
+	// x-forwarded-for는 "client, proxy1, proxy2" 형태가 올 수 있음
+	return value.split(",")[0]?.trim() ?? "";
+}
 
 /**
  * 마인크래프트 코드 검증 API
@@ -21,19 +38,16 @@ export async function POST(req: NextRequest) {
 			return rateLimitedResponse;
 		}
 
-		const body = await req.json();
-		const { code, uuid, nickname, ip } = body;
-
-		console.log("[Minecraft] Verify Request:", body);
-
-		// 필수 필드 검증
-		if (!code || !uuid || !nickname || !ip) {
-			console.error("[Minecraft] Missing params:", body);
+		const body = await req.json().catch(() => null);
+		const parsed = verifyBodySchema.safeParse(body);
+		if (!parsed.success) {
 			return NextResponse.json(
 				{ error: "missing_params" },
 				{ status: 400 }
 			);
 		}
+
+		const { code, uuid, nickname, ip } = parsed.data;
 
 		// 만료된 코드 삭제 (10분)
 		const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
@@ -57,10 +71,20 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		// IP 검증 로그
-		console.log(
-			`[Minecraft] IP Check: Web(${authRequest.ipAddress}) vs MC(${ip})`
-		);
+		// signup용 코드만 IP mismatch를 적용 (재인증 코드는 marker로 구분)
+		const storedIpRaw = (authRequest.ipAddress ?? "").trim();
+		const requestIp = normalizeIp(ip);
+		const storedIp = storedIpRaw.startsWith(REAUTH_MARKER_PREFIX)
+			? storedIpRaw
+			: normalizeIp(storedIpRaw);
+		const isReauthMarker = storedIp.startsWith(REAUTH_MARKER_PREFIX);
+		const hasUsableStoredIp = storedIp.length > 0 && storedIp !== "unknown";
+		if (!isReauthMarker && hasUsableStoredIp && storedIp !== requestIp) {
+			return NextResponse.json(
+				{ error: "ip_mismatch" },
+				{ status: 400 }
+			);
+		}
 
 		// 코드 상태를 verified로 업데이트
 		await prisma.minecraftCode.update({

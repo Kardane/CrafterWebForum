@@ -115,8 +115,10 @@ export default function RegisterPage() {
 			return;
 		}
 
-		if (password.length < 4) {
-			setPasswordError("비밀번호는 최소 4자 이상이어야 합니다");
+		// 서버 규칙과 동일: 8자 이상 + 숫자 또는 특수문자 포함
+		const pwRegex = /^(?=.*[0-9!@#$%^&*])(?=.{8,})/;
+		if (!pwRegex.test(password)) {
+			setPasswordError("비밀번호는 8자 이상이며, 숫자나 특수문자를 포함해야 합니다");
 			return;
 		}
 
