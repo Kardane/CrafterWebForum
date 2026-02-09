@@ -6,6 +6,11 @@ export const RATE_LIMIT_POLICIES: Record<string, RateLimitPolicy> = {
 		limit: 10,
 		windowMs: 60_000,
 	},
+	minecraftStatus: {
+		namespace: "minecraft:status",
+		limit: 60,
+		windowMs: 60_000,
+	},
 	minecraftVerify: {
 		namespace: "minecraft:verify",
 		limit: 30,
