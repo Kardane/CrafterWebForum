@@ -6,7 +6,9 @@ export function extractFirstImage(content: string): string | null {
 	if (!content) return null;
 
 	// 1. 직접 업로드된 이미지 또는 Imgur 직접 링크 (확장자 포함)
-	const match = content.match(/(https?:\/\/i\.imgur\.com\/[a-zA-Z0-9]+\.(?:jpg|jpeg|png|gif|webp)|\/uploads\/[^\s]+\.(?:jpg|jpeg|png|gif|webp))/i);
+	const match = content.match(
+		/(https?:\/\/i\.imgur\.com\/[a-zA-Z0-9]+\.(?:jpg|jpeg|png|gif|webp)|https?:\/\/[^\s)]+\/uploads\/[^\s)]+\.(?:jpg|jpeg|png|gif|webp)|\/uploads\/[^\s)]+\.(?:jpg|jpeg|png|gif|webp))/i
+	);
 	if (match) {
 		return match[1];
 	}
@@ -29,7 +31,10 @@ export function getPreviewText(content: string, limit: number = 100): string {
 
 	const text = content
 		.replace(/```[\s\S]*?```/g, '') // 코드 블록
-		.replace(/(https?:\/\/(?:i\.)?imgur\.com\/[^\s]+|\/uploads\/[^\s]+)/gi, '') // 이미지 URL
+		.replace(
+			/(https?:\/\/(?:i\.)?imgur\.com\/[^\s]+|https?:\/\/[^\s]+\/uploads\/[^\s]+|\/uploads\/[^\s]+)/gi,
+			''
+		) // 이미지 URL
 		.replace(/https?:\/\/[^\s]+/gi, '') // 일반 URL
 		.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // 링크 텍스트
 		.replace(/#{1,6}\s+/g, '') // 헤더

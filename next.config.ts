@@ -11,6 +11,16 @@ const nextConfig: NextConfig = {
 				protocol: "https",
 				hostname: "crafatar.com",
 			},
+			{
+				protocol: "https",
+				hostname: "**.public.blob.vercel-storage.com",
+				pathname: "/uploads/**",
+			},
+			{
+				protocol: "https",
+				hostname: "**.blob.vercel-storage.com",
+				pathname: "/uploads/**",
+			},
 		],
 	},
 };

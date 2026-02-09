@@ -14,6 +14,7 @@ interface PostCardProps {
 	authorName: string;
 	authorUuid?: string;
 	createdAt: string | Date;
+	updatedAt: string | Date;
 	viewCount: number;
 	likeCount: number;
 	commentCount: number;
@@ -29,6 +30,7 @@ export default function PostCard({
 	content,
 	authorName,
 	createdAt,
+	updatedAt,
 	likeCount,
 	commentCount,
 	tags,
@@ -38,7 +40,11 @@ export default function PostCard({
 }: PostCardProps) {
 	const thumb = extractFirstImage(content);
 	const preview = getPreviewText(content);
-	const timeAgo = formatDistanceToNow(new Date(createdAt), { addSuffix: true, locale: ko });
+	const activityDate = updatedAt || createdAt;
+	const timeAgo = formatDistanceToNow(new Date(activityDate), {
+		addSuffix: true,
+		locale: ko,
+	});
 
 	return (
 		<Link

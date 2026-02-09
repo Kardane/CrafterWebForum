@@ -114,14 +114,26 @@ export function validateUploadFile(file: File): UploadValidationResult {
 
 export async function ensureUploadPath(): Promise<UploadPathInfo> {
 	const uploadRoot = path.resolve(process.cwd(), "public", "uploads");
-	const now = new Date();
-	const year = String(now.getFullYear());
-	const month = String(now.getMonth() + 1).padStart(2, "0");
-	const relativeDir = path.join(year, month);
+	const relativeDir = getUploadRelativeDir();
 	const absoluteDir = path.join(uploadRoot, relativeDir);
 
 	await mkdir(absoluteDir, { recursive: true });
 	return { uploadRoot, absoluteDir, relativeDir };
+}
+
+export function getUploadRelativeDir(date: Date = new Date()): string {
+	const year = String(date.getFullYear());
+	const month = String(date.getMonth() + 1).padStart(2, "0");
+	return path.posix.join(year, month);
+}
+
+export function toBlobObjectPath(relativeDir: string, filename: string): string {
+	const normalizedDir = relativeDir.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	const normalizedFilename = path.posix.basename(filename).replace(/\\/g, "/");
+	if (!normalizedDir) {
+		return `uploads/${normalizedFilename}`;
+	}
+	return `uploads/${normalizedDir}/${normalizedFilename}`;
 }
 
 export function createStoredFileName(extension: string): string {
@@ -131,4 +143,3 @@ export function createStoredFileName(extension: string): string {
 export function toPublicUploadUrl(relativePath: string): string {
 	return `/uploads/${relativePath.replace(/\\/g, "/")}`;
 }
-

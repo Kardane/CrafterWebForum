@@ -27,6 +27,7 @@ function runChecks() {
 	const databaseUrl = env.DATABASE_URL?.trim() ?? "";
 	const isTursoDatabase = /^libsql:\/\/|^turso:\/\//i.test(databaseUrl);
 	const tursoAuthToken = env.TURSO_AUTH_TOKEN?.trim() ?? "";
+	const blobReadWriteToken = env.BLOB_READ_WRITE_TOKEN?.trim() ?? "";
 	const nextAuthSecret = env.NEXTAUTH_SECRET?.trim() ?? "";
 	const nextAuthUrl = env.NEXTAUTH_URL?.trim() ?? "";
 	const authTrustHost = env.AUTH_TRUST_HOST?.trim() ?? "";
@@ -46,6 +47,11 @@ function runChecks() {
 		"TURSO_AUTH_TOKEN is set",
 		tursoAuthToken.length > 0,
 		tursoAuthToken ? "configured" : "missing"
+	);
+	pushCheck(
+		"BLOB_READ_WRITE_TOKEN is set",
+		blobReadWriteToken.length > 0,
+		blobReadWriteToken ? "configured" : "missing"
 	);
 	pushCheck(
 		"NEXTAUTH_SECRET looks production-ready",

@@ -1,19 +1,26 @@
-import path from "node:path";
-import { unlink, writeFile } from "node:fs/promises";
 import { NextResponse } from "next/server";
+import { put } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createThumbnail, optimizeImage } from "@/lib/image-optimizer";
 import {
 	createStoredFileName,
-	ensureUploadPath,
-	toPublicUploadUrl,
+	getUploadRelativeDir,
+	toBlobObjectPath,
 	UploadValidationError,
 	validateUploadFile,
 } from "@/lib/upload";
 
 
 export const runtime = "nodejs";
+
+function getBlobToken(): string {
+	const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
+	if (!token) {
+		throw new UploadValidationError("Upload storage unavailable", 503);
+	}
+	return token;
+}
 
 interface UploadSuccessResponse {
 	success: true;
@@ -30,7 +37,6 @@ interface UploadSuccessResponse {
 }
 
 export async function POST(request: Request) {
-	const createdFiles: string[] = [];
 	try {
 		const session = await auth();
 		if (!session?.user) {
@@ -44,8 +50,9 @@ export async function POST(request: Request) {
 		}
 
 		const validated = validateUploadFile(fileValue);
-		const uploadPath = await ensureUploadPath();
 		const inputBuffer = Buffer.from(await fileValue.arrayBuffer());
+		const uploadRelativeDir = getUploadRelativeDir();
+		const blobToken = getBlobToken();
 
 		if (validated.kind === "image") {
 			const isGif = validated.extension === "gif";
@@ -58,10 +65,6 @@ export async function POST(request: Request) {
 			const thumb150Filename = `${baseName}-150.webp`;
 			const thumb300Filename = `${baseName}-300.webp`;
 
-			const mainAbsolutePath = path.join(uploadPath.absoluteDir, mainFilename);
-			const thumb150AbsolutePath = path.join(uploadPath.absoluteDir, thumb150Filename);
-			const thumb300AbsolutePath = path.join(uploadPath.absoluteDir, thumb300Filename);
-
 			const optimized = isGif ? null : await optimizeImage(inputBuffer);
 			const mainBuffer = optimized ? optimized.buffer : inputBuffer;
 			const mainMimeType = optimized ? optimized.mimeType : validated.mimeType;
@@ -69,20 +72,34 @@ export async function POST(request: Request) {
 			const thumb150 = await createThumbnail(mainBuffer, 150);
 			const thumb300 = await createThumbnail(mainBuffer, 300);
 
-			await writeFile(mainAbsolutePath, mainBuffer);
-			createdFiles.push(mainAbsolutePath);
-			await writeFile(thumb150AbsolutePath, thumb150);
-			createdFiles.push(thumb150AbsolutePath);
-			await writeFile(thumb300AbsolutePath, thumb300);
-			createdFiles.push(thumb300AbsolutePath);
+			const mainObjectPath = toBlobObjectPath(uploadRelativeDir, mainFilename);
+			const thumb150ObjectPath = toBlobObjectPath(uploadRelativeDir, thumb150Filename);
+			const thumb300ObjectPath = toBlobObjectPath(uploadRelativeDir, thumb300Filename);
 
-			const relativeMain = path.join(uploadPath.relativeDir, mainFilename);
-			const relative150 = path.join(uploadPath.relativeDir, thumb150Filename);
-			const relative300 = path.join(uploadPath.relativeDir, thumb300Filename);
+			const [mainBlob, thumb150Blob, thumb300Blob] = await Promise.all([
+				put(mainObjectPath, mainBuffer, {
+					access: "public",
+					addRandomSuffix: false,
+					contentType: mainMimeType,
+					token: blobToken,
+				}),
+				put(thumb150ObjectPath, thumb150, {
+					access: "public",
+					addRandomSuffix: false,
+					contentType: "image/webp",
+					token: blobToken,
+				}),
+				put(thumb300ObjectPath, thumb300, {
+					access: "public",
+					addRandomSuffix: false,
+					contentType: "image/webp",
+					token: blobToken,
+				}),
+			]);
 
 			await prisma.upload.create({
 				data: {
-					filename: relativeMain.replace(/\\/g, "/"),
+					filename: mainBlob.url,
 					originalName: validated.originalName,
 					mimetype: mainMimeType,
 					size: mainBuffer.byteLength,
@@ -92,13 +109,13 @@ export async function POST(request: Request) {
 			const payload: UploadSuccessResponse = {
 				success: true,
 				type: "image",
-				url: toPublicUploadUrl(relativeMain),
+				url: mainBlob.url,
 				filename: mainFilename,
 				originalName: validated.originalName,
 				mimeType: mainMimeType,
 				size: mainBuffer.byteLength,
-				thumb150Url: toPublicUploadUrl(relative150),
-				thumb300Url: toPublicUploadUrl(relative300),
+				thumb150Url: thumb150Blob.url,
+				thumb300Url: thumb300Blob.url,
 				width: optimized?.width,
 				height: optimized?.height,
 			};
@@ -106,14 +123,17 @@ export async function POST(request: Request) {
 		}
 
 		const storedName = createStoredFileName(validated.extension);
-		const absolutePath = path.join(uploadPath.absoluteDir, storedName);
-		await writeFile(absolutePath, inputBuffer);
-		createdFiles.push(absolutePath);
+		const objectPath = toBlobObjectPath(uploadRelativeDir, storedName);
+		const uploadedBlob = await put(objectPath, inputBuffer, {
+			access: "public",
+			addRandomSuffix: false,
+			contentType: validated.mimeType,
+			token: blobToken,
+		});
 
-		const relativePath = path.join(uploadPath.relativeDir, storedName);
 		await prisma.upload.create({
 			data: {
-				filename: relativePath.replace(/\\/g, "/"),
+				filename: uploadedBlob.url,
 				originalName: validated.originalName,
 				mimetype: validated.mimeType,
 				size: inputBuffer.byteLength,
@@ -123,7 +143,7 @@ export async function POST(request: Request) {
 		const payload: UploadSuccessResponse = {
 			success: true,
 			type: validated.kind,
-			url: toPublicUploadUrl(relativePath),
+			url: uploadedBlob.url,
 			filename: storedName,
 			originalName: validated.originalName,
 			mimeType: validated.mimeType,
@@ -131,14 +151,6 @@ export async function POST(request: Request) {
 		};
 		return NextResponse.json(payload);
 	} catch (error) {
-		for (const filePath of createdFiles) {
-			try {
-				await unlink(filePath);
-			} catch {
-				// Keep cleanup best-effort; failures here should not mask the original error.
-			}
-		}
-
 		if (error instanceof UploadValidationError) {
 			return NextResponse.json({ error: error.message }, { status: error.status });
 		}
