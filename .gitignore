@@ -8,6 +8,7 @@
 !.yarn/releases
 !.yarn/versions
 /legacy/
+/minecraftauth/
 # testing and reports
 /coverage
 /playwright-report/
