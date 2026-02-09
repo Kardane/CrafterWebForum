@@ -26,7 +26,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
 				{/* 헤더 타이틀 - 레거시 스타일 */}
 				<h2 className="text-base font-semibold text-text-primary">
-					스티브 갤러리 개발 포럼 - Beta
+					스티브 갤러리 개발 포럼 <span className="italic">Beta</span> v0.2
 				</h2>
 			</div>
 		</header>

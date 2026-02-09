@@ -484,6 +484,10 @@ export default function CommentItem({
 					max-width: min(100%, 820px);
 				}
 
+				.comment-body :global(.link-text) {
+					color: var(--text-primary) !important;
+				}
+
 				.comment-body :global(.post-content) {
 					margin: 0;
 				}
