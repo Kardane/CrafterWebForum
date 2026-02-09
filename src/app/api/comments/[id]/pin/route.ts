@@ -20,7 +20,7 @@ export async function POST(
 
 		const existing = await prisma.comment.findUnique({
 			where: { id: commentId },
-			select: { id: true, isPinned: true },
+			select: { id: true, isPinned: true, postId: true },
 		});
 		if (!existing) {
 			return NextResponse.json({ error: "Comment not found" }, { status: 404 });
@@ -31,6 +31,11 @@ export async function POST(
 			where: { id: commentId },
 			data: { isPinned: nextPinned },
 			select: { id: true, isPinned: true },
+		});
+
+		await prisma.post.update({
+			where: { id: existing.postId },
+			data: { updatedAt: new Date() },
 		});
 
 		return NextResponse.json({

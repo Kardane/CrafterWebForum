@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "@/styles/globals.css";
 import MainLayout from "@/components/layout/MainLayout";
 import SessionProvider from "@/components/providers/SessionProvider";
@@ -16,6 +18,8 @@ export default function RootLayout({
 }: Readonly<{
 	children: React.ReactNode;
 }>) {
+	const isProduction = process.env.NODE_ENV === "production";
+
 	return (
 		<html lang="ko">
 			<body className="antialiased bg-bg-primary text-text-primary">
@@ -24,6 +28,12 @@ export default function RootLayout({
 						<MainLayout>{children}</MainLayout>
 					</ToastProvider>
 				</SessionProvider>
+				{isProduction && (
+					<>
+						<Analytics />
+						<SpeedInsights />
+					</>
+				)}
 			</body>
 		</html>
 	);

@@ -72,6 +72,11 @@ export async function PATCH(
 			},
 		});
 
+		await prisma.post.update({
+			where: { id: comment.postId },
+			data: { updatedAt: new Date() },
+		});
+
 		return NextResponse.json({
 			success: true,
 			message: 'Comment updated successfully',
@@ -134,6 +139,11 @@ export async function DELETE(
 			where: {
 				OR: [{ id: commentId }, { parentId: commentId }],
 			},
+		});
+
+		await prisma.post.update({
+			where: { id: comment.postId },
+			data: { updatedAt: new Date() },
 		});
 
 		return NextResponse.json({

@@ -4,6 +4,7 @@ const authMock = vi.fn();
 const commentFindUniqueMock = vi.fn();
 const commentUpdateMock = vi.fn();
 const commentDeleteManyMock = vi.fn();
+const postUpdateMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -16,6 +17,9 @@ vi.mock("@/lib/prisma", () => ({
 			update: commentUpdateMock,
 			deleteMany: commentDeleteManyMock,
 		},
+		post: {
+			update: postUpdateMock,
+		},
 	},
 }));
 
@@ -26,6 +30,7 @@ describe("PATCH /api/comments/[id]", () => {
 		commentFindUniqueMock.mockReset();
 		commentUpdateMock.mockReset();
 		commentDeleteManyMock.mockReset();
+		postUpdateMock.mockReset();
 	});
 
 	it("returns 401 when unauthenticated", async () => {
@@ -83,6 +88,7 @@ describe("POST /api/comments/[id]/pin", () => {
 		commentFindUniqueMock.mockReset();
 		commentUpdateMock.mockReset();
 		commentDeleteManyMock.mockReset();
+		postUpdateMock.mockReset();
 	});
 
 	it("returns 403 when caller is not admin", async () => {
@@ -95,7 +101,7 @@ describe("POST /api/comments/[id]/pin", () => {
 
 	it("toggles pin state for admin", async () => {
 		authMock.mockResolvedValue({ user: { id: "1", role: "admin", nickname: "admin" } });
-		commentFindUniqueMock.mockResolvedValue({ id: 10, isPinned: 0 });
+		commentFindUniqueMock.mockResolvedValue({ id: 10, isPinned: 0, postId: 3 });
 		commentUpdateMock.mockResolvedValue({ id: 10, isPinned: 1 });
 
 		const { POST } = await import("@/app/api/comments/[id]/pin/route");

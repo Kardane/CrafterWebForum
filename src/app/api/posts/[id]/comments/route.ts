@@ -177,6 +177,11 @@ export async function POST(
 			},
 		});
 
+		await prisma.post.update({
+			where: { id: postId },
+			data: { updatedAt: new Date() },
+		});
+
 		return NextResponse.json({
 			success: true,
 			message: "Comment created successfully",
