@@ -9,8 +9,15 @@ import { ToastProvider } from "@/components/ui/ToastProvider";
 
 
 export const metadata: Metadata = {
-	title: "CrafterForum - 마인크래프트 커뮤니티",
-	description: "마인크래프트 유저들을 위한 공간",
+	title: "스티브 갤러리 개발 포럼",
+	description: "스티브 갤러리 개발 포럼",
+	icons: {
+		icon: [
+			{ url: "/favicon-16.png", type: "image/png", sizes: "16x16" },
+			{ url: "/favicon-32.png", type: "image/png", sizes: "32x32" },
+		],
+		apple: [{ url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" }],
+	},
 };
 
 export default function RootLayout({
