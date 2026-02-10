@@ -53,11 +53,11 @@ describe("users/me minecraft reauth route", () => {
 	});
 
 	it("POST stores a user-scoped code in DB", async () => {
-		authMock.mockResolvedValue({ user: { id: 42 } });
+		// 실환경에서 세션 user.id가 문자열로 들어오는 케이스도 방어
+		authMock.mockResolvedValue({ user: { id: "42" } });
 		deleteManyMock.mockResolvedValue({ count: 0 });
 		findUniqueMock.mockResolvedValue(null);
-		createMock.mockResolvedValue({ code: "211110" });
-		vi.spyOn(Math, "random").mockReturnValue(0.123456);
+		createMock.mockResolvedValue({ code: "ignored" });
 
 		const { POST } = await import("@/app/api/users/me/minecraft-reauth/route");
 		const req = new Request("http://localhost/api/users/me/minecraft-reauth", { method: "POST" });
@@ -67,6 +67,7 @@ describe("users/me minecraft reauth route", () => {
 		expect(res.status).toBe(200);
 		expect(body.success).toBe(true);
 		expect(body.expiresIn).toBe(300);
+		expect(body.code).toMatch(/^[0-9A-Z]{6}$/);
 		expect(createMock).toHaveBeenCalledWith({
 			data: {
 				code: body.code,

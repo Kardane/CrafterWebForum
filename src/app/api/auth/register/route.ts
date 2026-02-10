@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
 import { isPrivilegedNickname } from "@/config/admin-policy";
-
+import { normalizeMinecraftAuthCode } from "@/lib/minecraft-auth-code";
 
 /**
  * 회원가입 API
@@ -25,9 +25,10 @@ export async function POST(req: NextRequest) {
 
 		const body = await req.json();
 		const { nickname, password, code, signupNote } = body;
+		const normalizedCode = typeof code === "string" ? normalizeMinecraftAuthCode(code) : "";
 
 		// 필수 필드 검증
-		if (!code) {
+		if (!normalizedCode) {
 			return NextResponse.json(
 				{ message: "인증 코드가 필요합니다." },
 				{ status: 400 }
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
 
 		// 1. 코드 검증 확인
 		const codeData = await prisma.minecraftCode.findUnique({
-			where: { code },
+			where: { code: normalizedCode },
 		});
 
 		if (!codeData) {
@@ -97,12 +98,12 @@ export async function POST(req: NextRequest) {
 				role: isPrivilegedAdmin ? "admin" : "user",
 				isApproved: isPrivilegedAdmin ? 1 : 0,
 				signupNote: signupNote || "",
-			},
-		});
+				},
+			});
 
 		// 코드 삭제
 		await prisma.minecraftCode.delete({
-			where: { code },
+			where: { code: normalizedCode },
 		});
 
 		console.log(

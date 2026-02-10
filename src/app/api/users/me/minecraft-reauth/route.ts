@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
+import { toSessionUserId } from '@/lib/session-user';
+import {
+	generateMinecraftAuthCode,
+	MINECRAFT_REAUTH_CODE_LENGTH,
+} from '@/lib/minecraft-auth-code';
 
 const REAUTH_TTL_SECONDS = 300;
 const REAUTH_MARKER_PREFIX = 'reauth:';
 const REAUTH_CODE_MAX_RETRY = 6;
 
 function createReauthCode(): string {
-	return Math.floor(100000 + Math.random() * 900000).toString();
+	return generateMinecraftAuthCode(MINECRAFT_REAUTH_CODE_LENGTH);
 }
 
 function getReauthMarker(userId: number): string {
@@ -41,7 +46,10 @@ export async function POST(request: NextRequest) {
 			return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 		}
 
-		const userId = session.user.id;
+		const userId = toSessionUserId(session.user.id);
+		if (!userId) {
+			return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+		}
 		const marker = getReauthMarker(userId);
 		const now = Date.now();
 		const validAfter = new Date(now - REAUTH_TTL_SECONDS * 1000);
@@ -95,10 +103,14 @@ export async function GET(request: NextRequest) {
 			return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 		}
 
-		const marker = getReauthMarker(session.user.id);
+		const userId = toSessionUserId(session.user.id);
+		if (!userId) {
+			return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+		}
+		const marker = getReauthMarker(userId);
 		const latestCode = await prisma.minecraftCode.findFirst({
 			where: {
-				userId: session.user.id,
+				userId,
 				ipAddress: marker,
 			},
 			orderBy: { createdAt: 'desc' },
@@ -149,7 +161,7 @@ export async function GET(request: NextRequest) {
 		}
 
 		await prisma.user.update({
-			where: { id: session.user.id },
+			where: { id: userId },
 			data: {
 				nickname: verifiedNickname,
 				minecraftNickname: verifiedNickname,

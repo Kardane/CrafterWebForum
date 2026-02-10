@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
+import { normalizeMinecraftAuthCode } from "@/lib/minecraft-auth-code";
 
 /**
  * 마인크래프트 인증 상태 확인 API
@@ -14,12 +14,14 @@ export async function GET(
 	req: NextRequest,
 	{ params }: { params: Promise<{ code: string }> }
 ) {
+	void req;
 	try {
 		const { code } = await params;
-
+		const normalizedCode = normalizeMinecraftAuthCode(code);
+	
 		// 코드 조회
 		const data = await prisma.minecraftCode.findUnique({
-			where: { code },
+			where: { code: normalizedCode },
 			select: {
 				isVerified: true,
 				linkedNickname: true,

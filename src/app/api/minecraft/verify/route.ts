@@ -2,24 +2,24 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
+import {
+	MINECRAFT_AUTH_CODE_REGEX,
+	normalizeMinecraftAuthCode,
+} from "@/lib/minecraft-auth-code";
 import { z } from "zod";
 
 const verifyBodySchema = z.object({
 	code: z
 		.string()
-		.trim()
-		.regex(/^\d{6,7}$/, { message: "invalid_code_format" }),
+		.transform((value) => normalizeMinecraftAuthCode(value))
+		.refine((value) => MINECRAFT_AUTH_CODE_REGEX.test(value), {
+			message: "invalid_code_format",
+		}),
 	uuid: z.string().trim().min(1, { message: "missing_uuid" }),
 	nickname: z.string().trim().min(1, { message: "missing_nickname" }).max(32),
-	ip: z.string().trim().min(1, { message: "missing_ip" }).max(128),
+	// IP mismatch 체크는 비활성화, 로깅/디버깅용으로만 받음
+	ip: z.string().trim().max(128).optional(),
 });
-
-const REAUTH_MARKER_PREFIX = "reauth:";
-
-function normalizeIp(value: string): string {
-	// x-forwarded-for는 "client, proxy1, proxy2" 형태가 올 수 있음
-	return value.split(",")[0]?.trim() ?? "";
-}
 
 /**
  * 마인크래프트 코드 검증 API
@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		const { code, uuid, nickname, ip } = parsed.data;
+		const { code, uuid, nickname } = parsed.data;
 
 		// 만료된 코드 삭제 (10분)
 		const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
@@ -67,21 +67,6 @@ export async function POST(req: NextRequest) {
 		if (!authRequest) {
 			return NextResponse.json(
 				{ error: "invalid_code" },
-				{ status: 400 }
-			);
-		}
-
-		// signup용 코드만 IP mismatch를 적용 (재인증 코드는 marker로 구분)
-		const storedIpRaw = (authRequest.ipAddress ?? "").trim();
-		const requestIp = normalizeIp(ip);
-		const storedIp = storedIpRaw.startsWith(REAUTH_MARKER_PREFIX)
-			? storedIpRaw
-			: normalizeIp(storedIpRaw);
-		const isReauthMarker = storedIp.startsWith(REAUTH_MARKER_PREFIX);
-		const hasUsableStoredIp = storedIp.length > 0 && storedIp !== "unknown";
-		if (!isReauthMarker && hasUsableStoredIp && storedIp !== requestIp) {
-			return NextResponse.json(
-				{ error: "ip_mismatch" },
 				{ status: 400 }
 			);
 		}

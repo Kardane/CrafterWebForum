@@ -42,7 +42,7 @@ describe("POST /api/minecraft/verify", () => {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
-				code: "123456",
+				code: "ab12cd3",
 				uuid: "u",
 				nickname: "nick",
 				ip: "1.1.1.1",
@@ -55,32 +55,9 @@ describe("POST /api/minecraft/verify", () => {
 		expect(body.error).toBe("invalid_code");
 	});
 
-	it("returns 400 ip_mismatch for signup codes with stored IP", async () => {
+	it("accepts verify even when stored IP differs (IP mismatch disabled)", async () => {
 		deleteManyMock.mockResolvedValue({ count: 0 });
-		findUniqueMock.mockResolvedValue({ code: "123456", ipAddress: "9.9.9.9" });
-
-		const { POST } = await import("@/app/api/minecraft/verify/route");
-		const req = new Request("http://localhost/api/minecraft/verify", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				code: "123456",
-				uuid: "u",
-				nickname: "nick",
-				ip: "1.1.1.1",
-			}),
-		});
-
-		const res = await POST(req as never);
-		const body = await res.json();
-		expect(res.status).toBe(400);
-		expect(body.error).toBe("ip_mismatch");
-		expect(updateMock).not.toHaveBeenCalled();
-	});
-
-	it("skips ip_mismatch for reauth marker codes", async () => {
-		deleteManyMock.mockResolvedValue({ count: 0 });
-		findUniqueMock.mockResolvedValue({ code: "123456", ipAddress: "reauth:42" });
+		findUniqueMock.mockResolvedValue({ code: "AB12CD3", ipAddress: "9.9.9.9" });
 		updateMock.mockResolvedValue({});
 
 		const { POST } = await import("@/app/api/minecraft/verify/route");
@@ -88,7 +65,7 @@ describe("POST /api/minecraft/verify", () => {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({
-				code: "123456",
+				code: "AB12CD3",
 				uuid: "u",
 				nickname: "nick",
 				ip: "1.1.1.1",
@@ -101,5 +78,29 @@ describe("POST /api/minecraft/verify", () => {
 		expect(body.success).toBe(true);
 		expect(updateMock).toHaveBeenCalledTimes(1);
 	});
-});
 
+	it("normalizes code to uppercase before lookup", async () => {
+		deleteManyMock.mockResolvedValue({ count: 0 });
+		findUniqueMock.mockResolvedValue({ code: "AB12CD3", ipAddress: "reauth:42" });
+		updateMock.mockResolvedValue({});
+
+		const { POST } = await import("@/app/api/minecraft/verify/route");
+		const req = new Request("http://localhost/api/minecraft/verify", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				code: "ab12cd3",
+				uuid: "u",
+				nickname: "nick",
+				ip: "1.1.1.1",
+			}),
+		});
+
+		const res = await POST(req as never);
+		const body = await res.json();
+		expect(res.status).toBe(200);
+		expect(body.success).toBe(true);
+		expect(findUniqueMock).toHaveBeenCalledWith({ where: { code: "AB12CD3" } });
+		expect(updateMock).toHaveBeenCalledTimes(1);
+	});
+});

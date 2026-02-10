@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDeprecationHeaders } from "@/lib/deprecation";
+import { toSessionUserId } from "@/lib/session-user";
 import { updateMinecraftIdentity } from "@/lib/user-service";
 
 /**
@@ -16,12 +17,20 @@ export async function POST(req: NextRequest) {
 		// NextAuth 세션 검증
 		const session = await auth();
 
-		if (!session?.user) {
-			return NextResponse.json(
-				{ error: "unauthorized" },
-				{ status: 401 }
-			);
-		}
+			if (!session?.user) {
+				return NextResponse.json(
+					{ error: "unauthorized" },
+					{ status: 401 }
+				);
+			}
+	
+			const userId = toSessionUserId(session.user.id);
+			if (!userId) {
+				return NextResponse.json(
+					{ error: "unauthorized" },
+					{ status: 401 }
+				);
+			}
 
 		const body = await req.json() as {
 			nickname?: unknown;
@@ -38,7 +47,7 @@ export async function POST(req: NextRequest) {
 			);
 		}
 
-		const result = await updateMinecraftIdentity(session.user.id, nickname, uuid);
+			const result = await updateMinecraftIdentity(userId, nickname, uuid);
 		return NextResponse.json(
 			{
 				success: true,
