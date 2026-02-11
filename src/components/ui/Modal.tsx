@@ -18,6 +18,7 @@ interface ModalProps {
 	footer?: React.ReactNode;
 	size?: ModalSize;
 	variant?: ModalVariant;
+	onEnter?: () => void;
 	closeOnBackdrop?: boolean;
 	closeOnEsc?: boolean;
 	hideCloseButton?: boolean;
@@ -40,6 +41,7 @@ export function Modal({
 	footer,
 	size = "md",
 	variant = "default",
+	onEnter,
 	closeOnBackdrop = true,
 	closeOnEsc = true,
 	hideCloseButton = false,
@@ -53,9 +55,23 @@ export function Modal({
 		document.body.style.overflow = "hidden";
 
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (!closeOnEsc) return;
 			if (event.key === "Escape") {
-				onClose();
+				if (closeOnEsc) {
+					onClose();
+				}
+				return;
+			}
+			if (
+				event.key === "Enter" &&
+				onEnter &&
+				!event.shiftKey &&
+				!event.ctrlKey &&
+				!event.altKey &&
+				!event.metaKey &&
+				!(event.target instanceof HTMLTextAreaElement)
+			) {
+				event.preventDefault();
+				onEnter();
 			}
 		};
 		window.addEventListener("keydown", handleKeyDown);
@@ -64,7 +80,7 @@ export function Modal({
 			window.removeEventListener("keydown", handleKeyDown);
 			document.body.style.overflow = prevOverflow;
 		};
-	}, [isOpen, closeOnEsc, onClose]);
+	}, [isOpen, closeOnEsc, onClose, onEnter]);
 
 	if (typeof window === "undefined") return null;
 

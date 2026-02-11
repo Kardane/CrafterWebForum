@@ -14,10 +14,14 @@ export default function MainLayout({ children }: MainLayoutProps) {
 	const pathname = usePathname();
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-	// 로그인/회원가입 페이지에서는 사이드바 숨김
-	const isAuthPage = pathname.startsWith("/login") || pathname.startsWith("/register");
+	// 인증 플로우 페이지에서는 사이드바/헤더 숨김
+	const isAuthPage =
+		pathname.startsWith("/login") ||
+		pathname.startsWith("/register") ||
+		pathname.startsWith("/forgot-password");
 	const isPostDetailPage = pathname.includes("/posts/") && !pathname.includes("/new") && !pathname.includes("/edit");
-	const isComposerPage = pathname.includes("/new") || pathname.includes("/inquiries/new");
+	const isPostEditPage = /^\/posts\/[^/]+\/edit(?:\/|$)/.test(pathname);
+	const isComposerPage = pathname.includes("/new") || pathname.includes("/inquiries/new") || isPostEditPage;
 	const showSidebar = !isAuthPage;
 	const showHeader = !isAuthPage && !isPostDetailPage && !isComposerPage;
 

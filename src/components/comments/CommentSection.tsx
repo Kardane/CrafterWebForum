@@ -19,6 +19,7 @@ import {
 	type FlattenedStreamComment,
 } from "@/lib/comment-stream";
 import { toSessionUserId } from "@/lib/session-user";
+import { text } from "@/lib/system-text";
 
 interface Comment {
 	id: number;
@@ -181,6 +182,8 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	const scrollSaveTimerRef = useRef<number | null>(null);
 	const hasInitializedViewRef = useRef(false);
 	const restoreAppliedRef = useRef(false);
+	const restoreCheckedRef = useRef(false);
+	const latestJumpAppliedRef = useRef(false);
 
 	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
 	const sessionUserId = toSessionUserId(session?.user?.id);
@@ -377,6 +380,12 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	);
 
 	useEffect(() => {
+		restoreAppliedRef.current = false;
+		restoreCheckedRef.current = false;
+		latestJumpAppliedRef.current = false;
+	}, [postId]);
+
+	useEffect(() => {
 		const openPinnedModal = () => {
 			setIsPinnedModalOpen(true);
 		};
@@ -448,9 +457,10 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	}, [flattenedComments, isThreadCollapsible, readMarkerIndex]);
 
 	useEffect(() => {
-		if (restoreAppliedRef.current || flattenedComments.length === 0) {
+		if (restoreCheckedRef.current || flattenedComments.length === 0) {
 			return;
 		}
+		restoreCheckedRef.current = true;
 		const saved = readPostDetailScrollState(postId);
 		if (!saved) {
 			return;
@@ -468,6 +478,22 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		};
 		restore();
 	}, [ensureCommentVisible, flattenedComments, postId]);
+
+	useEffect(() => {
+		if (latestJumpAppliedRef.current || flattenedComments.length === 0) {
+			return;
+		}
+		if (!restoreCheckedRef.current || restoreAppliedRef.current) {
+			return;
+		}
+		latestJumpAppliedRef.current = true;
+		requestAnimationFrame(() => {
+			document.getElementById("comment-feed-end")?.scrollIntoView({
+				behavior: "auto",
+				block: "end",
+			});
+		});
+	}, [flattenedComments.length]);
 
 	useEffect(() => {
 		const handleScroll = () => {
@@ -816,13 +842,16 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 			<Modal
 				isOpen={pendingDeleteId !== null}
 				onClose={() => setPendingDeleteId(null)}
-				title="댓글 삭제"
+				onEnter={() => {
+					void handleCommentDeleteConfirmed();
+				}}
+				title={text("comment.deleteTitle")}
 				size="sm"
 				variant="sidebarLike"
 				footer={
 					<div className="flex justify-end gap-2">
 						<button type="button" className="btn btn-secondary btn-sm" onClick={() => setPendingDeleteId(null)}>
-							취소
+							{text("comment.cancelButton")}
 						</button>
 						<button
 							type="button"
@@ -831,12 +860,12 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 								void handleCommentDeleteConfirmed();
 							}}
 						>
-							삭제
+							{text("comment.deleteButton")}
 						</button>
 					</div>
 				}
 			>
-				<p className="text-sm text-text-secondary">선택한 댓글을 삭제할까</p>
+				<p className="text-sm text-text-secondary">{text("comment.deleteConfirm")}</p>
 			</Modal>
 
 			<style jsx>{`

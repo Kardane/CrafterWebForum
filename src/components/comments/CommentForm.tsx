@@ -6,6 +6,8 @@ import PollModal from "@/components/poll/PollModal";
 import MarkdownHelpModal from "@/components/comments/MarkdownHelpModal";
 import { serializePollData, PollData } from "@/lib/poll";
 import { useToast } from "@/components/ui/useToast";
+import { parseUploadJsonResponse } from "@/lib/upload-response";
+import { text } from "@/lib/system-text";
 
 interface CommentFormProps {
 	onSubmit: (content: string) => Promise<void> | void;
@@ -121,12 +123,11 @@ export default function CommentForm({
 					method: "POST",
 					body: formData,
 				});
-				const data = (await response.json()) as UploadPayload | { error: string };
-
-				if (!response.ok || !("url" in data)) {
-					const message = "error" in data ? data.error : "파일 업로드에 실패했습니다";
-					throw new Error(message);
+				const parsed = await parseUploadJsonResponse<UploadPayload>(response);
+				if (parsed.error || !parsed.data?.url) {
+					throw new Error(parsed.error ?? "파일 업로드에 실패했습니다");
 				}
+				const data = parsed.data;
 
 				const snippet =
 					data.type === "image"
@@ -357,7 +358,7 @@ export default function CommentForm({
 					/>
 
 					<button type="submit" disabled={disabled || isUploading || !content.trim()} className="submit-btn">
-						{isUploading ? "업로드..." : disabled ? "..." : "전송"}
+						{isUploading ? text("comment.uploadingButton") : disabled ? "..." : text("comment.submitButton")}
 					</button>
 				</div>
 
@@ -437,11 +438,15 @@ export default function CommentForm({
 					color: var(--text-primary);
 				}
 
-				.form-input-wrapper {
-					display: flex;
-					align-items: flex-end;
-					gap: 8px;
-				}
+					.form-input-wrapper {
+						display: flex;
+						align-items: flex-end;
+						gap: 8px;
+					}
+
+					.comment-form.edit-mode .form-input-wrapper {
+						align-items: stretch;
+					}
 
 				.plus-btn-wrapper {
 					position: relative;
@@ -535,27 +540,35 @@ export default function CommentForm({
 					box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent);
 				}
 
-				.submit-btn {
-					padding: 0 12px;
-					height: 34px;
-					background: var(--accent);
-					border: none;
-					border-radius: 6px;
-					color: white;
-					font-size: 0.9rem;
-					font-weight: 600;
-					cursor: pointer;
-					white-space: nowrap;
-				}
+					.submit-btn {
+						padding: 0 12px;
+						height: 34px;
+						background: var(--color-accent, #8b2332);
+						border: none;
+						border-radius: 6px;
+						display: inline-flex;
+						align-items: center;
+						justify-content: center;
+						color: white;
+						font-size: 0.9rem;
+						font-weight: 600;
+						cursor: pointer;
+						white-space: nowrap;
+					}
+
+					.comment-form.edit-mode .submit-btn {
+						height: auto;
+						min-height: 34px;
+					}
 
 				.submit-btn:disabled {
 					opacity: 0.5;
 					cursor: not-allowed;
 				}
 
-				.submit-btn:not(:disabled):hover {
-					background: var(--accent-hover);
-				}
+					.submit-btn:not(:disabled):hover {
+						background: var(--color-accent-hover, #6b1a28);
+					}
 
 				.cancel-wrapper {
 					text-align: right;
