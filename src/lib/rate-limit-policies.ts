@@ -21,4 +21,9 @@ export const RATE_LIMIT_POLICIES: Record<string, RateLimitPolicy> = {
 		limit: 5,
 		windowMs: 10 * 60_000,
 	},
+	authPasswordForgot: {
+		namespace: "auth:password:forgot",
+		limit: 5,
+		windowMs: 10 * 60_000,
+	},
 };

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { text } from "@/lib/system-text";
 
 /**
  * 로그인 페이지 - 레거시 스타일
@@ -27,11 +28,11 @@ export default function LoginPage() {
 		setPasswordError("");
 
 		if (!nickname) {
-			setNicknameError("닉네임을 입력해주세요");
+			setNicknameError(text("auth.errorNicknameRequired"));
 			return;
 		}
 		if (!password) {
-			setPasswordError("비밀번호를 입력해주세요");
+			setPasswordError(text("auth.errorPasswordRequired"));
 			return;
 		}
 
@@ -52,15 +53,15 @@ export default function LoginPage() {
 				} else if (msg.includes("비밀번호")) {
 					setPasswordError(msg);
 				} else {
-					setPasswordError(msg || "로그인에 실패했습니다");
+					setPasswordError(msg || text("auth.errorLoginFailed"));
 				}
 			} else {
 				// 로그인 성공
 				router.push("/");
 				router.refresh();
 			}
-		} catch (error) {
-			setPasswordError("로그인 중 오류가 발생했습니다");
+		} catch {
+			setPasswordError(text("auth.errorLoginUnexpected"));
 		} finally {
 			setIsLoading(false);
 		}
@@ -70,50 +71,50 @@ export default function LoginPage() {
 		<div className="auth-container">
 			<div className="auth-card">
 				{/* 헤더 */}
-				<div className="auth-header">
-					<img
-						src="/img/Crafter.png"
-						alt="Logo"
-						className="auth-logo"
-					/>
-					<h1 className="auth-title">스티브 갤러리 개발 포럼</h1>
-					<p className="auth-subtitle">계정에 로그인하세요</p>
-				</div>
+					<div className="auth-header">
+						<img
+							src="/img/Crafter.png"
+							alt="Logo"
+							className="auth-logo"
+						/>
+						<h1 className="auth-title">{text("auth.title")}</h1>
+						<p className="auth-subtitle">{text("auth.subtitle")}</p>
+					</div>
 
 				{/* 폼 */}
-				<form onSubmit={handleSubmit} className="auth-form">
-					{/* 닉네임 필드 */}
-					<div className="form-group">
-						<label className="form-label" htmlFor="nickname">
-							닉네임
-						</label>
-						<input
-							type="text"
-							id="nickname"
-							className="form-input"
-							placeholder="닉네임을 입력하세요"
-							value={nickname}
-							onChange={(e) => setNickname(e.target.value)}
-							disabled={isLoading}
+					<form onSubmit={handleSubmit} className="auth-form">
+						{/* 닉네임 필드 */}
+						<div className="form-group">
+							<label className="form-label" htmlFor="nickname">
+								{text("auth.nicknameLabel")}
+							</label>
+							<input
+								type="text"
+								id="nickname"
+								className="form-input"
+								placeholder={text("auth.nicknamePlaceholder")}
+								value={nickname}
+								onChange={(e) => setNickname(e.target.value)}
+								disabled={isLoading}
 						/>
 						{nicknameError && (
 							<div className="auth-error">{nicknameError}</div>
 						)}
 					</div>
 
-					{/* 비밀번호 필드 */}
-					<div className="form-group">
-						<label className="form-label" htmlFor="password">
-							비밀번호
-						</label>
-						<input
-							type="password"
-							id="password"
-							className="form-input"
-							placeholder="비밀번호를 입력하세요"
-							value={password}
-							onChange={(e) => setPassword(e.target.value)}
-							disabled={isLoading}
+						{/* 비밀번호 필드 */}
+						<div className="form-group">
+							<label className="form-label" htmlFor="password">
+								{text("auth.passwordLabel")}
+							</label>
+							<input
+								type="password"
+								id="password"
+								className="form-input"
+								placeholder={text("auth.passwordPlaceholder")}
+								value={password}
+								onChange={(e) => setPassword(e.target.value)}
+								disabled={isLoading}
 						/>
 						{passwordError && (
 							<div className="auth-error">{passwordError}</div>
@@ -123,18 +124,23 @@ export default function LoginPage() {
 					{/* 로그인 버튼 */}
 					<button
 						type="submit"
-						className="btn btn-primary btn-block"
-						disabled={isLoading}
-					>
-						{isLoading ? "로그인 중..." : "로그인"}
-					</button>
-				</form>
+							className="btn btn-primary btn-block"
+							disabled={isLoading}
+						>
+							{isLoading ? text("auth.loggingInButton") : text("auth.loginButton")}
+						</button>
+					</form>
 
-				{/* 푸터 */}
-				<div className="auth-footer">
-					<p>
-						계정이 없으신가요?{" "}
-						<Link href="/register" style={{ color: '#ff4444' }}>회원가입</Link>
+					{/* 푸터 */}
+					<div className="auth-footer">
+						<p>
+							{text("auth.noAccount")}{" "}
+							<Link href="/register" style={{ color: '#ff4444' }}>{text("auth.registerLink")}</Link>
+						</p>
+						<p className="mt-2">
+							<Link href="/forgot-password" style={{ color: '#ff4444' }}>
+								{text("auth.forgotPasswordLink")}
+						</Link>
 					</p>
 				</div>
 			</div>
