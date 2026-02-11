@@ -9,6 +9,7 @@ import { useToast } from "@/components/ui/useToast";
 
 interface CommentFormProps {
 	onSubmit: (content: string) => Promise<void> | void;
+	onRequestEditLatestOwnComment?: () => void;
 	disabled?: boolean;
 	placeholder?: string;
 	initialValue?: string;
@@ -21,7 +22,7 @@ interface CommentFormProps {
 }
 
 interface UploadPayload {
-	type: "image" | "file";
+	type: "image" | "video" | "file";
 	url: string;
 	originalName: string;
 	error?: string;
@@ -29,6 +30,7 @@ interface UploadPayload {
 
 export default function CommentForm({
 	onSubmit,
+	onRequestEditLatestOwnComment,
 	disabled = false,
 	placeholder = "댓글을 입력하세요...",
 	initialValue = "",
@@ -105,14 +107,6 @@ export default function CommentForm({
 		resizeTextarea();
 	}, [content, initialValue]);
 
-	const appendUploadedContent = (payload: UploadPayload) => {
-		const snippet =
-			payload.type === "image"
-				? `![${payload.originalName}](${payload.url})`
-				: `[📦 ${payload.originalName}](${payload.url})`;
-		setContent((prev) => prev + (prev ? "\n" : "") + snippet);
-	};
-
 	const uploadFiles = async (files: File[]) => {
 		if (files.length === 0) return content;
 
@@ -137,7 +131,9 @@ export default function CommentForm({
 				const snippet =
 					data.type === "image"
 						? `![${data.originalName}](${data.url})`
-						: `[📦 ${data.originalName}](${data.url})`;
+						: data.type === "video"
+							? data.url
+							: `[📦 ${data.originalName}](${data.url})`;
 
 				currentContent = currentContent + (currentContent ? "\n" : "") + snippet;
 				setContent(currentContent);
@@ -335,6 +331,21 @@ export default function CommentForm({
 								if ((content.trim() || isEditMode) && !disabled && !isUploading) {
 									void handleFormSubmit();
 								}
+								return;
+							}
+
+							// ArrowUp: 입력이 비어있고 커서가 시작점이면 마지막 내 댓글 수정 진입
+							if (
+								event.key === "ArrowUp" &&
+								!isEditMode &&
+								!content.trim() &&
+								onRequestEditLatestOwnComment &&
+								textareaRef.current &&
+								textareaRef.current.selectionStart === 0 &&
+								textareaRef.current.selectionEnd === 0
+							) {
+								event.preventDefault();
+								onRequestEditLatestOwnComment();
 							}
 						}}
 						placeholder={placeholder}
@@ -364,7 +375,13 @@ export default function CommentForm({
 					</div>
 				)}
 
-				<input type="file" ref={fileInputRef} onChange={handleFileSelect} style={{ display: "none" }} />
+				<input
+					type="file"
+					ref={fileInputRef}
+					onChange={handleFileSelect}
+					accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.pdf,.txt,.md,.json,.zip"
+					style={{ display: "none" }}
+				/>
 			</form>
 
 			<PollModal isOpen={isPollModalOpen} onClose={() => setIsPollModalOpen(false)} onSubmit={handlePollCreate} />

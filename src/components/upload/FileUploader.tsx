@@ -5,7 +5,7 @@ import Image from "next/image";
 
 export interface UploadedFileResult {
 	success: true;
-	type: "image" | "file";
+	type: "image" | "video" | "file";
 	url: string;
 	filename: string;
 	originalName: string;
@@ -31,7 +31,7 @@ function formatBytes(bytes: number): string {
 
 export default function FileUploader({
 	onUploaded,
-	accept = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.md,.json,.zip",
+	accept = ".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.pdf,.txt,.md,.json,.zip",
 	maxSizeMB = 5,
 }: FileUploaderProps) {
 	const [isDragging, setIsDragging] = useState(false);
@@ -127,7 +127,7 @@ export default function FileUploader({
 					Drag files here or select files
 				</p>
 				<p className="text-xs text-text-muted mb-3">
-					Max {maxSizeMB}MB per file. Allowed: images + pdf/txt/md/json/zip.
+					Max {maxSizeMB}MB per file. Allowed: images/videos + pdf/txt/md/json/zip.
 				</p>
 				<label className="btn btn-secondary cursor-pointer">
 					Choose Files

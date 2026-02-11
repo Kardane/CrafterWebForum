@@ -17,4 +17,10 @@ describe("markdown utils", () => {
 		expect(html).toContain("<img src=\"https://example.com/a.png\"");
 		expect(html).not.toContain("window.open");
 	});
+
+	it("normalizes extra line breaks between markdown blocks", () => {
+		const html = processMarkdown("# Title\n- item");
+		expect(html).toContain("<ul class=\"md-ul\">");
+		expect(html).not.toContain("</h1><br><ul");
+	});
 });

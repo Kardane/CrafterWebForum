@@ -14,6 +14,11 @@ describe("embed utils", () => {
 		expect(html).toContain("<img src=\"/uploads/2026/02/a.png\"");
 	});
 
+	it("converts uploaded video links into video embed", () => {
+		const html = processAllEmbeds("/uploads/2026/02/a.mp4");
+		expect(html).toContain("<video src=\"/uploads/2026/02/a.mp4\" controls></video>");
+	});
+
 	it("does not duplicate markdown images during embed pass", () => {
 		const markdownHtml = processMarkdown("![alt](https://example.com/a.png)");
 		const html = processAllEmbeds(markdownHtml);

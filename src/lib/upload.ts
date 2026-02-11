@@ -27,6 +27,9 @@ const MIME_BY_EXTENSION: Record<string, readonly string[]> = {
 	png: ["image/png"],
 	gif: ["image/gif"],
 	webp: ["image/webp"],
+	mp4: ["video/mp4"],
+	webm: ["video/webm"],
+	mov: ["video/quicktime"],
 	pdf: ["application/pdf"],
 	txt: ["text/plain"],
 	md: ["text/markdown", "text/plain"],
@@ -39,8 +42,9 @@ const MIME_BY_EXTENSION: Record<string, readonly string[]> = {
 };
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov"]);
 
-export type UploadKind = "image" | "file";
+export type UploadKind = "image" | "video" | "file";
 
 export interface UploadValidationResult {
 	kind: UploadKind;
@@ -104,7 +108,11 @@ export function validateUploadFile(file: File): UploadValidationResult {
 	}
 
 	return {
-		kind: IMAGE_EXTENSIONS.has(extension) ? "image" : "file",
+		kind: IMAGE_EXTENSIONS.has(extension)
+			? "image"
+			: VIDEO_EXTENSIONS.has(extension)
+				? "video"
+				: "file",
 		extension,
 		mimeType,
 		originalName,

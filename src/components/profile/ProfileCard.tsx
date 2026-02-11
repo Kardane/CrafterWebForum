@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import MinecraftReauth from './MinecraftReauth';
+import { buildAvatarCandidates } from '@/lib/avatar';
 
 interface ProfileCardProps {
 	user: {
@@ -15,6 +16,14 @@ interface ProfileCardProps {
 
 export default function ProfileCard({ user }: ProfileCardProps) {
 	const [isReauthModalOpen, setIsReauthModalOpen] = useState(false);
+	const avatarSeed = user.minecraftUuid ?? '';
+	const avatarCandidates = useMemo(() => buildAvatarCandidates(user.minecraftUuid, 96), [user.minecraftUuid]);
+	const [avatarState, setAvatarState] = useState<{ seed: string; index: number }>({
+		seed: avatarSeed,
+		index: 0,
+	});
+	const avatarIndex = avatarState.seed === avatarSeed ? avatarState.index : 0;
+	const avatarSrc = avatarCandidates[avatarIndex] ?? null;
 
 	const getRoleBadge = (role: string) => {
 		if (role === 'admin') {
@@ -29,11 +38,17 @@ export default function ProfileCard({ user }: ProfileCardProps) {
 				{/* 아바타 (마인크래프트 스킨) */}
 				<div className="relative">
 					<div className="w-24 h-24 rounded-lg overflow-hidden border border-border bg-bg-tertiary">
-						{user.minecraftUuid ? (
+						{avatarSrc ? (
 							<img
-								src={`https://mc-heads.net/avatar/${user.minecraftUuid}/96`}
+								src={avatarSrc}
 								alt={user.nickname}
 								className="w-full h-full object-cover"
+								onError={() => {
+									setAvatarState((prev) => ({
+										seed: avatarSeed,
+										index: prev.seed === avatarSeed ? prev.index + 1 : 1,
+									}));
+								}}
 							/>
 						) : (
 							<div className="w-full h-full flex items-center justify-center text-3xl font-bold text-text-muted">

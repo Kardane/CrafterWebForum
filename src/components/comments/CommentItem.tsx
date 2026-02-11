@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
 import { Reply, Copy, Link2, Edit, Trash2, Pin, Check } from "lucide-react";
 import PostContent from "../posts/PostContent";
@@ -9,6 +9,7 @@ import PollCard from "@/components/poll/PollCard";
 import { extractPollData } from "@/lib/poll";
 import { toSessionUserId } from "@/lib/session-user";
 import { useToast } from "@/components/ui/useToast";
+import { buildAvatarCandidates } from "@/lib/avatar";
 
 interface Comment {
 	id: number;
@@ -38,15 +39,12 @@ interface CommentItemProps {
 	onDelete: (commentId: number, event?: React.MouseEvent) => void;
 	onPin?: (commentId: number) => void;
 	onVote?: (commentId: number, optionId: number) => void;
+	shouldStartEdit?: boolean;
+	onEditRequestConsumed?: (commentId: number) => void;
 	disabled?: boolean;
 	threadRootId?: number;
 	isCompact?: boolean;
 	isHighlighted?: boolean;
-}
-
-function getMinecraftHeadUrl(uuid: string | null, size = 36): string | null {
-	if (!uuid) return null;
-	return `https://api.mineatar.io/face/${uuid}?scale=${Math.ceil(size / 8)}`;
 }
 
 type CopiedType = "text" | "link" | null;
@@ -62,6 +60,8 @@ export default function CommentItem({
 	onDelete,
 	onPin,
 	onVote,
+	shouldStartEdit = false,
+	onEditRequestConsumed,
 	disabled = false,
 	threadRootId,
 	isCompact = false,
@@ -72,6 +72,12 @@ export default function CommentItem({
 	const [isEditing, setIsEditing] = useState(false);
 	const [copiedType, setCopiedType] = useState<CopiedType>(null);
 	const [isActionSuppressed, setIsActionSuppressed] = useState(false);
+	const avatarSeed = comment.author.minecraftUuid ?? "";
+	const avatarCandidates = useMemo(() => buildAvatarCandidates(comment.author.minecraftUuid, 36), [comment.author.minecraftUuid]);
+	const [avatarState, setAvatarState] = useState<{ seed: string; index: number }>({
+		seed: avatarSeed,
+		index: 0,
+	});
 	const copiedTimeoutRef = useRef<number | null>(null);
 	const suppressTimeoutRef = useRef<number | null>(null);
 
@@ -87,9 +93,19 @@ export default function CommentItem({
 		[]
 	);
 
+	useEffect(() => {
+		if (!shouldStartEdit) {
+			return;
+		}
+		setIsEditing(true);
+		onEditRequestConsumed?.(comment.id);
+	}, [comment.id, onEditRequestConsumed, shouldStartEdit]);
+
 	const sessionUserId = toSessionUserId(session?.user?.id);
 	const isOwner = sessionUserId === comment.author.id;
 	const isAdmin = (session?.user as { role?: string })?.role === "admin";
+	const avatarIndex = avatarState.seed === avatarSeed ? avatarState.index : 0;
+	const avatarSrc = avatarCandidates[avatarIndex] ?? null;
 
 	const createdAtLabel = new Date(comment.createdAt).toLocaleString("ko-KR", {
 		month: "2-digit",
@@ -200,11 +216,17 @@ export default function CommentItem({
 				<div className="comment-main-row">
 					<div className={`comment-avatar ${isCompact ? "compact-spacer" : ""}`}>
 						{!isCompact &&
-							(comment.author.minecraftUuid ? (
+							(avatarSrc ? (
 								<img
-									src={getMinecraftHeadUrl(comment.author.minecraftUuid, 36) || ""}
+									src={avatarSrc}
 									alt=""
 									className="avatar-img"
+									onError={() => {
+										setAvatarState((prev) => ({
+											seed: avatarSeed,
+											index: prev.seed === avatarSeed ? prev.index + 1 : 1,
+										}));
+									}}
 								/>
 							) : (
 								<div className="avatar-fallback">{comment.author.nickname[0].toUpperCase()}</div>

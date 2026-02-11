@@ -143,6 +143,7 @@ export default function LoginPage() {
 			<style jsx>{`
 				.auth-container {
 					min-height: 100vh;
+					min-height: 100dvh;
 					display: flex;
 					align-items: center;
 					justify-content: flex-start;
@@ -257,7 +258,9 @@ export default function LoginPage() {
 				@media (max-width: 768px) {
 					.auth-container {
 						padding: 20px;
+						padding-bottom: max(20px, env(safe-area-inset-bottom));
 						justify-content: center;
+						background-attachment: scroll;
 					}
 				}
 			`}</style>

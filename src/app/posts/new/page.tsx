@@ -11,7 +11,7 @@ import { POST_TAGS } from "@/constants/post-tags";
 
 interface UploadPayload {
 	success: boolean;
-	type: "image" | "file";
+	type: "image" | "video" | "file";
 	url: string;
 	originalName: string;
 	error?: string;
@@ -82,7 +82,9 @@ export default function NewPostPage() {
 		const snippet =
 			payload.type === "image"
 				? `![${payload.originalName}](${payload.url})`
-				: `[📦 ${payload.originalName}](${payload.url})`;
+				: payload.type === "video"
+					? payload.url
+					: `[📦 ${payload.originalName}](${payload.url})`;
 
 		setContent((prev) => {
 			if (!prev.trim()) {
@@ -340,6 +342,7 @@ export default function NewPostPage() {
 					type="file"
 					className="hidden"
 					onChange={handleFileSelect}
+					accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.pdf,.txt,.md,.json,.zip"
 					multiple
 				/>
 			</form>

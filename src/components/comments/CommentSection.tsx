@@ -18,6 +18,7 @@ import {
 	toReplyPreview,
 	type FlattenedStreamComment,
 } from "@/lib/comment-stream";
+import { toSessionUserId } from "@/lib/session-user";
 
 interface Comment {
 	id: number;
@@ -173,6 +174,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	const [visibleStart, setVisibleStart] = useState(0);
 	const [composerReserveHeight, setComposerReserveHeight] = useState(120);
 	const [expandedThreadRoots, setExpandedThreadRoots] = useState<Set<number>>(() => new Set());
+	const [requestedEditCommentId, setRequestedEditCommentId] = useState<number | null>(null);
 	const streamRef = useRef<HTMLDivElement>(null);
 	const composerShellRef = useRef<HTMLDivElement>(null);
 	const highlightTimerRef = useRef<number | null>(null);
@@ -181,6 +183,19 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	const restoreAppliedRef = useRef(false);
 
 	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
+	const sessionUserId = toSessionUserId(session?.user?.id);
+	const latestOwnCommentId = useMemo(() => {
+		if (!sessionUserId) {
+			return null;
+		}
+		for (let index = flattenedComments.length - 1; index >= 0; index -= 1) {
+			const candidate = flattenedComments[index];
+			if (candidate.comment.author.id === sessionUserId) {
+				return candidate.comment.id;
+			}
+		}
+		return null;
+	}, [flattenedComments, sessionUserId]);
 	const threadReplyCounts = useMemo(() => {
 		const counts = new Map<number, number>();
 		for (const item of flattenedComments) {
@@ -626,6 +641,21 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		});
 	};
 
+	const handleRequestEditLatestOwnComment = () => {
+		if (!latestOwnCommentId) {
+			showToast({ type: "error", message: "수정 가능한 내 댓글이 없음" });
+			return;
+		}
+		if (!ensureCommentVisible(latestOwnCommentId)) {
+			showToast({ type: "error", message: "대상 댓글을 찾지 못함" });
+			return;
+		}
+		setRequestedEditCommentId(latestOwnCommentId);
+		requestAnimationFrame(() => {
+			scrollToCommentElement(latestOwnCommentId, true);
+		});
+	};
+
 	const handleLoadOlderComments = () => {
 		setVisibleStart((prev) => Math.max(0, prev - LATEST_CHUNK_SIZE));
 	};
@@ -704,6 +734,10 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 									threadRootId={row.item.threadRootId}
 									isCompact={row.item.isCompact}
 									isHighlighted={highlightedCommentId === row.item.comment.id}
+									shouldStartEdit={requestedEditCommentId === row.item.comment.id}
+									onEditRequestConsumed={(commentId) => {
+										setRequestedEditCommentId((prev) => (prev === commentId ? null : prev));
+									}}
 									onNavigateToComment={handleNavigateToComment}
 									onReplyRequest={handleReplyRequest}
 									onEdit={handleCommentUpdate}
@@ -728,6 +762,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					<div className="composer-shell" id="comment-composer" ref={composerShellRef}>
 					<CommentForm
 						onSubmit={(content) => handleCommentCreate(content, replyTarget?.parentId ?? null)}
+						onRequestEditLatestOwnComment={handleRequestEditLatestOwnComment}
 						disabled={isLoading}
 						variant="composer"
 						replyTo={replyTarget?.nickname}

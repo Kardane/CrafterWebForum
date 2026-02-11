@@ -17,6 +17,23 @@ export function escapeHtml(text: string): string {
 	return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
+function normalizeMarkdownLineBreaks(html: string): string {
+	// 블록 요소 경계에 남는 불필요한 <br> 제거
+	let normalized = html
+		.replace(/<br>\s*(<\/(?:h[1-6]|ul|ol|blockquote|pre)>)/gi, "$1")
+		.replace(/(<(?:h[1-6]|ul|ol|blockquote|pre)\b[^>]*>)\s*<br>/gi, "$1")
+		.replace(/<br>\s*(<hr class="md-hr">)/gi, "$1")
+		.replace(/(<hr class="md-hr">)\s*<br>/gi, "$1");
+
+	normalized = normalized.replace(
+		/(<\/(?:h[1-6]|ul|ol|blockquote|pre)>)\s*(?:<br>\s*)+(?=<(?:h[1-6]|ul|ol|blockquote|pre|hr)\b)/gi,
+		"$1"
+	);
+
+	// 연속 개행은 최대 2줄까지만 유지
+	return normalized.replace(/(?:<br>\s*){3,}/gi, "<br><br>");
+}
+
 /**
  * 마크다운 텍스트를 HTML로 변환
  * @param text 원본 마크다운 텍스트
@@ -121,6 +138,7 @@ export function processMarkdown(text: string): string {
 	// 6. 줄바꿈 처리 (연속된 2개 이상의 \n을 <br>로 변환)
 	html = html.replace(/\n\n+/g, '<br><br>');
 	html = html.replace(/\n/g, '<br>');
+	html = normalizeMarkdownLineBreaks(html);
 
 	return html;
 }

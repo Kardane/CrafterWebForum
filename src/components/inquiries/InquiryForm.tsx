@@ -8,7 +8,7 @@ import { useToast } from '@/components/ui/useToast';
 
 interface UploadPayload {
 	success: boolean;
-	type: 'image' | 'file';
+	type: 'image' | 'video' | 'file';
 	url: string;
 	originalName: string;
 	error?: string;
@@ -31,7 +31,9 @@ export default function InquiryForm() {
 		const snippet =
 			payload.type === 'image'
 				? `![${payload.originalName}](${payload.url})`
-				: `[📦 ${payload.originalName}](${payload.url})`;
+				: payload.type === 'video'
+					? payload.url
+					: `[📦 ${payload.originalName}](${payload.url})`;
 
 		setContent((prev) => {
 			if (!prev.trim()) {
@@ -235,6 +237,7 @@ export default function InquiryForm() {
 					type="file"
 					className="hidden"
 					onChange={handleFileSelect}
+					accept=".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.pdf,.txt,.md,.json,.zip"
 					multiple
 				/>
 			</form>

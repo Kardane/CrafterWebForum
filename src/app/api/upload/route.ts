@@ -24,7 +24,7 @@ function getBlobToken(): string {
 
 interface UploadSuccessResponse {
 	success: true;
-	type: "image" | "file";
+	type: "image" | "video" | "file";
 	url: string;
 	filename: string;
 	originalName: string;
