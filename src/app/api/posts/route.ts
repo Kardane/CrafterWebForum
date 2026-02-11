@@ -26,11 +26,11 @@ export async function GET(req: NextRequest) {
 		const session = await auth();
 		const sessionUserId = toSessionUserId(session?.user?.id);
 		const { searchParams } = new URL(req.url);
-		const page = parseInt(searchParams.get("page") || "1", 10);
-		const limit = parseInt(searchParams.get("limit") || "12", 10);
-		const tag = searchParams.get("tag");
-		const sort = searchParams.get("sort") || "newest";
-		const search = searchParams.get("search");
+			const page = parseInt(searchParams.get("page") || "1", 10);
+			const limit = parseInt(searchParams.get("limit") || "12", 10);
+			const tag = searchParams.get("tag");
+			const sort = searchParams.get("sort") || "activity";
+			const search = searchParams.get("search");
 
 		const skip = (page - 1) * limit;
 
@@ -52,9 +52,9 @@ export async function GET(req: NextRequest) {
 			];
 		}
 
-		let orderBy:
-			| Prisma.PostOrderByWithRelationInput
-			| Prisma.PostOrderByWithRelationInput[] = { createdAt: "desc" };
+			let orderBy:
+				| Prisma.PostOrderByWithRelationInput
+				| Prisma.PostOrderByWithRelationInput[] = { updatedAt: "desc" };
 
 		switch (sort) {
 			case "oldest":
@@ -63,15 +63,15 @@ export async function GET(req: NextRequest) {
 			case "likes":
 				orderBy = [{ likes: "desc" }, { createdAt: "desc" }];
 				break;
-			case "comments":
-				orderBy = { comments: { _count: "desc" } };
-				break;
-			case "activity":
-				orderBy = { updatedAt: "desc" };
-				break;
-			default:
-				orderBy = { createdAt: "desc" };
-		}
+				case "comments":
+					orderBy = { comments: { _count: "desc" } };
+					break;
+				case "activity":
+					orderBy = { updatedAt: "desc" };
+					break;
+				default:
+					orderBy = { updatedAt: "desc" };
+			}
 
 		const include: Prisma.PostInclude = {
 			author: {

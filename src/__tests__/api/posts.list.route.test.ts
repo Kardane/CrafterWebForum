@@ -131,5 +131,10 @@ describe("GET /api/posts", () => {
 			userLiked: false,
 		});
 		expect(likeFindManyMock).not.toHaveBeenCalled();
+		expect(postFindManyMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				orderBy: { updatedAt: "desc" },
+			})
+		);
 	});
 });
