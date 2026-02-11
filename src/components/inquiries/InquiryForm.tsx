@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { FileImage, HelpCircle } from 'lucide-react';
 import MarkdownHelpModal from '@/components/comments/MarkdownHelpModal';
 import { useToast } from '@/components/ui/useToast';
+import { parseUploadJsonResponse } from '@/lib/upload-response';
 
 interface UploadPayload {
 	success: boolean;
@@ -58,14 +59,11 @@ export default function InquiryForm() {
 					method: 'POST',
 					body: formData,
 				});
-				const data = (await response.json()) as UploadPayload | { error: string };
-
-				if (!response.ok || !('url' in data)) {
-					const message = 'error' in data ? data.error : '파일 업로드 실패';
-					throw new Error(message);
+				const parsed = await parseUploadJsonResponse<UploadPayload>(response);
+				if (parsed.error || !parsed.data?.url) {
+					throw new Error(parsed.error ?? '파일 업로드 실패');
 				}
-
-				appendUploadedContent(data);
+				appendUploadedContent(parsed.data);
 			}
 			showToast({ type: 'success', message: '파일 업로드 완료' });
 		} catch (error) {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/upload-constants";
 import { UploadValidationError, validateUploadFile } from "@/lib/upload";
 
 describe("upload validation", () => {
@@ -28,5 +29,15 @@ describe("upload validation", () => {
 		});
 
 		expect(() => validateUploadFile(file)).toThrowError(UploadValidationError);
+	});
+
+	it("rejects files larger than max upload size", () => {
+		const file = new File([new Uint8Array(MAX_UPLOAD_BYTES + 1)], "large.mp4", {
+			type: "video/mp4",
+		});
+
+		expect(() => validateUploadFile(file)).toThrowError(
+			`File exceeds ${MAX_UPLOAD_MB}MB limit`
+		);
 	});
 });

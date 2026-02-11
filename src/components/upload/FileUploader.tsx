@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
+import { MAX_UPLOAD_MB } from "@/lib/upload-constants";
+import { parseUploadXhrError } from "@/lib/upload-response";
 
 export interface UploadedFileResult {
 	success: true;
@@ -32,7 +34,7 @@ function formatBytes(bytes: number): string {
 export default function FileUploader({
 	onUploaded,
 	accept = ".jpg,.jpeg,.png,.gif,.webp,.mp4,.webm,.mov,.pdf,.txt,.md,.json,.zip",
-	maxSizeMB = 5,
+	maxSizeMB = MAX_UPLOAD_MB,
 }: FileUploaderProps) {
 	const [isDragging, setIsDragging] = useState(false);
 	const [isUploading, setIsUploading] = useState(false);
@@ -62,8 +64,9 @@ export default function FileUploader({
 					resolve(xhr.response as UploadedFileResult);
 					return;
 				}
-				const message =
-					(xhr.response as { error?: string } | null)?.error ?? "Upload failed";
+				const rawText =
+					typeof xhr.responseText === "string" ? xhr.responseText : "";
+				const message = parseUploadXhrError(xhr.status, rawText);
 				reject(new Error(message));
 			};
 

@@ -1,8 +1,7 @@
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
-
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/upload-constants";
 
 const BLOCKED_EXTENSIONS = new Set([
 	"exe",
@@ -88,7 +87,7 @@ export function validateUploadFile(file: File): UploadValidationResult {
 		throw new UploadValidationError("Empty file");
 	}
 	if (file.size > MAX_UPLOAD_BYTES) {
-		throw new UploadValidationError("File exceeds 5MB limit", 413);
+		throw new UploadValidationError(`File exceeds ${MAX_UPLOAD_MB}MB limit`, 413);
 	}
 
 	const originalName = sanitizeOriginalName(file.name);
