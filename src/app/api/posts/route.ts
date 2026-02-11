@@ -6,8 +6,25 @@ import { toSessionUserId } from "@/lib/session-user";
 
 export const dynamic = "force-dynamic"; // 항상 최신 데이터 조회
 
+function parseTags(rawTags: string | null): string[] {
+	if (!rawTags) {
+		return [];
+	}
+	try {
+		const parsed = JSON.parse(rawTags) as unknown;
+		if (!Array.isArray(parsed)) {
+			return [];
+		}
+		return parsed.filter((tag): tag is string => typeof tag === "string");
+	} catch {
+		return [];
+	}
+}
+
 export async function GET(req: NextRequest) {
 	try {
+		const session = await auth();
+		const sessionUserId = toSessionUserId(session?.user?.id);
 		const { searchParams } = new URL(req.url);
 		const page = parseInt(searchParams.get("page") || "1", 10);
 		const limit = parseInt(searchParams.get("limit") || "12", 10);
@@ -56,32 +73,41 @@ export async function GET(req: NextRequest) {
 				orderBy = { createdAt: "desc" };
 		}
 
+		const include: Prisma.PostInclude = {
+			author: {
+				select: {
+					nickname: true,
+					minecraftUuid: true,
+				},
+			},
+			_count: {
+				select: {
+					comments: true,
+				},
+			},
+			postReads: {
+				where: {
+					userId: sessionUserId ?? -1,
+				},
+				select: {
+					lastReadCommentCount: true,
+				},
+				take: 1,
+			},
+		};
+
 		const [posts, total] = await prisma.$transaction([
 			prisma.post.findMany({
 				where: whereCondition,
 				take: limit,
 				skip,
 				orderBy,
-				include: {
-					author: {
-						select: {
-							nickname: true,
-							minecraftUuid: true,
-						},
-					},
-					_count: {
-						select: {
-							comments: true,
-						},
-					},
-				},
+				include,
 			}),
 			prisma.post.count({ where: whereCondition }),
 		]);
 
-		const session = await auth();
 		let likedPostIds: number[] = [];
-		const sessionUserId = toSessionUserId(session?.user?.id);
 		if (sessionUserId) {
 			const likes = await prisma.like.findMany({
 				where: {
@@ -97,7 +123,7 @@ export async function GET(req: NextRequest) {
 			id: post.id,
 			title: post.title,
 			content: post.content,
-			tags: JSON.parse((post.tags as string) || "[]"),
+			tags: parseTags(post.tags),
 			likes: post.likes,
 			views: post.views,
 			createdAt: post.createdAt,
@@ -105,6 +131,10 @@ export async function GET(req: NextRequest) {
 			authorName: post.author.nickname,
 			authorUuid: post.author.minecraftUuid,
 			commentCount: post._count.comments,
+			unreadCount: Math.max(
+				post._count.comments - (post.postReads?.[0]?.lastReadCommentCount ?? 0),
+				0
+			),
 			userLiked: likedPostIds.includes(post.id),
 		}));
 

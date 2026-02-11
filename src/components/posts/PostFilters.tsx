@@ -6,13 +6,14 @@ import classNames from "classnames";
 import { POST_TAGS } from "@/constants/post-tags";
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { text } from "@/lib/system-text";
 
 const SORT_OPTIONS = [
-	{ value: "activity", label: "최근 활동순" },
-	{ value: "newest", label: "최신순" },
-	{ value: "oldest", label: "오래된순" },
-	{ value: "likes", label: "추천순" },
-	{ value: "comments", label: "댓글순" },
+	{ value: "activity", label: text("postFilters.sortActivity") },
+	{ value: "newest", label: text("postFilters.sortNewest") },
+	{ value: "oldest", label: text("postFilters.sortOldest") },
+	{ value: "likes", label: text("postFilters.sortLikes") },
+	{ value: "comments", label: text("postFilters.sortComments") },
 ];
 
 interface PostFiltersProps {
@@ -38,9 +39,9 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 		} else {
 			params.delete(key);
 		}
-		// 필터 변경 시 페이지를 1로 초기화
+		// 무한 스크롤 기준으로 필터가 바뀌면 페이지 파라미터는 제거
 		if (key !== "page") {
-			params.set("page", "1");
+			params.delete("page");
 		}
 		router.push(`/?${params.toString()}`);
 	};
@@ -60,7 +61,7 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 						className="btn btn-primary h-9 gap-2 px-3 whitespace-nowrap"
 					>
 						<Plus size={18} />
-						<span>새 포스트</span>
+						<span>{text("postFilters.newPost")}</span>
 					</Link>
 
 					<form
@@ -68,7 +69,7 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 						className="flex w-full min-w-0 flex-1 sm:max-w-[720px]"
 					>
 						<input
-							placeholder="포스트 검색..."
+							placeholder={text("postFilters.searchPlaceholder")}
 							value={searchTerm}
 							onChange={(e) => setSearchTerm(e.target.value)}
 							className="input-base h-9 min-w-0 flex-1 rounded-r-none border-r-0"
@@ -77,7 +78,7 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 							type="submit"
 							className="h-9 flex-shrink-0 rounded-l-none rounded-r-md bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
 						>
-							검색
+							{text("postFilters.searchButton")}
 						</button>
 					</form>
 				</div>
@@ -114,12 +115,12 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 									: "bg-bg-tertiary border-border text-text-secondary hover:bg-bg-secondary"
 							)}
 						>
-							태그
+							{text("postFilters.tagsButton")}
 							<span className="text-[10px]">{isTagsOpen ? "▲" : "▼"}</span>
 						</button>
 					</div>
 					<div className="text-sm font-medium text-text-muted whitespace-nowrap">
-						총 {totalPosts.toLocaleString()}개 포스트
+						{text("postFilters.totalPosts", { count: totalPosts.toLocaleString() })}
 					</div>
 				</div>
 			</div>
@@ -140,7 +141,7 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 							: "bg-bg-tertiary text-text-secondary border-transparent hover:bg-bg-secondary"
 					)}
 				>
-					전체
+					{text("postFilters.allTag")}
 				</button>
 				{POST_TAGS.map(tag => (
 					<button

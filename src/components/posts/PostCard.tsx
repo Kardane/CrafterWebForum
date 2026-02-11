@@ -21,7 +21,7 @@ interface PostCardProps {
 	tags: string[];
 	unreadCount?: number;
 	userLiked?: boolean;
-	onNavigate?: () => void;
+	onNavigate?: (postId: number) => void;
 }
 
 export default function PostCard({
@@ -51,7 +51,7 @@ export default function PostCard({
 			href={`/posts/${id}`}
 			className="block"
 			onClick={() => {
-				onNavigate?.();
+				onNavigate?.(id);
 			}}
 		>
 			<div className="bg-bg-secondary rounded-lg border border-bg-tertiary p-4 hover:border-accent hover:shadow-md transition-all duration-200 cursor-pointer flex gap-4 h-full">
