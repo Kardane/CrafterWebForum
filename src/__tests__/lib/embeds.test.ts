@@ -29,6 +29,14 @@ describe("embed utils", () => {
 	it("renders github links as cards", () => {
 		const html = processAllEmbeds("https://github.com/vercel/next.js/issues/1");
 		expect(html).toContain("external-link-card");
+		expect(html).toContain("external-link-card__icon");
 		expect(html).toContain("Issue #1");
+	});
+
+	it("renders minecraft wiki links as cards with icon", () => {
+		const html = processAllEmbeds("https://minecraft.wiki/w/Redstone");
+		expect(html).toContain("external-link-card");
+		expect(html).toContain("minecraft.wiki");
+		expect(html).toContain("external-link-card__icon");
 	});
 });
