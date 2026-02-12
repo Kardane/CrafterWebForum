@@ -1,18 +1,21 @@
 "use client";
 
+/**
+ * 댓글 섹션 오케스트레이터 컴포넌트
+ * 트리 조작은 comment-tree-ops, API는 useCommentMutations, 스크롤은 useCommentScroll로 위임
+ */
+
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSession } from "next-auth/react";
-import { ChevronDown, Pin } from "lucide-react";
+import { Pin } from "lucide-react";
 import CommentItem from "./CommentItem";
 import CommentForm from "./CommentForm";
+import PinnedCommentsModal from "./PinnedCommentsModal";
+import ReadMarkerRow from "./ReadMarkerRow";
+import ThreadToggleRow from "./ThreadToggleRow";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/useToast";
 import { OPEN_PINNED_COMMENTS_EVENT } from "@/constants/comments";
-import {
-	clearPostDetailScrollState,
-	readPostDetailScrollState,
-	savePostDetailScrollState,
-} from "@/lib/scroll-restore";
 import {
 	flattenCommentsForStream,
 	toReplyPreview,
@@ -20,23 +23,14 @@ import {
 } from "@/lib/comment-stream";
 import { toSessionUserId } from "@/lib/session-user";
 import { text } from "@/lib/system-text";
-
-interface Comment {
-	id: number;
-	content: string;
-	createdAt: string;
-	updatedAt: string;
-	isPinned: boolean;
-	parentId: number | null;
-	isPostAuthor: boolean;
-	author: {
-		id: number;
-		nickname: string;
-		minecraftUuid: string | null;
-		role: string;
-	};
-	replies: Comment[];
-}
+import {
+	type Comment,
+	LATEST_CHUNK_SIZE,
+	THREAD_COLLAPSE_THRESHOLD,
+	getReadMarkerIndex,
+} from "@/lib/comment-tree-ops";
+import { useCommentMutations } from "./useCommentMutations";
+import { useCommentScroll } from "./useCommentScroll";
 
 interface CommentSectionProps {
 	postId: number;
@@ -62,157 +56,104 @@ interface PinnedCommentItem {
 }
 
 type RenderRow =
-	| {
-			type: "read-marker";
-			key: string;
-	  }
-	| {
-			type: "comment";
-			key: string;
-			item: FlattenedComment;
-	  }
-	| {
-			type: "thread-toggle";
-			key: string;
-			rootId: number;
-			replyCount: number;
-			isCollapsed: boolean;
-	  };
+	| { type: "read-marker"; key: string }
+	| { type: "comment"; key: string; item: FlattenedComment }
+	| { type: "thread-toggle"; key: string; rootId: number; replyCount: number; isCollapsed: boolean };
 
-const LATEST_CHUNK_SIZE = 40;
-const THREAD_COLLAPSE_THRESHOLD = 8;
-const DETAIL_SCROLL_SAVE_DELAY_MS = 240;
-
-function appendReplyToThread(nodes: Comment[], rootId: number, newComment: Comment): Comment[] {
-	return nodes.map((node) => {
-		if (node.id === rootId) {
-			return {
-				...node,
-				replies: [...node.replies, newComment],
-			};
-		}
-		if (node.replies.length === 0) {
-			return node;
-		}
-		return {
-			...node,
-			replies: appendReplyToThread(node.replies, rootId, newComment),
-		};
-	});
+interface InitialCommentViewState {
+	visibleStart: number;
+	expandedThreadRoots: Set<number>;
 }
 
-function updateCommentInTree(nodes: Comment[], targetId: number, content: string, updatedAt: string): Comment[] {
-	return nodes.map((node) => {
-		if (node.id === targetId) {
-			return {
-				...node,
-				content,
-				updatedAt,
-			};
-		}
-		if (node.replies.length === 0) {
-			return node;
-		}
-		return {
-			...node,
-			replies: updateCommentInTree(node.replies, targetId, content, updatedAt),
-		};
-	});
-}
-
-function removeCommentFromTree(nodes: Comment[], targetId: number): Comment[] {
-	return nodes
-		.filter((node) => node.id !== targetId)
-		.map((node) => ({
-			...node,
-			replies: removeCommentFromTree(node.replies, targetId),
-		}));
-}
-
-function updateCommentPinnedInTree(nodes: Comment[], targetId: number, isPinned: boolean): Comment[] {
-	return nodes.map((node) => {
-		if (node.id === targetId) {
-			return {
-				...node,
-				isPinned,
-			};
-		}
-		if (node.replies.length === 0) {
-			return node;
-		}
-		return {
-			...node,
-			replies: updateCommentPinnedInTree(node.replies, targetId, isPinned),
-		};
-	});
-}
-
-function getReadMarkerIndex(total: number, lastReadCommentCount: number): number | null {
-	if (total <= 0 || lastReadCommentCount <= 0 || lastReadCommentCount >= total) {
-		return null;
+/**
+ * 초기 댓글 뷰 상태 계산
+ * - 기본 시작 위치: 최신 댓글 청크
+ * - 읽음 마커가 더 앞에 있으면 마커 기준으로 시작
+ * - 마커가 접힌 스레드 내부라면 해당 스레드를 초기에 펼침
+ */
+function buildInitialCommentViewState(initialComments: Comment[], lastReadCommentCount: number): InitialCommentViewState {
+	const flattened = flattenCommentsForStream(initialComments);
+	const total = flattened.length;
+	if (total === 0) {
+		return { visibleStart: 0, expandedThreadRoots: new Set<number>() };
 	}
-	return lastReadCommentCount;
-}
 
-function parseCommentIdFromElementId(rawId: string): number | null {
-	const value = rawId.replace("comment-", "");
-	const parsed = Number.parseInt(value, 10);
-	if (!Number.isInteger(parsed) || parsed <= 0) {
-		return null;
+	const readMarkerIndex = getReadMarkerIndex(total, lastReadCommentCount);
+	const defaultStart = Math.max(0, total - LATEST_CHUNK_SIZE);
+	const visibleStart = readMarkerIndex !== null && readMarkerIndex < defaultStart ? readMarkerIndex : defaultStart;
+	const expandedThreadRoots = new Set<number>();
+
+	if (readMarkerIndex === null) {
+		return { visibleStart, expandedThreadRoots };
 	}
-	return parsed;
+
+	const markerItem = flattened[readMarkerIndex];
+	if (markerItem?.comment.parentId === null) {
+		return { visibleStart, expandedThreadRoots };
+	}
+
+	let replyCount = 0;
+	for (const item of flattened) {
+		if (item.threadRootId === markerItem.threadRootId && item.comment.parentId !== null) {
+			replyCount += 1;
+		}
+	}
+	if (replyCount >= THREAD_COLLAPSE_THRESHOLD) {
+		expandedThreadRoots.add(markerItem.threadRootId);
+	}
+
+	return { visibleStart, expandedThreadRoots };
 }
 
 export default function CommentSection({ postId, initialComments, readMarker }: CommentSectionProps) {
 	const { data: session } = useSession();
 	const { showToast } = useToast();
+	const [initialViewState] = useState<InitialCommentViewState>(() =>
+		buildInitialCommentViewState(initialComments, readMarker?.lastReadCommentCount ?? 0)
+	);
 	const [comments, setComments] = useState<Comment[]>(initialComments);
-	const [isLoading, setIsLoading] = useState(false);
 	const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
 	const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 	const [highlightedCommentId, setHighlightedCommentId] = useState<number | null>(null);
 	const [isPinnedModalOpen, setIsPinnedModalOpen] = useState(false);
-	const [visibleStart, setVisibleStart] = useState(0);
+	const [visibleStart, setVisibleStart] = useState(initialViewState.visibleStart);
 	const [composerReserveHeight, setComposerReserveHeight] = useState(120);
-	const [expandedThreadRoots, setExpandedThreadRoots] = useState<Set<number>>(() => new Set());
+	const [expandedThreadRoots, setExpandedThreadRoots] = useState<Set<number>>(
+		() => new Set(initialViewState.expandedThreadRoots)
+	);
 	const [requestedEditCommentId, setRequestedEditCommentId] = useState<number | null>(null);
 	const streamRef = useRef<HTMLDivElement>(null);
 	const composerShellRef = useRef<HTMLDivElement>(null);
-	const highlightTimerRef = useRef<number | null>(null);
-	const scrollSaveTimerRef = useRef<number | null>(null);
-	const hasInitializedViewRef = useRef(false);
-	const restoreAppliedRef = useRef(false);
-	const restoreCheckedRef = useRef(false);
-	const latestJumpAppliedRef = useRef(false);
 
+	// --- 파생 데이터 ---
 	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
 	const sessionUserId = toSessionUserId(session?.user?.id);
+
 	const latestOwnCommentId = useMemo(() => {
-		if (!sessionUserId) {
-			return null;
-		}
-		for (let index = flattenedComments.length - 1; index >= 0; index -= 1) {
-			const candidate = flattenedComments[index];
-			if (candidate.comment.author.id === sessionUserId) {
-				return candidate.comment.id;
+		if (!sessionUserId) return null;
+		for (let i = flattenedComments.length - 1; i >= 0; i -= 1) {
+			if (flattenedComments[i].comment.author.id === sessionUserId) {
+				return flattenedComments[i].comment.id;
 			}
 		}
 		return null;
 	}, [flattenedComments, sessionUserId]);
+
 	const threadReplyCounts = useMemo(() => {
 		const counts = new Map<number, number>();
 		for (const item of flattenedComments) {
-			if (item.comment.parentId === null) {
-				continue;
+			if (item.comment.parentId !== null) {
+				counts.set(item.threadRootId, (counts.get(item.threadRootId) ?? 0) + 1);
 			}
-			counts.set(item.threadRootId, (counts.get(item.threadRootId) ?? 0) + 1);
 		}
 		return counts;
 	}, [flattenedComments]);
+
 	const readMarkerIndex = useMemo(
 		() => getReadMarkerIndex(flattenedComments.length, readMarker?.lastReadCommentCount ?? 0),
 		[flattenedComments.length, readMarker?.lastReadCommentCount]
 	);
+
 	const pinnedComments = useMemo<PinnedCommentItem[]>(
 		() =>
 			flattenedComments
@@ -225,13 +166,25 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				})),
 		[flattenedComments]
 	);
-	const hasOlderComments = visibleStart > 0;
-	const olderLoadCount = Math.min(LATEST_CHUNK_SIZE, visibleStart);
 
+	const effectiveVisibleStart = useMemo(() => {
+		const total = flattenedComments.length;
+		if (total === 0) {
+			return 0;
+		}
+		const maxStart = Math.max(0, total - 1);
+		return Math.min(Math.max(0, visibleStart), maxStart);
+	}, [flattenedComments.length, visibleStart]);
+
+	const hasOlderComments = effectiveVisibleStart > 0;
+	const olderLoadCount = Math.min(LATEST_CHUNK_SIZE, effectiveVisibleStart);
+
+	// --- 스레드 접기/펼치기 ---
 	const isThreadCollapsible = useCallback(
 		(rootId: number) => (threadReplyCounts.get(rootId) ?? 0) >= THREAD_COLLAPSE_THRESHOLD,
 		[threadReplyCounts]
 	);
+
 	const isThreadCollapsed = useCallback(
 		(rootId: number) => isThreadCollapsible(rootId) && !expandedThreadRoots.has(rootId),
 		[expandedThreadRoots, isThreadCollapsible]
@@ -240,15 +193,8 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	const ensureCommentVisible = useCallback(
 		(commentId: number): boolean => {
 			const targetIndex = flattenedComments.findIndex((item) => item.comment.id === commentId);
-			if (targetIndex < 0) {
-				return false;
-			}
-			setVisibleStart((prev) => {
-				if (targetIndex >= prev) {
-					return prev;
-				}
-				return Math.max(0, targetIndex - 2);
-			});
+			if (targetIndex < 0) return false;
+			setVisibleStart((prev) => (targetIndex >= prev ? prev : Math.max(0, targetIndex - 2)));
 			const targetItem = flattenedComments[targetIndex];
 			if (
 				targetItem.comment.parentId !== null &&
@@ -266,359 +212,88 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		[expandedThreadRoots, flattenedComments, isThreadCollapsible]
 	);
 
-	const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
-		requestAnimationFrame(() => {
-			document.getElementById("comment-feed-end")?.scrollIntoView({ behavior, block: "end" });
-		});
-	};
+	// --- 훅 위임 ---
+	const { scrollToBottom, scrollToCommentElement } = useCommentScroll({
+		postId,
+		streamRef,
+		ensureCommentVisible,
+		flattenedCommentsLength: flattenedComments.length,
+	});
 
-	const scrollToCommentElement = (commentId: number, highlight: boolean, attempt = 0) => {
-		const target = document.getElementById(`comment-${commentId}`);
-		if (!target) {
-			if (attempt < 12) {
-				window.setTimeout(() => {
-					scrollToCommentElement(commentId, highlight, attempt + 1);
-				}, 60);
-			}
-			return;
-		}
-		target.scrollIntoView({ behavior: "smooth", block: "center" });
-		if (!highlight) {
-			return;
-		}
-		setHighlightedCommentId(commentId);
-		if (highlightTimerRef.current !== null) {
-			window.clearTimeout(highlightTimerRef.current);
-		}
-		highlightTimerRef.current = window.setTimeout(() => {
-			setHighlightedCommentId((prev) => (prev === commentId ? null : prev));
-		}, 1600);
-	};
+	const {
+		isLoading,
+		handleCommentCreate,
+		handleCommentUpdate,
+		handleCommentDeleteConfirmed,
+		handleCommentPinToggle,
+	} = useCommentMutations({
+		postId,
+		session,
+		setComments,
+		setReplyTarget,
+		setExpandedThreadRoots,
+		setPendingDeleteId,
+		scrollToBottom,
+	});
 
-	const findViewportAnchorCommentId = useCallback((): number | null => {
-		const container = streamRef.current;
-		if (!container) {
-			return null;
-		}
-		const candidates = container.querySelectorAll<HTMLElement>(".comment-wrapper[id^='comment-']");
-		if (candidates.length === 0) {
-			return null;
-		}
-		const viewportCenter = window.innerHeight / 2;
-		let bestId: number | null = null;
-		let bestDistance = Number.POSITIVE_INFINITY;
-		candidates.forEach((candidate) => {
-			const rect = candidate.getBoundingClientRect();
-			if (rect.bottom < 0 || rect.top > window.innerHeight) {
-				return;
-			}
-			const candidateId = parseCommentIdFromElementId(candidate.id);
-			if (candidateId === null) {
-				return;
-			}
-			const center = rect.top + rect.height / 2;
-			const distance = Math.abs(center - viewportCenter);
-			if (distance < bestDistance) {
-				bestDistance = distance;
-				bestId = candidateId;
-			}
-		});
-		return bestId;
-	}, []);
-
-	const saveDetailScrollState = useCallback(() => {
-		savePostDetailScrollState(postId, {
-			anchorCommentId: findViewportAnchorCommentId(),
-			scrollY: window.scrollY,
-		});
-	}, [findViewportAnchorCommentId, postId]);
-
+	// --- 렌더 행 구성 ---
 	const renderRows = useMemo<RenderRow[]>(() => {
 		const rows: RenderRow[] = [];
-		for (let index = visibleStart; index < flattenedComments.length; index += 1) {
-			const item = flattenedComments[index];
-			const collapsed = isThreadCollapsed(item.threadRootId);
-			if (collapsed && item.comment.parentId !== null) {
-				continue;
+		for (let i = effectiveVisibleStart; i < flattenedComments.length; i += 1) {
+			const item = flattenedComments[i];
+			if (isThreadCollapsed(item.threadRootId) && item.comment.parentId !== null) continue;
+			if (readMarkerIndex !== null && i === readMarkerIndex) {
+				rows.push({ type: "read-marker", key: `read-marker-${i}` });
 			}
-			if (readMarkerIndex !== null && index === readMarkerIndex) {
-				rows.push({ type: "read-marker", key: `read-marker-${index}` });
-			}
-			rows.push({
-				type: "comment",
-				key: `comment-${item.comment.id}`,
-				item,
-			});
-			if (item.comment.id !== item.threadRootId) {
-				continue;
-			}
+			rows.push({ type: "comment", key: `comment-${item.comment.id}`, item });
+			if (item.comment.id !== item.threadRootId) continue;
 			const replyCount = threadReplyCounts.get(item.threadRootId) ?? 0;
-			if (replyCount < THREAD_COLLAPSE_THRESHOLD) {
-				continue;
-			}
+			if (replyCount < THREAD_COLLAPSE_THRESHOLD) continue;
 			rows.push({
 				type: "thread-toggle",
 				key: `thread-toggle-${item.threadRootId}`,
 				rootId: item.threadRootId,
 				replyCount,
-				isCollapsed: collapsed,
+				isCollapsed: isThreadCollapsed(item.threadRootId),
 			});
 		}
 		return rows;
-	}, [flattenedComments, isThreadCollapsed, readMarkerIndex, threadReplyCounts, visibleStart]);
+	}, [effectiveVisibleStart, flattenedComments, isThreadCollapsed, readMarkerIndex, threadReplyCounts]);
 
-	useEffect(
-		() => () => {
-			if (highlightTimerRef.current !== null) {
-				window.clearTimeout(highlightTimerRef.current);
-			}
-			if (scrollSaveTimerRef.current !== null) {
-				window.clearTimeout(scrollSaveTimerRef.current);
-			}
-		},
-		[]
-	);
-
+	// --- 이벤트/이펙트 ---
 	useEffect(() => {
-		restoreAppliedRef.current = false;
-		restoreCheckedRef.current = false;
-		latestJumpAppliedRef.current = false;
-	}, [postId]);
-
-	useEffect(() => {
-		const openPinnedModal = () => {
-			setIsPinnedModalOpen(true);
-		};
+		const openPinnedModal = () => setIsPinnedModalOpen(true);
 		window.addEventListener(OPEN_PINNED_COMMENTS_EVENT, openPinnedModal);
-		return () => {
-			window.removeEventListener(OPEN_PINNED_COMMENTS_EVENT, openPinnedModal);
-		};
+		return () => window.removeEventListener(OPEN_PINNED_COMMENTS_EVENT, openPinnedModal);
 	}, []);
 
+	// 작성기 높이 리저브 관측
 	useEffect(() => {
 		const composer = composerShellRef.current;
-		if (!composer) {
-			return;
-		}
-
+		if (!composer) return;
 		const updateReserve = () => {
 			const nextHeight = Math.ceil(composer.getBoundingClientRect().height) + 24;
 			setComposerReserveHeight((prev) => (prev === nextHeight ? prev : nextHeight));
 		};
-
 		updateReserve();
 		window.addEventListener("resize", updateReserve);
-
 		if (typeof ResizeObserver === "undefined") {
-			return () => {
-				window.removeEventListener("resize", updateReserve);
-			};
+			return () => window.removeEventListener("resize", updateReserve);
 		}
-
 		const observer = new ResizeObserver(updateReserve);
 		observer.observe(composer);
-
 		return () => {
 			observer.disconnect();
 			window.removeEventListener("resize", updateReserve);
 		};
 	}, []);
 
-	useEffect(() => {
-		const total = flattenedComments.length;
-		if (total === 0) {
-			setVisibleStart(0);
-			return;
-		}
-		if (!hasInitializedViewRef.current) {
-			const defaultStart = Math.max(0, total - LATEST_CHUNK_SIZE);
-			let nextStart = defaultStart;
-			if (readMarkerIndex !== null && readMarkerIndex < nextStart) {
-				nextStart = readMarkerIndex;
-			}
-			setVisibleStart(nextStart);
-			if (readMarkerIndex !== null) {
-				const markerItem = flattenedComments[readMarkerIndex];
-				if (markerItem?.comment.parentId !== null && isThreadCollapsible(markerItem.threadRootId)) {
-					setExpandedThreadRoots((prev) => {
-						const next = new Set(prev);
-						next.add(markerItem.threadRootId);
-						return next;
-					});
-				}
-			}
-			hasInitializedViewRef.current = true;
-			return;
-		}
-		setVisibleStart((prev) => {
-			const maxStart = Math.max(0, total - 1);
-			return prev > maxStart ? maxStart : prev;
-		});
-	}, [flattenedComments, isThreadCollapsible, readMarkerIndex]);
-
-	useEffect(() => {
-		if (restoreCheckedRef.current || flattenedComments.length === 0) {
-			return;
-		}
-		restoreCheckedRef.current = true;
-		const saved = readPostDetailScrollState(postId);
-		if (!saved) {
-			return;
-		}
-		restoreAppliedRef.current = true;
-		const restore = () => {
-			if (saved.anchorCommentId !== null && ensureCommentVisible(saved.anchorCommentId)) {
-				requestAnimationFrame(() => {
-					scrollToCommentElement(saved.anchorCommentId!, false);
-				});
-			} else {
-				window.scrollTo({ top: saved.scrollY, behavior: "auto" });
-			}
-			clearPostDetailScrollState(postId);
-		};
-		restore();
-	}, [ensureCommentVisible, flattenedComments, postId]);
-
-	useEffect(() => {
-		if (latestJumpAppliedRef.current || flattenedComments.length === 0) {
-			return;
-		}
-		if (!restoreCheckedRef.current || restoreAppliedRef.current) {
-			return;
-		}
-		latestJumpAppliedRef.current = true;
-		requestAnimationFrame(() => {
-			document.getElementById("comment-feed-end")?.scrollIntoView({
-				behavior: "auto",
-				block: "end",
-			});
-		});
-	}, [flattenedComments.length]);
-
-	useEffect(() => {
-		const handleScroll = () => {
-			if (scrollSaveTimerRef.current !== null) {
-				window.clearTimeout(scrollSaveTimerRef.current);
-			}
-			scrollSaveTimerRef.current = window.setTimeout(() => {
-				saveDetailScrollState();
-			}, DETAIL_SCROLL_SAVE_DELAY_MS);
-		};
-		const handleVisibilityChange = () => {
-			if (document.visibilityState === "hidden") {
-				saveDetailScrollState();
-			}
-		};
-		window.addEventListener("scroll", handleScroll, { passive: true });
-		window.addEventListener("beforeunload", saveDetailScrollState);
-		document.addEventListener("visibilitychange", handleVisibilityChange);
-		return () => {
-			if (scrollSaveTimerRef.current !== null) {
-				window.clearTimeout(scrollSaveTimerRef.current);
-			}
-			saveDetailScrollState();
-			window.removeEventListener("scroll", handleScroll);
-			window.removeEventListener("beforeunload", saveDetailScrollState);
-			document.removeEventListener("visibilitychange", handleVisibilityChange);
-		};
-	}, [saveDetailScrollState]);
-
-	const handleCommentCreate = async (content: string, parentId: number | null = null) => {
-		if (!session?.user) {
-			showToast({ type: "error", message: "로그인이 필요함" });
-			throw new Error("unauthenticated");
-		}
-		setIsLoading(true);
-		try {
-			const response = await fetch(`/api/posts/${postId}/comments`, {
-				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ content, parentId }),
-			});
-			const data = (await response.json()) as { error?: string; comment: Comment };
-			if (!response.ok) {
-				throw new Error(data.error || "Failed to create comment");
-			}
-			if (parentId === null) {
-				setComments((prev) => [...prev, data.comment]);
-			} else {
-				setComments((prev) => appendReplyToThread(prev, parentId, data.comment));
-				setReplyTarget(null);
-				setExpandedThreadRoots((prev) => {
-					const next = new Set(prev);
-					next.add(parentId);
-					return next;
-				});
-			}
-			scrollToBottom("smooth");
-		} catch (error) {
-			console.error("Comment create error:", error);
-			showToast({ type: "error", message: "댓글 작성 실패" });
-			throw error;
-		} finally {
-			setIsLoading(false);
-		}
-	};
-
-	const handleCommentUpdate = async (commentId: number, content: string) => {
-		setIsLoading(true);
-		try {
-			const response = await fetch(`/api/comments/${commentId}`, {
-				method: "PATCH",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ content }),
-			});
-			const data = await response.json();
-			if (!response.ok) {
-				throw new Error(data.error || "Failed to update comment");
-			}
-			setComments((prev) => updateCommentInTree(prev, commentId, data.comment.content, data.comment.updatedAt));
-			showToast({ type: "success", message: "댓글 수정 완료" });
-		} catch (error) {
-			console.error("Comment update error:", error);
-			showToast({ type: "error", message: "댓글 수정 실패" });
-			throw error;
-		} finally {
-			setIsLoading(false);
-		}
-	};
-
-	const handleCommentDeleteConfirmed = async (commentId?: number) => {
-		const idToDelete = commentId ?? pendingDeleteId;
-		if (idToDelete === null) {
-			return;
-		}
-		setIsLoading(true);
-		try {
-			const response = await fetch(`/api/comments/${idToDelete}`, {
-				method: "DELETE",
-			});
-			if (!response.ok) {
-				const data = await response.json();
-				throw new Error(data.error || "Failed to delete comment");
-			}
-			setComments((prev) => removeCommentFromTree(prev, idToDelete));
-			setPendingDeleteId(null);
-			showToast({ type: "success", message: "댓글 삭제 완료" });
-		} catch (error) {
-			console.error("Comment delete error:", error);
-			showToast({ type: "error", message: "댓글 삭제 실패" });
-		} finally {
-			setIsLoading(false);
-		}
-	};
-
+	// --- 핸들러 ---
 	const handleReplyRequest = (commentId: number, nickname: string) => {
 		setReplyTarget({ parentId: commentId, nickname });
 		requestAnimationFrame(() => {
 			const input = document.getElementById("comment-composer-input");
-			if (input instanceof HTMLTextAreaElement) {
-				input.focus();
-			}
+			if (input instanceof HTMLTextAreaElement) input.focus();
 		});
 	};
 
@@ -629,42 +304,12 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		}
 		const { pathname, search } = window.location;
 		window.history.replaceState(null, "", `${pathname}${search}#comment-${commentId}`);
-		requestAnimationFrame(() => {
-			scrollToCommentElement(commentId, true);
-		});
-	};
-
-	const handleCommentPinToggle = async (commentId: number) => {
-		setIsLoading(true);
-		try {
-			const response = await fetch(`/api/comments/${commentId}/pin`, {
-				method: "POST",
-			});
-			const data = (await response.json()) as {
-				error?: string;
-				comment?: { id: number; isPinned: boolean };
-			};
-			if (!response.ok || !data.comment) {
-				throw new Error(data.error || "Failed to toggle comment pin");
-			}
-			setComments((prev) => updateCommentPinnedInTree(prev, commentId, data.comment!.isPinned));
-			showToast({
-				type: "success",
-				message: data.comment.isPinned ? "댓글 고정 완료" : "댓글 고정 해제 완료",
-			});
-		} catch (error) {
-			console.error("Comment pin toggle error:", error);
-			showToast({ type: "error", message: "댓글 고정 처리 실패" });
-		} finally {
-			setIsLoading(false);
-		}
+		requestAnimationFrame(() => scrollToCommentElement(commentId, true, setHighlightedCommentId));
 	};
 
 	const handlePinnedCommentSelect = (commentId: number) => {
 		setIsPinnedModalOpen(false);
-		requestAnimationFrame(() => {
-			handleNavigateToComment(commentId);
-		});
+		requestAnimationFrame(() => handleNavigateToComment(commentId));
 	};
 
 	const handleRequestEditLatestOwnComment = () => {
@@ -677,27 +322,21 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 			return;
 		}
 		setRequestedEditCommentId(latestOwnCommentId);
-		requestAnimationFrame(() => {
-			scrollToCommentElement(latestOwnCommentId, true);
-		});
+		requestAnimationFrame(() => scrollToCommentElement(latestOwnCommentId, true, setHighlightedCommentId));
 	};
 
-	const handleLoadOlderComments = () => {
-		setVisibleStart((prev) => Math.max(0, prev - LATEST_CHUNK_SIZE));
-	};
+	const handleLoadOlderComments = () => setVisibleStart((prev) => Math.max(0, prev - LATEST_CHUNK_SIZE));
 
 	const handleToggleThread = (rootId: number) => {
 		setExpandedThreadRoots((prev) => {
 			const next = new Set(prev);
-			if (next.has(rootId)) {
-				next.delete(rootId);
-			} else {
-				next.add(rootId);
-			}
+			if (next.has(rootId)) next.delete(rootId);
+			else next.add(rootId);
 			return next;
 		});
 	};
 
+	// --- JSX ---
 	return (
 		<div className="comment-section">
 			<div className="comment-section-header">
@@ -708,13 +347,12 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					onClick={() => setIsPinnedModalOpen(true)}
 				>
 					<Pin size={14} />
-					고정 댓글
-					{pinnedComments.length > 0 ? ` ${pinnedComments.length}` : ""}
+					고정 댓글{pinnedComments.length > 0 ? ` ${pinnedComments.length}` : ""}
 				</button>
 			</div>
 
-				<div className="comment-stream" ref={streamRef}>
-					<div className="comment-list" style={{ paddingBottom: `${composerReserveHeight}px` }}>
+			<div className="comment-stream" ref={streamRef}>
+				<div className="comment-list" style={{ paddingBottom: `${composerReserveHeight}px` }}>
 					{hasOlderComments && (
 						<div className="older-loader">
 							<button type="button" className="btn btn-secondary btn-sm" onClick={handleLoadOlderComments}>
@@ -728,26 +366,18 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					) : (
 						renderRows.map((row) => {
 							if (row.type === "read-marker") {
-								return (
-									<div key={row.key} className="read-marker">
-										<span>여기부터 새 댓글</span>
-									</div>
-								);
+								return <ReadMarkerRow key={row.key} rowKey={row.key} />;
 							}
 							if (row.type === "thread-toggle") {
 								return (
-									<div key={row.key} className="thread-toggle-row">
-										<button
-											type="button"
-											className="thread-toggle-btn"
-											onClick={() => handleToggleThread(row.rootId)}
-										>
-											<ChevronDown size={14} className={row.isCollapsed ? "" : "expanded"} />
-											{row.isCollapsed
-												? `답글 ${row.replyCount}개 펼치기`
-												: `답글 ${row.replyCount}개 접기`}
-										</button>
-									</div>
+									<ThreadToggleRow
+										key={row.key}
+										rowKey={row.key}
+										rootId={row.rootId}
+										replyCount={row.replyCount}
+										isCollapsed={row.isCollapsed}
+										onToggle={handleToggleThread}
+									/>
 								);
 							}
 							return (
@@ -761,19 +391,14 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 									isCompact={row.item.isCompact}
 									isHighlighted={highlightedCommentId === row.item.comment.id}
 									shouldStartEdit={requestedEditCommentId === row.item.comment.id}
-									onEditRequestConsumed={(commentId) => {
-										setRequestedEditCommentId((prev) => (prev === commentId ? null : prev));
-									}}
+									onEditRequestConsumed={(cId) => setRequestedEditCommentId((prev) => (prev === cId ? null : prev))}
 									onNavigateToComment={handleNavigateToComment}
 									onReplyRequest={handleReplyRequest}
 									onEdit={handleCommentUpdate}
 									onPin={handleCommentPinToggle}
-									onDelete={(commentId, event) => {
-										if (event?.shiftKey) {
-											void handleCommentDeleteConfirmed(commentId);
-										} else {
-											setPendingDeleteId(commentId);
-										}
+									onDelete={(cId, event) => {
+										if (event?.shiftKey) void handleCommentDeleteConfirmed(cId, pendingDeleteId);
+										else setPendingDeleteId(cId);
 									}}
 									disabled={isLoading}
 								/>
@@ -784,8 +409,8 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				</div>
 			</div>
 
-				<div className="composer-dock">
-					<div className="composer-shell" id="comment-composer" ref={composerShellRef}>
+			<div className="composer-dock">
+				<div className="composer-shell" id="comment-composer" ref={composerShellRef}>
 					<CommentForm
 						onSubmit={(content) => handleCommentCreate(content, replyTarget?.parentId ?? null)}
 						onRequestEditLatestOwnComment={handleRequestEditLatestOwnComment}
@@ -800,51 +425,17 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				</div>
 			</div>
 
-			<Modal
+			<PinnedCommentsModal
 				isOpen={isPinnedModalOpen}
 				onClose={() => setIsPinnedModalOpen(false)}
-				title="고정 댓글"
-				size="md"
-				variant="sidebarLike"
-			>
-				{pinnedComments.length === 0 ? (
-					<p className="text-sm text-text-secondary">고정된 댓글 없음</p>
-				) : (
-					<ul className="pinned-list">
-						{pinnedComments.map((item) => (
-							<li key={item.id}>
-								<button
-									type="button"
-									className="pinned-item"
-									onClick={() => {
-										handlePinnedCommentSelect(item.id);
-									}}
-								>
-									<div className="pinned-item-meta">
-										<span className="pinned-item-author">@{item.authorNickname}</span>
-										<span className="pinned-item-date">
-											{new Date(item.createdAt).toLocaleString("ko-KR", {
-												month: "2-digit",
-												day: "2-digit",
-												hour: "2-digit",
-												minute: "2-digit",
-											})}
-										</span>
-									</div>
-									<p className="pinned-item-preview">{item.preview}</p>
-								</button>
-							</li>
-						))}
-					</ul>
-				)}
-			</Modal>
+				pinnedComments={pinnedComments}
+				onSelect={handlePinnedCommentSelect}
+			/>
 
 			<Modal
 				isOpen={pendingDeleteId !== null}
 				onClose={() => setPendingDeleteId(null)}
-				onEnter={() => {
-					void handleCommentDeleteConfirmed();
-				}}
+				onEnter={() => void handleCommentDeleteConfirmed(undefined, pendingDeleteId)}
 				title={text("comment.deleteTitle")}
 				size="sm"
 				variant="sidebarLike"
@@ -856,9 +447,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 						<button
 							type="button"
 							className="btn btn-danger btn-sm"
-							onClick={() => {
-								void handleCommentDeleteConfirmed();
-							}}
+							onClick={() => void handleCommentDeleteConfirmed(undefined, pendingDeleteId)}
 						>
 							{text("comment.deleteButton")}
 						</button>

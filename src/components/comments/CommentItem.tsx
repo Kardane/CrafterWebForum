@@ -162,8 +162,7 @@ export default function CommentItem({
 			await navigator.clipboard.writeText(comment.content);
 			markCopied("text");
 			showToast({ type: "success", message: "댓글 내용 복사 완료" });
-		} catch (error) {
-			console.error("Failed to copy comment text:", error);
+		} catch {
 			showToast({ type: "error", message: "복사 실패" });
 		} finally {
 			dismissToolbarFocus();
@@ -176,8 +175,7 @@ export default function CommentItem({
 			await navigator.clipboard.writeText(url);
 			markCopied("link");
 			showToast({ type: "success", message: "댓글 링크 복사 완료" });
-		} catch (error) {
-			console.error("Failed to copy comment link:", error);
+		} catch {
 			showToast({ type: "error", message: "복사 실패" });
 		} finally {
 			dismissToolbarFocus();

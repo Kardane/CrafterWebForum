@@ -2,7 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
-import { ArrowLeft, MessageCircle } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 import PostContent from "@/components/posts/PostContent";
 import LikeButton from "@/components/posts/LikeButton";
 import CommentSection from "@/components/comments/CommentSection";
@@ -158,9 +158,9 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 					</div>
 				</div>
 
-					<div className="mt-8">
-						<CommentSection postId={post.id} initialComments={comments} readMarker={readMarker} />
-					</div>
+				<div className="mt-8">
+					<CommentSection postId={post.id} initialComments={comments} readMarker={readMarker} />
+				</div>
 			</div>
 		</PostLikeStateProvider>
 	);
