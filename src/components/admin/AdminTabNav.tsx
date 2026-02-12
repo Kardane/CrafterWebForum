@@ -26,7 +26,7 @@ export default function AdminTabNav({ activeTab }: AdminTabNavProps) {
 	return (
 		<nav aria-label="관리자 탭" className="mb-5 overflow-x-auto">
 			<div className="inline-flex min-w-full items-center gap-2">
-				{ADMIN_TABS.map((tab, index) => {
+				{ADMIN_TABS.map((tab) => {
 					const isActive = tab.id === activeTab;
 					return (
 						<Link

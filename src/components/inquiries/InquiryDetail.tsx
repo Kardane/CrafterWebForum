@@ -33,8 +33,6 @@ interface InquiryDetailProps {
 export default function InquiryDetail({
 	inquiry,
 	replies,
-	currentUserId,
-	currentUserRole,
 }: InquiryDetailProps) {
 	const router = useRouter();
 	const [replyContent, setReplyContent] = useState('');

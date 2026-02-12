@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+
 import { useSession } from "next-auth/react";
 
 interface PollOption {
@@ -31,7 +31,7 @@ interface PollCardProps {
 /**
  * 투표 결과 카드 컴포넌트 - 레거시 스타일
  */
-export default function PollCard({ pollData, commentId, onVote }: PollCardProps) {
+export default function PollCard({ pollData, onVote }: PollCardProps) {
 	const { data: session } = useSession();
 	const userId = session?.user?.id?.toString() || "";
 

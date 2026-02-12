@@ -17,7 +17,7 @@ export default function RegisterPage() {
 	// 인증 코드 관련
 	const [authCode, setAuthCode] = useState("");
 	const [timeRemaining, setTimeRemaining] = useState(60);
-	const [isPolling, setIsPolling] = useState(false);
+	const [, setIsPolling] = useState(false);
 	const [verifiedNickname, setVerifiedNickname] = useState("");
 
 	// 회원가입 폼
@@ -44,7 +44,7 @@ export default function RegisterPage() {
 				startTimer();
 				startPolling(data.code);
 			}
-		} catch (error) {
+		} catch {
 			alert("코드 발급에 실패했습니다");
 		}
 	};
@@ -81,8 +81,8 @@ export default function RegisterPage() {
 					setVerifiedNickname(data.nickname);
 					setStep("register");
 				}
-			} catch (error) {
-				console.error("Polling error", error);
+			} catch {
+				// 폴링 실패는 조용히 무시 (다음 주기에 재시도)
 			}
 		}, 2000);
 	};
@@ -144,7 +144,7 @@ export default function RegisterPage() {
 			} else {
 				setPasswordError(data.message || "회원가입에 실패했습니다");
 			}
-		} catch (error) {
+		} catch {
 			setPasswordError("회원가입 중 오류가 발생했습니다");
 		} finally {
 			setIsSubmitting(false);
