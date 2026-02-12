@@ -83,7 +83,7 @@ This workspace contains two apps:
 
 - Frontend: `src/app`, `src/components`
 - Backend APIs: `src/app/api/**/route.ts`
-- Auth: `src/auth.ts`, `src/auth.config.ts`, `src/middleware.ts`
+- Auth: `src/auth.ts`, `src/auth.config.ts`, `src/proxy.ts`
 - Data: Prisma (`prisma/schema.prisma`) with local SQLite and production Turso(libSQL)
 
 Do not commit:
@@ -133,6 +133,7 @@ Run from each app directory:
 - Keep legacy `/post/[id]` compatibility only via canonical redirect middleware
 - Keep API response DTOs consistent with UI contracts
 - For comment APIs, keep `author` object and `replies` tree shape stable
+- Keep comment view logic split by responsibility: `CommentSection` (orchestration), `useCommentMutations` (API side effects), `useCommentScroll` (scroll restore), `comment-tree-ops` (pure immutable transforms)
 
 ### Auth and Authorization
 
@@ -164,8 +165,9 @@ Run from each app directory:
 ### API Surface
 
 - Avoid duplicating equivalent endpoints under different namespaces
-- Prefer one canonical profile/password API line (`/api/users/me*` or `/api/auth/*`) and deprecate the other intentionally
-- Current canonical line is `/api/users/me*`; keep `/api/auth/profile|password|reauth` as deprecated wrappers until removal window closes
+- Prefer one canonical profile/password API line (`/api/users/me*`) and keep `/api/auth/*` only as explicit deprecation bridge
+- `/api/auth/me|profile|reauth` now return `410 Gone`; do not reintroduce business logic on these paths
+- `/api/auth/password` is still a deprecated bridge and must keep deprecation headers targeting `/api/users/me/password` until final removal
 
 ### Data Layer
 
@@ -199,10 +201,10 @@ Before PR merge:
 
 ## Current Hotspots to Prioritize
 
-- Recover lint gate by scoping lint target away from `.agent/**` + `legacy/**`, then fixing remaining app-source errors (`SidebarSettingsModal` 우선)
-- Restore E2E gate by installing missing Playwright runtime dependency (`libnspr4`) and re-verifying `npm run test:e2e`
-- Migrate `src/middleware.ts` to Next.js 16 `proxy` convention to remove deprecation risk
-- Plan removal of deprecated `/api/auth/profile|password|reauth` after confirming no client dependency
+- Fix current lint gate blockers in comment split modules (`src/components/comments/CommentSection.tsx`, `src/components/comments/useCommentScroll.ts`)
+- Re-verify `npm run dev` / `npm run test:e2e` on unrestricted host (current sandbox blocks port bind: `EPERM 0.0.0.0:3000`)
+- Investigate webpack fallback build failure (`npx next build --webpack` exits with generic webpack errors in current environment)
+- Remove deprecated `/api/auth/password` after client migration 확인 (`/api/auth/me|profile|reauth`는 이미 `410 Gone`)
 - Rotate Turso auth token after migration since token was exposed in interactive session
 
 ## Legacy Report #2 Status (2026-02-11)

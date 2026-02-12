@@ -2,27 +2,29 @@
 
 ## 0. 리뷰 범위
 - 대상: `CrafterForumWeb_NextJS`
-- 기준: `src/app`, `src/components`, `src/app/api`, `src/lib`, `src/auth*`, `src/middleware.ts`, `prisma/schema.prisma`
+- 기준: `src/app`, `src/components`, `src/app/api`, `src/lib`, `src/auth*`, `src/proxy.ts`, `prisma/schema.prisma`
 - 레거시 비교 기준: `legacy/` (동작 참고용)
-- 최종 검증일: 2026-02-11
+- 최종 검증일: 2026-02-12
 
 ### 최신 검증 커맨드
-- `npm run lint` -> 미재검증 (마지막 전체 결과: 실패, `267 problems: 153 errors, 114 warnings`)
-- `npm test` -> 성공 (`19 files, 58 tests passed`)
-- `npm run build` -> 성공 (Next.js 16.1.6 Turbopack)
-- `npm run test:e2e` -> 미재검증 (마지막 전체 결과: 실패, `libnspr4.so` 런타임 라이브러리 누락으로 Chromium launch 실패)
-- `npm run db:migrate:turso -- --force` -> 성공 (SQLite -> Turso 이관 완료, FK 깨진 `PostRead` 4건 제외)
+- `npm run lint` -> 성공 (`12 warnings, 0 errors`)
+- `npm test` -> 성공 (`25 files, 100 tests passed`)
+- `npm run build` -> 실패 (현 세션 샌드박스 제약으로 Turbopack CSS 처리 중 `listen EPERM`)
+- `npx next build --webpack` -> 실패 (현 세션에서 generic webpack errors로 종료, 상세 원인 미표출)
+- `npm run dev` -> 실패 (현 세션 샌드박스 제약으로 `listen EPERM 0.0.0.0:3000`)
+- `npm run test:e2e` -> 실패 (Playwright `webServer`가 `npm run dev` 시작 실패를 전파)
+- `npm run db:migrate:turso -- --force` -> 이번 회차 미실행 (직전 성공 이력: 2026-02-11)
 
 ## 1. 한눈에 보는 구조
 이 프로젝트는 Next.js App Router 기반 단일 저장소 BFF 구조
 
 - 프론트엔드: `src/app`, `src/components`
 - 백엔드 API: `src/app/api/**/route.ts`
-- 인증/인가: `src/auth.ts`, `src/auth.config.ts`, `src/middleware.ts`, `src/lib/admin-auth.ts`
+- 인증/인가: `src/auth.ts`, `src/auth.config.ts`, `src/proxy.ts`, `src/lib/admin-auth.ts`
 - 데이터: Prisma (`prisma/schema.prisma`) + DB 어댑터 분기
   - local: SQLite (`prisma/dev.db`)
   - production: Turso(libSQL)
-- 공통 서비스: `src/lib/*` (rate limit, session id normalize, comments DTO, user service)
+- 공통 서비스: `src/lib/*` (rate limit, session id normalize, comments DTO/ops, embed pipeline, user service)
 
 ## 2. 레이어 구성
 ```text
@@ -32,6 +34,17 @@ src/
     admin/                # 관리자 페이지
     posts/, inquiries/    # 핵심 도메인 페이지
   components/             # 도메인 UI
+    comments/
+      CommentSection.tsx          # 댓글 오케스트레이터
+      useCommentMutations.ts      # 댓글 API mutation 훅
+      useCommentScroll.ts         # 댓글 스크롤/복원 훅
+      PinnedCommentsModal.tsx     # 고정 댓글 목록 모달
+      ReadMarkerRow.tsx           # 읽음 마커 행
+      ThreadToggleRow.tsx         # 스레드 접기/펼치기 행
+    sidebar/
+      SidebarSettingsModal.tsx    # 사이드바 설정 오케스트레이터
+      SettingsLinkItem.tsx        # 설정 링크 행
+      AddLinkModal.tsx            # 커스텀 링크 추가 모달
   lib/                    # 공통 서버 유틸/서비스
     prisma.ts             # Prisma singleton
     database-url.ts       # DB URL 스킴 판별
@@ -40,6 +53,12 @@ src/
     rate-limit-policies.ts# 정책 값 분리
     comments.ts           # 댓글 DTO 트리 계약
     comment-stream.ts     # 댓글 연속 compact 스트림 로직
+    comment-tree-ops.ts   # 댓글 트리 불변 조작 유틸
+    embeds/
+      index.ts            # 임베드 파이프라인 진입점
+      youtube.ts          # YouTube/Streamable 임베드
+      external-card.ts    # 외부 링크 카드 렌더링
+      media.ts            # 업로드/이미지 링크 처리
     session-user.ts       # 세션 ID 정규화
   constants/
     admin-trend.ts        # 관리자 추이 기간 옵션
@@ -66,7 +85,8 @@ legacy/                   # 레거시 동작 참조
 - 레거시 `/post/[id]`는 호환 redirect 레이어로만 유지
 - 댓글 계약 통일: `author` + `replies` 트리
 - 계정 canonical API: `/api/users/me*`
-- `/api/auth/profile|password|reauth`는 deprecation wrapper로 축소 유지
+- `/api/auth/me|profile|reauth`는 `410 Gone` tombstone 응답으로 전환
+- `/api/auth/password`는 deprecation bridge로만 유지 (`/api/users/me/password`로 이관 헤더 제공)
 
 ### 3.3 레이트리밋 공통화
 - 공통 엔진: `src/lib/rate-limit.ts`
@@ -144,40 +164,48 @@ legacy/                   # 레거시 동작 참조
 23. 프로필/댓글 아바타 로딩에 후보 URL fallback(`mineatar -> mc-heads`) 공통화
 24. 마크다운 블록 전환 구간의 과도한 `<br>` 정규화 처리
 25. 회귀 테스트 보강 (`upload`, `embeds`, `markdown` 관련 단위 테스트 추가/확장)
+26. 댓글 섹션 책임 분리: 오케스트레이션/스크롤/뮤테이션/행 컴포넌트 모듈화
+27. 댓글 트리 연산 순수 함수(`comment-tree-ops`) 분리 + 단위 테스트 21건 추가
+28. 사이드바 설정 모달 분리 (`SettingsLinkItem`, `AddLinkModal`)로 컴포넌트 복잡도 완화
+29. 임베드 처리기를 `src/lib/embeds/*`로 분리하고 기존 `src/lib/embeds.ts`를 호환 re-export로 유지
+30. deprecated `/api/auth/me|profile|reauth`를 `410 Gone` 정책으로 전환하고 회귀 테스트 반영
 
-### 5.1 레거시 2번 항목 반영 현황 (2026-02-11)
+### 5.1 레거시 2번 항목 반영 현황 (2026-02-12 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14
 - 미완료 또는 재검증 필요: #1, #2, #4, #5, #6, #8, #9, #11
 
 ## 6. 현재 리스크 평가
 
 ### High
-1. `npm run lint` 미통과
-- `.agent/**`, `legacy/**`가 lint 스코프에 포함되어 에러 대량 유입
-- 앱 코드에서도 `SidebarSettingsModal`의 `set-state-in-effect`, `no-explicit-any` 에러 잔존
+1. 런타임 검증 게이트 미통과
+- 현재 샌드박스에서 포트 바인딩이 제한되어 `dev/build/e2e`를 끝까지 검증하지 못함
 
 2. E2E 게이트 미통과
-- 실패 원인: Chromium 실행 시 `libnspr4.so` 누락
-- 현재는 테스트 코드 품질이 아니라 런타임 의존성 이슈가 게이트를 막는 상태
+- Playwright `webServer`가 시작되지 못해 테스트 본 실행 전 종료
+- 근본 원인: 현 세션에서 `npm run dev`가 `listen EPERM 0.0.0.0:3000`로 실패
 
-3. Turso 토큰 회전 필요
+3. Build 게이트 미통과
+- `npm run build`(Turbopack): 샌드박스 포트 바인딩 제한으로 `listen EPERM` 기반 내부 실패
+- `npx next build --webpack`: generic webpack errors로 종료되어 원인 재수집 필요
+
+4. Turso 토큰 회전 필요
 - 이관 과정에서 토큰이 채팅 로그에 노출됨
 - Turso 토큰 재발급 후 Vercel env 동기화 필요
 
 ### Medium
-1. Next.js 16 `middleware` 컨벤션 deprecation 경고
-- `src/middleware.ts` -> `proxy` 컨벤션 이관 필요
+1. Next.js 16 `middleware` 컨벤션 deprecation
+- `src/proxy.ts` 전환 완료, 더 이상 deprecation 경고 미노출
 
-2. deprecated `auth/*` wrapper 제거 미완료
-- 클라이언트 의존성 확인 후 제거 일정 확정 필요
+2. deprecated auth 라인 정리 작업 진행 중
+- `/api/auth/me|profile|reauth`는 410으로 고정됐지만 `/api/auth/password`는 아직 bridge 상태
+- 클라이언트 호출 경로를 완전히 `/api/users/me*`로 정리한 뒤 최종 제거 필요
 
 ## 7. 우선순위 제안
-1. ESLint 범위를 앱 코드 중심(`src`, `e2e`)으로 재정의하고 `.agent`, `legacy`는 분리
-2. `src/components/sidebar/SidebarSettingsModal.tsx` 고심각 lint 에러 우선 해결
-3. E2E 실행 환경에 Playwright 필수 라이브러리(`libnspr4`) 설치 후 재검증
-4. `middleware` -> `proxy` 마이그레이션 수행
-5. deprecated `/api/auth/profile|password|reauth` 제거 계획 확정
+1. 포트 바인딩 제한이 없는 환경에서 `dev/build/e2e` 재검증해 환경 이슈와 코드 이슈를 분리
+2. `npx next build --webpack` 실패 원인 로그를 CI 또는 로컬 unrestricted 환경에서 재수집
+3. `/api/auth/password` 호출처 정리 후 deprecated auth 라인 최종 제거
 
 ## 8. 결론
 핵심 백엔드 구조(인증/인가, API 계약, 레이트리밋, 관리자 운영 플로우)는 이전 대비 안정화됨
-현재 유지보수 난이도를 끌어올리는 주원인은 기능보다 품질 게이트 환경(`lint` 스코프, E2E 런타임 의존성)이며, 이를 먼저 정리하면 개발/배포 속도가 크게 개선됨
+현재 병목은 기능 결함보다 품질 게이트 재검증 흐름에 있음
+우선 lint blocker 2건을 정리하고, 포트 제한 없는 환경에서 build/e2e를 재수행하면 실제 코드 리스크를 정확히 분리해 다음 배포 사이클 안정성을 높일 수 있음
