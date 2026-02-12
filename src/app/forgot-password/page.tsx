@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import classNames from "classnames";
+import AuthShell from "@/components/auth/AuthShell";
+import styles from "@/components/auth/AuthShell.module.css";
 import { text } from "@/lib/system-text";
 
 interface CodeCheckResponse {
@@ -144,297 +147,114 @@ export default function ForgotPasswordPage() {
 	);
 
 	return (
-		<div className="auth-container">
-			<div className="auth-card">
-				<div className="auth-header">
-					<img src="/img/Crafter.png" alt="Logo" className="auth-logo" />
-					<h1 className="auth-title">{text("passwordReset.title")}</h1>
-					<p className="auth-subtitle">
-						{step === "auth"
-							? text("passwordReset.subtitleAuth")
-							: text("passwordReset.subtitleForm")}
-					</p>
-				</div>
-
-				{step === "auth" && (
-					<div className="auth-step">
-						{!authCode ? (
-							<button type="button" onClick={() => void generateCode()} className="btn btn-primary btn-block">
-								{text("passwordReset.startAuthButton")}
-							</button>
-						) : (
-							<>
-								<div className="code-display">
-									<div className="code-box">
-										<span className="code-text">{authCode}</span>
-									</div>
-									<p className="code-instruction">
-										{text("passwordReset.codeInstruction")}
-										<br />
-										<code className="code-command">/forum auth {authCode}</code>
-									</p>
-									<p className="code-timer">
-										{text("passwordReset.codeRefreshIn", { seconds: timeRemaining })}
-									</p>
-								</div>
-								{isPolling && (
-									<div className="loading-spinner">
-										<div className="spinner" />
-										{text("passwordReset.waitingAuth")}
-									</div>
-								)}
-							</>
-						)}
-					</div>
-				)}
-
-				{step === "reset" && (
-					<form onSubmit={handleSubmit} className="auth-form">
-						<div className="form-group">
-							<label className="form-label" htmlFor="nickname">
-								{text("passwordReset.verifiedNicknameLabel")}
-							</label>
-							<input
-								id="nickname"
-								type="text"
-								className="form-input form-input-readonly"
-								value={verifiedNickname}
-								readOnly
-							/>
-						</div>
-
-						<div className="form-group">
-							<label className="form-label" htmlFor="newPassword">
-								{text("passwordReset.newPasswordLabel")}
-							</label>
-							<input
-								id="newPassword"
-								type="password"
-								className="form-input"
-								placeholder={text("passwordReset.newPasswordPlaceholder")}
-								value={newPassword}
-								onChange={(event) => setNewPassword(event.target.value)}
-								disabled={isSubmitting}
-								required
-							/>
-						</div>
-
-						<div className="form-group">
-							<label className="form-label" htmlFor="confirmPassword">
-								{text("passwordReset.confirmPasswordLabel")}
-							</label>
-							<input
-								id="confirmPassword"
-								type="password"
-								className="form-input"
-								placeholder={text("passwordReset.confirmPasswordPlaceholder")}
-								value={confirmPassword}
-								onChange={(event) => setConfirmPassword(event.target.value)}
-								disabled={isSubmitting}
-								required
-							/>
-						</div>
-
-						{formError && <div className="auth-error">{formError}</div>}
-
-						<button type="submit" className="btn btn-primary btn-block" disabled={isSubmitting}>
-							{isSubmitting
-								? text("passwordReset.submittingButton")
-								: text("passwordReset.submitButton")}
+		<AuthShell
+			title={text("passwordReset.title")}
+			subtitle={
+				step === "auth"
+					? text("passwordReset.subtitleAuth")
+					: text("passwordReset.subtitleForm")
+			}
+			align="center"
+			logoSize={72}
+			footer={<Link href="/login">{text("auth.backToLogin")}</Link>}
+		>
+			{step === "auth" && (
+				<div className={styles.step}>
+					{!authCode ? (
+						<button
+							type="button"
+							onClick={() => void generateCode()}
+							className={classNames("btn btn-primary", styles.fullWidthButton)}
+						>
+							{text("passwordReset.startAuthButton")}
 						</button>
-					</form>
-				)}
+					) : (
+						<>
+							<div className={styles.codeDisplay}>
+								<div className={styles.codeBox}>
+									<span className={styles.codeText}>{authCode}</span>
+								</div>
+								<p className={styles.codeInstruction}>
+									{text("passwordReset.codeInstruction")}
+									<br />
+									<code className={styles.codeCommand}>/forum auth {authCode}</code>
+								</p>
+								<p className={styles.codeTimer}>
+									{text("passwordReset.codeRefreshIn", { seconds: timeRemaining })}
+								</p>
+							</div>
 
-				<div className="auth-footer">
-					<Link href="/login">{text("auth.backToLogin")}</Link>
+							{isPolling && (
+								<div className={styles.spinnerLine}>
+									<div className={styles.spinner} />
+									{text("passwordReset.waitingAuth")}
+								</div>
+							)}
+						</>
+					)}
 				</div>
-			</div>
+			)}
 
-			<style jsx>{`
-				.auth-container {
-					min-height: 100vh;
-					min-height: 100dvh;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-					padding: 20px;
-					padding-bottom: max(20px, env(safe-area-inset-bottom));
-					background: url("/img/background.png") center/cover no-repeat;
-					background-attachment: scroll;
-				}
+			{step === "reset" && (
+				<form onSubmit={handleSubmit} className={styles.form}>
+					<div className={styles.formGroup}>
+						<label className={styles.formLabel} htmlFor="nickname">
+							{text("passwordReset.verifiedNicknameLabel")}
+						</label>
+						<input
+							id="nickname"
+							type="text"
+							className={classNames(styles.formInput, styles.formInputReadonly)}
+							value={verifiedNickname}
+							readOnly
+						/>
+					</div>
 
-				.auth-card {
-					background: rgba(30, 32, 36, 0.82);
-					border-radius: 12px;
-					padding: 32px;
-					width: 100%;
-					max-width: 440px;
-					box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-					backdrop-filter: blur(10px);
-				}
+					<div className={styles.formGroup}>
+						<label className={styles.formLabel} htmlFor="newPassword">
+							{text("passwordReset.newPasswordLabel")}
+						</label>
+						<input
+							id="newPassword"
+							type="password"
+							className={styles.formInput}
+							placeholder={text("passwordReset.newPasswordPlaceholder")}
+							value={newPassword}
+							onChange={(event) => setNewPassword(event.target.value)}
+							disabled={isSubmitting}
+							required
+						/>
+					</div>
 
-				.auth-header {
-					text-align: center;
-					margin-bottom: 20px;
-				}
+					<div className={styles.formGroup}>
+						<label className={styles.formLabel} htmlFor="confirmPassword">
+							{text("passwordReset.confirmPasswordLabel")}
+						</label>
+						<input
+							id="confirmPassword"
+							type="password"
+							className={styles.formInput}
+							placeholder={text("passwordReset.confirmPasswordPlaceholder")}
+							value={confirmPassword}
+							onChange={(event) => setConfirmPassword(event.target.value)}
+							disabled={isSubmitting}
+							required
+						/>
+					</div>
 
-				.auth-logo {
-					width: 72px;
-					height: 72px;
-					margin: 0 auto 16px;
-					display: block;
-					image-rendering: pixelated;
-				}
+					{formError && <div className={styles.formError}>{formError}</div>}
 
-				.auth-title {
-					font-size: 1.45rem;
-					font-weight: 700;
-					margin-bottom: 6px;
-					color: var(--color-text-primary);
-				}
-
-				.auth-subtitle {
-					color: var(--color-text-secondary);
-					font-size: 0.9rem;
-				}
-
-				.auth-form {
-					display: flex;
-					flex-direction: column;
-					gap: 14px;
-				}
-
-				.form-group {
-					display: flex;
-					flex-direction: column;
-					gap: 6px;
-				}
-
-				.form-label {
-					font-size: 0.9rem;
-					font-weight: 500;
-					color: var(--color-text-secondary);
-				}
-
-				.form-input {
-					width: 100%;
-					padding: 10px 12px;
-					background: rgba(0, 0, 0, 0.32);
-					border: 1px solid var(--color-border);
-					border-radius: 4px;
-					color: var(--color-text-primary);
-					font-size: 0.95rem;
-				}
-
-				.form-input:focus {
-					outline: none;
-					border-color: var(--color-accent);
-				}
-
-				.form-input-readonly {
-					opacity: 0.78;
-					cursor: default;
-				}
-
-				.auth-error {
-					color: var(--color-error);
-					font-size: 0.85rem;
-					font-weight: 600;
-				}
-
-				.code-display {
-					border: 1px solid var(--color-border);
-					border-radius: 8px;
-					padding: 16px;
-					background: rgba(0, 0, 0, 0.25);
-				}
-
-				.code-box {
-					border-radius: 8px;
-					border: 1px solid var(--color-border);
-					padding: 10px 12px;
-					text-align: center;
-					background: rgba(0, 0, 0, 0.3);
-					margin-bottom: 10px;
-				}
-
-				.code-text {
-					font-family: "JetBrains Mono", monospace;
-					letter-spacing: 0.14em;
-					font-size: 1rem;
-					font-weight: 700;
-					color: var(--color-text-primary);
-				}
-
-				.code-instruction {
-					color: var(--color-text-secondary);
-					font-size: 0.85rem;
-					line-height: 1.45;
-				}
-
-				.code-command {
-					display: inline-block;
-					margin-top: 4px;
-					padding: 2px 6px;
-					background: rgba(0, 0, 0, 0.35);
-					border-radius: 4px;
-					color: #fff;
-				}
-
-				.code-timer {
-					margin-top: 8px;
-					color: var(--color-text-muted);
-					font-size: 0.8rem;
-				}
-
-				.loading-spinner {
-					display: inline-flex;
-					align-items: center;
-					gap: 8px;
-					margin-top: 12px;
-					color: var(--color-text-secondary);
-					font-size: 0.9rem;
-				}
-
-				.spinner {
-					width: 16px;
-					height: 16px;
-					border: 2px solid var(--color-border);
-					border-top-color: var(--color-accent);
-					border-radius: 999px;
-					animation: spin 1s linear infinite;
-				}
-
-				.btn-block {
-					width: 100%;
-					padding: 11px;
-					font-size: 0.96rem;
-				}
-
-				.auth-footer {
-					margin-top: 16px;
-					text-align: center;
-					font-size: 0.9rem;
-				}
-
-				.auth-footer a {
-					color: var(--color-accent);
-					text-decoration: none;
-				}
-
-				.auth-footer a:hover {
-					text-decoration: underline;
-				}
-
-				@keyframes spin {
-					from {
-						transform: rotate(0deg);
-					}
-					to {
-						transform: rotate(360deg);
-					}
-				}
-			`}</style>
-		</div>
+					<button
+						type="submit"
+						className={classNames("btn btn-primary", styles.fullWidthButton)}
+						disabled={isSubmitting}
+					>
+						{isSubmitting
+							? text("passwordReset.submittingButton")
+							: text("passwordReset.submitButton")}
+					</button>
+				</form>
+			)}
+		</AuthShell>
 	);
 }

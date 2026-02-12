@@ -18,7 +18,9 @@ export default function MainLayout({ children }: MainLayoutProps) {
 	const isAuthPage =
 		pathname.startsWith("/login") ||
 		pathname.startsWith("/register") ||
-		pathname.startsWith("/forgot-password");
+		pathname.startsWith("/forgot-password") ||
+		pathname.startsWith("/pending") ||
+		pathname.startsWith("/auth/");
 	const isPostDetailPage = pathname.includes("/posts/") && !pathname.includes("/new") && !pathname.includes("/edit");
 	const isPostEditPage = /^\/posts\/[^/]+\/edit(?:\/|$)/.test(pathname);
 	const isComposerPage = pathname.includes("/new") || pathname.includes("/inquiries/new") || isPostEditPage;
