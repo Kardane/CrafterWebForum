@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import classNames from "classnames";
 import { Settings, HelpCircle, Shield } from "lucide-react";
 import SidebarSettingsModal from "../sidebar/SidebarSettingsModal";
+import SafeImage from "@/components/ui/SafeImage";
 import { DEFAULT_SETTINGS, getSidebarSettings, normalizeSidebarUrl } from "@/lib/sidebar-settings";
 import { SidebarLink, DEFAULT_LINKS, compareSidebarLinks } from "@/lib/sidebar-links";
 import { isPrivilegedNickname } from "@/config/admin-policy";
@@ -156,7 +158,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 		);
 
 		const icon = (
-			<img
+			<SafeImage
 				src={link.icon_url || "https://via.placeholder.com/20"}
 				className="h-5 w-5 rounded object-contain"
 				alt=""
@@ -223,9 +225,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 							<Link href="/profile" className="flex min-w-0 flex-1 items-center gap-2">
 								<div className="h-8 w-8 shrink-0 overflow-hidden rounded-md border border-border bg-bg-secondary">
 									{user.minecraftUuid ? (
-										<img
+										<Image
 											src={getMinecraftHeadUrl(user.minecraftUuid) || ""}
 											alt={user.nickname}
+											width={32}
+											height={32}
 											className="h-full w-full object-cover"
 										/>
 									) : (

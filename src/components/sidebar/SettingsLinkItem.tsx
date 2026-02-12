@@ -8,6 +8,7 @@
 import type { DragEvent } from "react";
 import { GripVertical, Eye, EyeOff, Trash2 } from "lucide-react";
 import type { SidebarLink } from "@/lib/sidebar-links";
+import SafeImage from "@/components/ui/SafeImage";
 
 interface SettingsLinkItemProps {
 	item: SidebarLink;
@@ -45,9 +46,11 @@ export default function SettingsLinkItem({
 				</div>
 
 				{/* 아이콘 */}
-				<img
+				<SafeImage
 					src={item.icon_url || "https://via.placeholder.com/20"}
 					alt=""
+					width={20}
+					height={20}
 					className="item-icon"
 				/>
 

@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
+import Image from "next/image";
 import { MessageCircle } from "lucide-react";
 import PostContent from "@/components/posts/PostContent";
 import LikeButton from "@/components/posts/LikeButton";
@@ -126,9 +127,11 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 
 						<div className="flex items-center gap-3 py-3 border-b border-border">
 							{post.author_uuid ? (
-								<img
+								<Image
 									src={getMinecraftHeadUrl(post.author_uuid, 40) || ""}
 									alt=""
+									width={40}
+									height={40}
 									className="w-10 h-10 rounded-[4px] [image-rendering:pixelated]"
 								/>
 							) : (

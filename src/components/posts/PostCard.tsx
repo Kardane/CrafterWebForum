@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ko } from "date-fns/locale";
 import { MessageSquare } from "lucide-react";
 import LikeButton from "./LikeButton";
+import SafeImage from "@/components/ui/SafeImage";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
 
 interface PostCardProps {
@@ -109,9 +110,11 @@ export default function PostCard({
 
 				{thumb && (
 					<div className="w-24 h-24 flex-shrink-0 rounded-md overflow-hidden bg-bg-tertiary border border-border">
-						<img
+						<SafeImage
 							src={thumb}
 							alt="thumbnail"
+							width={96}
+							height={96}
 							className="w-full h-full object-cover"
 							loading="lazy"
 						/>

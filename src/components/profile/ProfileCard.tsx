@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import MinecraftReauth from './MinecraftReauth';
+import SafeImage from '@/components/ui/SafeImage';
 import { buildAvatarCandidates } from '@/lib/avatar';
 
 interface ProfileCardProps {
@@ -39,9 +40,11 @@ export default function ProfileCard({ user }: ProfileCardProps) {
 				<div className="relative">
 					<div className="w-24 h-24 rounded-lg overflow-hidden border border-border bg-bg-tertiary">
 						{avatarSrc ? (
-							<img
+							<SafeImage
 								src={avatarSrc}
 								alt={user.nickname}
+								width={96}
+								height={96}
 								className="w-full h-full object-cover"
 								onError={() => {
 									setAvatarState((prev) => ({
