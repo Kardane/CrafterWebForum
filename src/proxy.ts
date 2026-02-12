@@ -4,10 +4,10 @@ import { auth } from "@/auth.config";
 import { isPrivilegedNickname } from "@/config/admin-policy";
 
 /**
- * NextAuth.js 미들웨어
+ * NextAuth.js 프록시
  * 보호된 라우트에 대한 인증 및 권한 검증
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
 	const { pathname } = request.nextUrl;
 
 	// 구 라우트(/post/:id) 접근 시 canonical 경로(/posts/:id)로 강제 이동
@@ -59,7 +59,7 @@ export async function middleware(request: NextRequest) {
 	return NextResponse.next();
 }
 
-// 미들웨어 적용 경로 설정
+// 프록시 적용 경로 설정
 export const config = {
 	matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
 };
