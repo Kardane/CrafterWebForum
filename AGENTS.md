@@ -131,6 +131,7 @@ Run from each app directory:
 - Post detail route is canonicalized as `/posts/[id]`
 - Never use `/post/[id]` for new links or redirects
 - Keep legacy `/post/[id]` compatibility only via canonical redirect middleware
+- Keep auth-layout route detection aligned with UX expectations (`/login`, `/register`, `/forgot-password`, `/pending`, `/auth/*`)
 - Keep API response DTOs consistent with UI contracts
 - For comment APIs, keep `author` object and `replies` tree shape stable
 - Keep comment view logic split by responsibility: `CommentSection` (orchestration), `useCommentMutations` (API side effects), `useCommentScroll` (scroll restore), `comment-tree-ops` (pure immutable transforms)
@@ -188,7 +189,9 @@ Run from each app directory:
 - Avatar rendering should use shared candidate fallback helper (`src/lib/avatar.ts`) for profile/comment surfaces
 - Normalize markdown line breaks around block transitions to avoid redundant `<br>` stacking
 - Comment composer should support `ArrowUp` shortcut (empty input + caret at start) to edit latest own visible comment
-- Auth pages (`/login`, `/register`, `/pending`) must preserve safe-area bottom padding on mobile
+- Auth pages (`/login`, `/register`, `/forgot-password`, `/pending`) must preserve safe-area bottom padding on mobile
+- Auth pages should use shared shell (`src/components/auth/AuthShell.tsx`) instead of per-page inline `style jsx`
+- Auth hero background/logo should use `next/image` with fixed intrinsic sizing to reduce CLS risk
 
 ## Quality Gate for PR
 
@@ -201,9 +204,9 @@ Before PR merge:
 
 ## Current Hotspots to Prioritize
 
-- Fix current lint gate blockers in comment split modules (`src/components/comments/CommentSection.tsx`, `src/components/comments/useCommentScroll.ts`)
-- Re-verify `npm run dev` / `npm run test:e2e` on unrestricted host (current sandbox blocks port bind: `EPERM 0.0.0.0:3000`)
-- Investigate webpack fallback build failure (`npx next build --webpack` exits with generic webpack errors in current environment)
+- Reduce remaining `@next/next/no-img-element` warnings on high-traffic surfaces (`posts`, `comments`, `sidebar`, `profile`)
+- Re-measure production Web Vitals after auth-shell refactor (target: FCP/LCP < 2.5s, CLS < 0.1)
+- Evaluate Next.js `allowedDevOrigins` for `127.0.0.1` dev/e2e warning path
 - Remove deprecated `/api/auth/password` after client migration 확인 (`/api/auth/me|profile|reauth`는 이미 `410 Gone`)
 - Rotate Turso auth token after migration since token was exposed in interactive session
 

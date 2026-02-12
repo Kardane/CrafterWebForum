@@ -7,12 +7,12 @@
 - 최종 검증일: 2026-02-12
 
 ### 최신 검증 커맨드
-- `npm run lint` -> 성공 (`12 warnings, 0 errors`)
+- `npm run lint` -> 성공 (`8 warnings, 0 errors`)
 - `npm test` -> 성공 (`25 files, 100 tests passed`)
-- `npm run build` -> 실패 (현 세션 샌드박스 제약으로 Turbopack CSS 처리 중 `listen EPERM`)
-- `npx next build --webpack` -> 실패 (현 세션에서 generic webpack errors로 종료, 상세 원인 미표출)
-- `npm run dev` -> 실패 (현 세션 샌드박스 제약으로 `listen EPERM 0.0.0.0:3000`)
-- `npm run test:e2e` -> 실패 (Playwright `webServer`가 `npm run dev` 시작 실패를 전파)
+- `npm run build` -> 성공 (Turbopack production build 완료)
+- `npx next build --webpack` -> 이번 회차 미실행 (직전 실패 이력: 2026-02-12, 원인 재수집 필요)
+- `npm run dev` -> 단독 실행 미검증 (단, `npm run test:e2e`의 `webServer` 구동은 성공)
+- `npm run test:e2e` -> 성공 (`5 passed`)
 - `npm run db:migrate:turso -- --force` -> 이번 회차 미실행 (직전 성공 이력: 2026-02-11)
 
 ## 1. 한눈에 보는 구조
@@ -34,6 +34,9 @@ src/
     admin/                # 관리자 페이지
     posts/, inquiries/    # 핵심 도메인 페이지
   components/             # 도메인 UI
+    auth/
+      AuthShell.tsx               # 인증 페이지 공통 레이아웃 셸
+      AuthShell.module.css        # 인증 페이지 공통 스타일
     comments/
       CommentSection.tsx          # 댓글 오케스트레이터
       useCommentMutations.ts      # 댓글 API mutation 훅
@@ -169,6 +172,10 @@ legacy/                   # 레거시 동작 참조
 28. 사이드바 설정 모달 분리 (`SettingsLinkItem`, `AddLinkModal`)로 컴포넌트 복잡도 완화
 29. 임베드 처리기를 `src/lib/embeds/*`로 분리하고 기존 `src/lib/embeds.ts`를 호환 re-export로 유지
 30. deprecated `/api/auth/me|profile|reauth`를 `410 Gone` 정책으로 전환하고 회귀 테스트 반영
+31. 인증 페이지 공통 셸(`AuthShell`) 도입으로 `/login`, `/register`, `/forgot-password`, `/pending`의 중복 inline 스타일 제거
+32. 인증 배경/로고를 `next/image` 기반으로 전환하고 고정 치수/`sizes`/`quality`로 CLS 리스크 완화
+33. `MainLayout`의 auth 레이아웃 분기 확대 (`/pending`, `/auth/*` 포함)로 인증 UX 일관성 강화
+34. `next.config.ts` 이미지 최적화 설정 보강 (`formats: avif/webp`, `qualities: [62, 75]`)
 
 ### 5.1 레거시 2번 항목 반영 현황 (2026-02-12 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14
@@ -177,35 +184,32 @@ legacy/                   # 레거시 동작 참조
 ## 6. 현재 리스크 평가
 
 ### High
-1. 런타임 검증 게이트 미통과
-- 현재 샌드박스에서 포트 바인딩이 제한되어 `dev/build/e2e`를 끝까지 검증하지 못함
-
-2. E2E 게이트 미통과
-- Playwright `webServer`가 시작되지 못해 테스트 본 실행 전 종료
-- 근본 원인: 현 세션에서 `npm run dev`가 `listen EPERM 0.0.0.0:3000`로 실패
-
-3. Build 게이트 미통과
-- `npm run build`(Turbopack): 샌드박스 포트 바인딩 제한으로 `listen EPERM` 기반 내부 실패
-- `npx next build --webpack`: generic webpack errors로 종료되어 원인 재수집 필요
-
-4. Turso 토큰 회전 필요
+1. Turso 토큰 회전 필요
 - 이관 과정에서 토큰이 채팅 로그에 노출됨
 - Turso 토큰 재발급 후 Vercel env 동기화 필요
 
 ### Medium
-1. Next.js 16 `middleware` 컨벤션 deprecation
-- `src/proxy.ts` 전환 완료, 더 이상 deprecation 경고 미노출
+1. `@next/next/no-img-element` 경고 잔존
+- 현재 8개 경고가 남아 있으며 `posts/comments/sidebar/profile` 표면에서 점진적 `next/image` 전환 필요
 
 2. deprecated auth 라인 정리 작업 진행 중
 - `/api/auth/me|profile|reauth`는 410으로 고정됐지만 `/api/auth/password`는 아직 bridge 상태
 - 클라이언트 호출 경로를 완전히 `/api/users/me*`로 정리한 뒤 최종 제거 필요
 
+3. dev/e2e 환경의 `allowedDevOrigins` 경고
+- Playwright 실행 중 `127.0.0.1 -> /_next/*` 교차 origin 경고가 출력됨
+- 차기 Next.js 메이저 대비 사전 설정 검토 필요
+
+4. 프로덕션 CWV 재측정 필요
+- 인증 페이지 렌더 구조는 경량화했지만, Vercel 실측 FCP/LCP/CLS 재수집으로 개선폭 확인 필요
+
 ## 7. 우선순위 제안
-1. 포트 바인딩 제한이 없는 환경에서 `dev/build/e2e` 재검증해 환경 이슈와 코드 이슈를 분리
-2. `npx next build --webpack` 실패 원인 로그를 CI 또는 로컬 unrestricted 환경에서 재수집
-3. `/api/auth/password` 호출처 정리 후 deprecated auth 라인 최종 제거
+1. `/api/auth/password` 호출처를 `/api/users/me/password`로 완전 이관 후 bridge 제거
+2. `posts/comments/sidebar/profile`의 `<img>`를 트래픽 우선순위 기준으로 `next/image` 전환
+3. Vercel Web Vitals(FCP/LCP/CLS)를 인증 페이지 기준으로 재측정하고 개선값 기록
+4. `allowedDevOrigins` 설정 여부를 결정하고 CI/dev 표준값으로 문서화
 
 ## 8. 결론
-핵심 백엔드 구조(인증/인가, API 계약, 레이트리밋, 관리자 운영 플로우)는 이전 대비 안정화됨
-현재 병목은 기능 결함보다 품질 게이트 재검증 흐름에 있음
-우선 lint blocker 2건을 정리하고, 포트 제한 없는 환경에서 build/e2e를 재수행하면 실제 코드 리스크를 정확히 분리해 다음 배포 사이클 안정성을 높일 수 있음
+핵심 백엔드 구조(인증/인가, API 계약, 레이트리밋, 관리자 운영 플로우)는 안정화 상태를 유지
+이번 회차에서 auth 화면 공통화와 이미지 최적화 경로를 정리해 성능 병목 지점을 구조적으로 축소
+현재 우선 리스크는 기능 결함보다 운영 품질 항목(토큰 회전, deprecated 경로 제거, 잔존 이미지 경고, 실측 CWV 추적)에 집중됨
