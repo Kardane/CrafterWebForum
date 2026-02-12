@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { processAllEmbeds, processYouTubeEmbeds } from "@/lib/embeds";
+import { processAllEmbeds, processYouTubeEmbeds, escapeHtml, createStreamableEmbed } from "@/lib/embeds";
 import { processMarkdown } from "@/lib/markdown";
 
 describe("embed utils", () => {
@@ -38,5 +38,32 @@ describe("embed utils", () => {
 		expect(html).toContain("external-link-card");
 		expect(html).toContain("minecraft.wiki");
 		expect(html).toContain("external-link-card__icon");
+	});
+
+	it("converts youtube.com/watch format into iframe", () => {
+		const html = processYouTubeEmbeds("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
+		expect(html).toContain("youtube.com/embed/dQw4w9WgXcQ");
+	});
+
+	it("converts streamable links into iframe embeds", () => {
+		const embed = createStreamableEmbed("abc123");
+		expect(embed).toContain("streamable.com/e/abc123");
+		expect(embed).toContain("<iframe");
+	});
+
+	it("escapeHtml escapes special characters", () => {
+		expect(escapeHtml('<script>alert("xss")</script>')).toBe(
+			"&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;"
+		);
+		expect(escapeHtml("a & b")).toBe("a &amp; b");
+		expect(escapeHtml("it's")).toBe("it&#039;s");
+	});
+
+	it("protects pre/code/img tags from being re-processed", () => {
+		const preBlock = '<pre><code>https://youtu.be/dQw4w9WgXcQ</code></pre>';
+		const result = processAllEmbeds(preBlock);
+		// pre/code 내부의 URL은 iframe으로 변환되면 안 됨
+		expect(result).toContain("<pre><code>");
+		expect(result).not.toContain("embed-container");
 	});
 });
