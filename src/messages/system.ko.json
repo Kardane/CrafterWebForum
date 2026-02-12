@@ -9,7 +9,7 @@
 	},
 	"postFilters": {
 		"newPost": "새 포스트",
-		"searchPlaceholder": "포스트 검색...",
+		"searchPlaceholder": "포스트/댓글 검색...",
 		"searchButton": "검색",
 		"tagsButton": "태그",
 		"allTag": "전체",
@@ -22,7 +22,7 @@
 	},
 	"comment": {
 		"deleteTitle": "댓글 삭제",
-		"deleteConfirm": "선택한 댓글을 삭제할까",
+		"deleteConfirm": "선택한 댓글을 삭제할까요?",
 		"deleteButton": "삭제",
 		"cancelButton": "취소",
 		"submitButton": "전송",

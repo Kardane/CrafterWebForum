@@ -6,6 +6,7 @@ import { Reply, Copy, Link2, Edit, Trash2, Pin, Check } from "lucide-react";
 import PostContent from "../posts/PostContent";
 import CommentForm from "./CommentForm";
 import PollCard from "@/components/poll/PollCard";
+import SafeImage from "@/components/ui/SafeImage";
 import { extractPollData } from "@/lib/poll";
 import { toSessionUserId } from "@/lib/session-user";
 import { useToast } from "@/components/ui/useToast";
@@ -215,9 +216,11 @@ export default function CommentItem({
 					<div className={`comment-avatar ${isCompact ? "compact-spacer" : ""}`}>
 						{!isCompact &&
 							(avatarSrc ? (
-								<img
+								<SafeImage
 									src={avatarSrc}
 									alt=""
+									width={36}
+									height={36}
 									className="avatar-img"
 									onError={() => {
 										setAvatarState((prev) => ({
@@ -506,6 +509,9 @@ export default function CommentItem({
 
 				.comment-body :global(.link-text) {
 					color: var(--text-primary) !important;
+					text-decoration: underline;
+					text-decoration-thickness: 1px;
+					text-underline-offset: 2px;
 				}
 
 				.comment-body :global(.post-content) {

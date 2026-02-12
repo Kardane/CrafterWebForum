@@ -137,4 +137,27 @@ describe("GET /api/posts", () => {
 			})
 		);
 	});
+
+	it("search query includes comment content condition", async () => {
+		authMock.mockResolvedValue(null);
+		postFindManyMock.mockResolvedValue([]);
+		postCountMock.mockResolvedValue(0);
+
+		const { GET } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts?search=레드스톤");
+
+		const res = await GET(req as never);
+		expect(res.status).toBe(200);
+		expect(postFindManyMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					OR: expect.arrayContaining([
+						{ title: { contains: "레드스톤" } },
+						{ content: { contains: "레드스톤" } },
+						{ comments: { some: { content: { contains: "레드스톤" } } } },
+					]),
+				}),
+			})
+		);
+	});
 });

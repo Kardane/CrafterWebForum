@@ -149,4 +149,28 @@ describe("flattenCommentsForStream", () => {
 			true,
 		]);
 	});
+
+	it("답글이 포함된 연속 댓글은 compact 처리하지 않음", () => {
+		const comments = [
+			makeComment({
+				id: 1,
+				authorId: 1,
+				createdAt: "2026-02-08T00:00:00.000Z",
+			}),
+			makeComment({
+				id: 2,
+				authorId: 1,
+				parentId: 1,
+				createdAt: "2026-02-08T00:01:00.000Z",
+			}),
+			makeComment({
+				id: 3,
+				authorId: 1,
+				createdAt: "2026-02-08T00:02:00.000Z",
+			}),
+		];
+
+		const flattened = flattenCommentsForStream(comments);
+		expect(flattened.map((item) => item.isCompact)).toEqual([false, false, false]);
+	});
 });

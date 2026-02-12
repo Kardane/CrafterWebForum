@@ -59,6 +59,10 @@ function shouldCompactWithPrevious(
 	if (previous.comment.isPinned || current.comment.isPinned) {
 		return false;
 	}
+	// 답글 흐름에서는 compact를 비활성화해 문맥 전환을 명확히 보이게 함
+	if (previous.comment.parentId !== null || current.comment.parentId !== null) {
+		return false;
+	}
 	if (previous.comment.author.id !== current.comment.author.id) {
 		return false;
 	}

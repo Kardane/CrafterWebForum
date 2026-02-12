@@ -11,6 +11,7 @@ import { Pin } from "lucide-react";
 import CommentItem from "./CommentItem";
 import CommentForm from "./CommentForm";
 import PinnedCommentsModal from "./PinnedCommentsModal";
+import CommentDateDividerRow from "./CommentDateDividerRow";
 import ReadMarkerRow from "./ReadMarkerRow";
 import ThreadToggleRow from "./ThreadToggleRow";
 import { Modal } from "@/components/ui/Modal";
@@ -56,6 +57,7 @@ interface PinnedCommentItem {
 }
 
 type RenderRow =
+	| { type: "date-divider"; key: string; label: string }
 	| { type: "read-marker"; key: string }
 	| { type: "comment"; key: string; item: FlattenedComment }
 	| { type: "thread-toggle"; key: string; rootId: number; replyCount: number; isCollapsed: boolean };
@@ -63,6 +65,27 @@ type RenderRow =
 interface InitialCommentViewState {
 	visibleStart: number;
 	expandedThreadRoots: Set<number>;
+}
+
+function toDateKey(value: string): string {
+	const date = new Date(value);
+	if (!Number.isFinite(date.getTime())) {
+		return "invalid";
+	}
+	return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function toDateLabel(value: string): string {
+	const date = new Date(value);
+	if (!Number.isFinite(date.getTime())) {
+		return "날짜 알 수 없음";
+	}
+	return date.toLocaleDateString("ko-KR", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		weekday: "short",
+	});
 }
 
 /**
@@ -239,9 +262,19 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	// --- 렌더 행 구성 ---
 	const renderRows = useMemo<RenderRow[]>(() => {
 		const rows: RenderRow[] = [];
+		let previousDateKey: string | null = null;
 		for (let i = effectiveVisibleStart; i < flattenedComments.length; i += 1) {
 			const item = flattenedComments[i];
 			if (isThreadCollapsed(item.threadRootId) && item.comment.parentId !== null) continue;
+			const currentDateKey = toDateKey(item.comment.createdAt);
+			if (currentDateKey !== previousDateKey) {
+				rows.push({
+					type: "date-divider",
+					key: `date-divider-${currentDateKey}-${i}`,
+					label: toDateLabel(item.comment.createdAt),
+				});
+				previousDateKey = currentDateKey;
+			}
 			if (readMarkerIndex !== null && i === readMarkerIndex) {
 				rows.push({ type: "read-marker", key: `read-marker-${i}` });
 			}
@@ -365,6 +398,9 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 						<div className="py-8 text-center text-text-muted">첫 댓글 써줘</div>
 					) : (
 						renderRows.map((row) => {
+							if (row.type === "date-divider") {
+								return <CommentDateDividerRow key={row.key} label={row.label} />;
+							}
 							if (row.type === "read-marker") {
 								return <ReadMarkerRow key={row.key} rowKey={row.key} />;
 							}
@@ -497,11 +533,29 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					align-items: center;
 					gap: 10px;
 					margin: 10px 0;
+					color: var(--text-muted);
+					font-size: 0.78rem;
+					font-weight: 600;
+				}
+
+				.date-divider {
+					display: flex;
+					align-items: center;
+					gap: 10px;
+					margin: 12px 0 8px;
+					color: var(--text-muted);
+					font-size: 0.82rem;
+					font-weight: 600;
+				}
+
+				.read-marker {
 					color: var(--warning);
 					font-size: 0.82rem;
 					font-weight: 700;
 				}
 
+				.date-divider::before,
+				.date-divider::after,
 				.read-marker::before,
 				.read-marker::after {
 					content: "";
