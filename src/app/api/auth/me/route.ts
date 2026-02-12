@@ -1,54 +1,12 @@
-import { NextResponse } from "next/server";
-import { auth } from "@/auth";
-import { prisma } from "@/lib/prisma";
-
-
 /**
- * 현재 사용자 정보 API
- * GET /api/auth/me
- * 
- * 응답:
- * - user: 사용자 정보 (id, email, nickname, role, minecraftUuid, createdAt, lastAuthAt)
+ * @deprecated — canonical: /api/users/me
+ * 이 엔드포인트는 제거되었음. /api/users/me를 사용할 것.
  */
+import { NextResponse } from "next/server";
+
 export async function GET() {
-	try {
-		// NextAuth 세션 검증
-		const session = await auth();
-
-		if (!session?.user) {
-			return NextResponse.json(
-				{ error: "auth_error_unauthorized" },
-				{ status: 401 }
-			);
-		}
-
-		// 사용자 정보 조회
-		const user = await prisma.user.findUnique({
-			where: { id: session.user.id },
-			select: {
-				id: true,
-				email: true,
-				nickname: true,
-				role: true,
-				minecraftUuid: true,
-				createdAt: true,
-				lastAuthAt: true,
-			},
-		});
-
-		if (!user) {
-			return NextResponse.json(
-				{ error: "auth_error_unauthorized" },
-				{ status: 404 }
-			);
-		}
-
-		return NextResponse.json({ user });
-	} catch (error) {
-		console.error("[Auth] /me error:", error);
-		return NextResponse.json(
-			{ error: "server_error" },
-			{ status: 500 }
-		);
-	}
+	return NextResponse.json(
+		{ error: "gone", message: "이 API는 제거되었습니다. /api/users/me를 사용하세요." },
+		{ status: 410 }
+	);
 }

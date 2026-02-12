@@ -24,7 +24,7 @@ export const authConfig: NextAuthConfig = {
 
 				try {
 					// 사용자 조회
-					let user = await prisma.user.findFirst({
+					const foundUser = await prisma.user.findFirst({
 						where: {
 							nickname,
 							deletedAt: null,
@@ -32,51 +32,51 @@ export const authConfig: NextAuthConfig = {
 					});
 
 					// 사용자 없음
-					if (!user) {
+					if (!foundUser) {
 						return null;
 					}
 
 					// 비밀번호 검증
-					const isValidPassword = await compare(password, user.password);
+					const isValidPassword = await compare(password, foundUser.password);
 					if (!isValidPassword) {
 						return null;
 					}
 
 					// 이메일 미인증
-					if (!user.emailVerified) {
+					if (!foundUser.emailVerified) {
 						return null;
 					}
 
 					// 관리 닉네임 정책과 마지막 접속 시각을 한 번에 반영
-					const shouldBeAdmin = isPrivilegedNickname(user.nickname);
+					const shouldBeAdmin = isPrivilegedNickname(foundUser.nickname);
 					const updateData: { lastAuthAt: Date; role?: string; isApproved?: number } = {
 						lastAuthAt: new Date(),
 					};
 
-					if (shouldBeAdmin && user.role !== "admin") {
+					if (shouldBeAdmin && foundUser.role !== "admin") {
 						updateData.role = "admin";
 					}
 
-					if (shouldBeAdmin && user.isApproved !== 1) {
+					if (shouldBeAdmin && foundUser.isApproved !== 1) {
 						updateData.isApproved = 1;
 					}
 
-					user = await prisma.user.update({
-						where: { id: user.id },
+					const updatedUser = await prisma.user.update({
+						where: { id: foundUser.id },
 						data: updateData,
 					});
 
 					// 인증 성공 - 사용자 정보 반환
 					return {
-						id: user.id,
-						email: user.email,
-						nickname: user.nickname,
-						role: user.role,
-						isApproved: user.isApproved,
-						minecraftUuid: user.minecraftUuid,
+						id: updatedUser.id,
+						email: updatedUser.email,
+						nickname: updatedUser.nickname,
+						role: updatedUser.role,
+						isApproved: updatedUser.isApproved,
+						minecraftUuid: updatedUser.minecraftUuid,
 					};
-				} catch (error) {
-					console.error("[Auth] Authorization error:", error);
+				} catch {
+					// 인증 실패 시 상세 에러를 외부에 노출하지 않음
 					return null;
 				}
 			},
