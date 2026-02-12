@@ -2,6 +2,55 @@
  * YouTube / Streamable 임베드 생성 및 HTML 내 링크 → iframe 변환
  */
 
+function isValidYouTubeId(id: string | null): id is string {
+	return typeof id === "string" && /^[a-zA-Z0-9_-]{11}$/.test(id);
+}
+
+export function extractYouTubeVideoIdFromUrl(rawUrl: string): string | null {
+	try {
+		const parsed = new URL(rawUrl);
+		const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+
+		if (hostname === "youtu.be") {
+			const id = parsed.pathname.split("/").filter(Boolean)[0] ?? null;
+			return isValidYouTubeId(id) ? id : null;
+		}
+
+		if (hostname === "youtube.com" || hostname === "m.youtube.com") {
+			const watchId = parsed.searchParams.get("v");
+			if (isValidYouTubeId(watchId)) {
+				return watchId;
+			}
+			const segments = parsed.pathname.split("/").filter(Boolean);
+			const shortsId = segments[0] === "shorts" ? segments[1] ?? null : null;
+			if (isValidYouTubeId(shortsId)) {
+				return shortsId;
+			}
+		}
+	} catch {
+		return null;
+	}
+	return null;
+}
+
+export function extractStreamableIdFromUrl(rawUrl: string): string | null {
+	try {
+		const parsed = new URL(rawUrl);
+		const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+		if (hostname !== "streamable.com") {
+			return null;
+		}
+		const segments = parsed.pathname.split("/").filter(Boolean);
+		if (segments.length === 0) {
+			return null;
+		}
+		const id = segments[0] === "e" ? segments[1] ?? "" : segments[0];
+		return /^[a-z0-9]+$/i.test(id) ? id : null;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * YouTube 임베드 HTML 생성
  */

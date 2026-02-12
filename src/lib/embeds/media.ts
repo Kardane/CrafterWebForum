@@ -2,6 +2,43 @@
  * 업로드 파일 및 이미지 링크 임베드 처리
  */
 
+export function createImageEmbed(imageUrl: string, alt = "image"): string {
+	return `<div class="embed-container"><img src="${imageUrl}" alt="${alt}" loading="lazy"></div>`;
+}
+
+export function resolveImgurImageUrl(rawUrl: string): string | null {
+	try {
+		const parsed = new URL(rawUrl);
+		const hostname = parsed.hostname.replace(/^www\./, "").toLowerCase();
+		const pathSegments = parsed.pathname.split("/").filter(Boolean);
+		if (pathSegments.length === 0) {
+			return null;
+		}
+
+		if (hostname === "i.imgur.com") {
+			const filename = pathSegments[pathSegments.length - 1];
+			if (/\.(?:jpg|jpeg|png|gif|webp|mp4)$/i.test(filename)) {
+				return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+			}
+			return null;
+		}
+
+		if (hostname === "imgur.com") {
+			let candidateId = pathSegments[0];
+			if ((pathSegments[0] === "gallery" || pathSegments[0] === "a") && pathSegments[1]) {
+				candidateId = pathSegments[1];
+			}
+			if (!/^[a-zA-Z0-9]{5,}$/.test(candidateId)) {
+				return null;
+			}
+			return `https://i.imgur.com/${candidateId}.png`;
+		}
+	} catch {
+		return null;
+	}
+	return null;
+}
+
 /**
  * 업로드된 파일 링크 처리 (이미지, 비디오, 오디오)
  */
@@ -17,7 +54,7 @@ export function processUploadedFiles(html: string): string {
 		const ext = filename.split('.').pop()?.toLowerCase().split('?')[0] || '';
 
 		if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-			return `<div class="embed-container"><img src="${fullUrl}" alt="uploaded image"></div>`;
+			return createImageEmbed(fullUrl, "uploaded image");
 		}
 		if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) {
 			return `<div class="embed-container"><video src="${fullUrl}" controls></video></div>`;
@@ -52,7 +89,12 @@ export function processImageLinks(html: string): string {
 			return `${prefix}${url}`;
 
 		if (/\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i.test(url)) {
-			return `${prefix}<div class="embed-container"><img src="${url}" alt="image" loading="lazy"></div>`;
+			return `${prefix}${createImageEmbed(url)}`;
+		}
+
+		const imgurImageUrl = resolveImgurImageUrl(url);
+		if (imgurImageUrl) {
+			return `${prefix}${createImageEmbed(imgurImageUrl, "imgur image")}`;
 		}
 		return `${prefix}<a href="${url}" target="_blank" class="link-text">${url}</a>`;
 	});

@@ -26,4 +26,9 @@ export const RATE_LIMIT_POLICIES: Record<string, RateLimitPolicy> = {
 		limit: 5,
 		windowMs: 10 * 60_000,
 	},
+	linkPreview: {
+		namespace: "link:preview",
+		limit: 30,
+		windowMs: 60_000,
+	},
 };

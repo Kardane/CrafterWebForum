@@ -248,42 +248,55 @@
 
 	.post-content .external-link-card {
 		display: flex;
-		background: var(--color-bg-tertiary);
-		border: 1px solid var(--color-border);
-		border-radius: 8px;
-		padding: 8px 10px;
+		background: color-mix(in srgb, var(--color-bg-tertiary) 92%, #000 8%);
+		border: 1px solid color-mix(in srgb, var(--color-border) 82%, #000 18%);
+		border-radius: 12px;
+		padding: 10px;
 		gap: 12px;
 		align-items: flex-start;
-		max-width: 450px;
-		margin: 2px 0;
+		max-width: min(100%, 620px);
+		margin: 4px 0;
 		text-decoration: none;
 		color: var(--color-text-primary);
-		transition: border-color 0.2s;
+		transition: border-color 0.2s, transform 0.15s ease;
 		box-sizing: border-box;
 		width: 100%;
 	}
 
 	.post-content .external-link-card:hover {
 		border-color: var(--color-accent);
+		transform: translateY(-1px);
 	}
 
-	.post-content .external-link-card__icon-wrap {
-		width: 38px;
-		height: 38px;
-		border-radius: 8px;
-		background: color-mix(in srgb, var(--color-bg-primary) 65%, #000 35%);
-		border: 1px solid color-mix(in srgb, var(--color-border) 80%, #000 20%);
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
+	.post-content .external-link-card__media {
+		position: relative;
+		width: 74px;
+		height: 74px;
+		border-radius: 10px;
+		background: color-mix(in srgb, var(--color-bg-primary) 72%, #000 28%);
+		border: 1px solid color-mix(in srgb, var(--color-border) 78%, #000 22%);
 		flex-shrink: 0;
 		overflow: hidden;
 	}
 
+	.post-content .external-link-card__thumb {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+
 	.post-content .external-link-card__icon {
-		width: 20px;
-		height: 20px;
+		width: 22px;
+		height: 22px;
 		object-fit: contain;
+		position: absolute;
+		right: 4px;
+		bottom: 4px;
+		padding: 2px;
+		background: color-mix(in srgb, var(--color-bg-primary) 78%, #000 22%);
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--color-border) 82%, #000 18%);
 	}
 
 	.post-content .external-link-card__body {
@@ -291,11 +304,13 @@
 		flex-direction: column;
 		min-width: 0;
 		flex: 1;
-		gap: 2px;
+		gap: 4px;
 	}
 
 	.post-content .external-link-card__badge {
-		font-size: 0.7rem;
+		font-size: 0.68rem;
+		font-weight: 600;
+		letter-spacing: 0.01em;
 		color: var(--color-text-muted);
 	}
 
@@ -303,18 +318,70 @@
 		font-size: 0.95rem;
 		font-weight: 600;
 		color: var(--color-text-primary);
+		line-height: 1.35;
 	}
 
 	.post-content .external-link-card__subtitle {
 		font-size: 0.8rem;
 		color: var(--color-text-secondary);
-		word-break: break-all;
+		word-break: break-word;
+		line-height: 1.35;
+	}
+
+	.post-content .external-link-card__description {
+		font-size: 0.76rem;
+		color: var(--color-text-muted);
+		line-height: 1.35;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		word-break: break-word;
+	}
+
+	.post-content .external-link-card__status {
+		display: inline-flex;
+		align-items: center;
+		width: fit-content;
+		padding: 1px 8px;
+		border-radius: 999px;
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.02em;
+		background: color-mix(in srgb, var(--color-accent) 24%, transparent);
+		color: color-mix(in srgb, #fff 88%, var(--color-accent) 12%);
+		border: 1px solid color-mix(in srgb, var(--color-accent) 52%, transparent);
+	}
+
+	.post-content .external-link-card__author {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.74rem;
+		font-weight: 600;
+		color: var(--color-text-secondary);
+	}
+
+	.post-content .external-link-card__author-avatar {
+		width: 18px;
+		height: 18px;
+		border-radius: 999px;
+		object-fit: cover;
+		flex-shrink: 0;
+		border: 1px solid color-mix(in srgb, var(--color-border) 80%, #000 20%);
+	}
+
+	.post-content .external-link-card__author-name {
+		max-width: 220px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.post-content .external-link-card__meta {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 6px;
+		gap: 5px;
 		margin-top: 4px;
 	}
 
@@ -324,7 +391,7 @@
 		gap: 2px;
 		padding: 2px 6px;
 		border-radius: 999px;
-		font-size: 0.68rem;
+		font-size: 0.66rem;
 		background: color-mix(in srgb, var(--color-bg-tertiary) 78%, #000 22%);
 		color: var(--color-text-muted);
 		border: 1px solid color-mix(in srgb, var(--color-border) 75%, #000 25%);

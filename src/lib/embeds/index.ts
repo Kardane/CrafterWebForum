@@ -6,6 +6,7 @@
 import { processYouTubeEmbeds } from "./youtube";
 import { processExternalLinks } from "./external-card";
 import { processUploadedFiles, processImageLinks } from "./media";
+import { processAnchorEmbeds } from "./anchor";
 
 // 하위 모듈 re-export
 export { createYouTubeEmbed, createStreamableEmbed, processYouTubeEmbeds } from "./youtube";
@@ -44,7 +45,8 @@ function protectRenderedHtml(html: string): ProtectedHtmlResult {
  * 모든 임베드 처리를 통합 실행
  */
 export function processAllEmbeds(html: string): string {
-	const { protectedHtml, restoreHtml } = protectRenderedHtml(html);
+	const linkExpandedHtml = processAnchorEmbeds(html);
+	const { protectedHtml, restoreHtml } = protectRenderedHtml(linkExpandedHtml);
 	let nextHtml = protectedHtml;
 	nextHtml = processYouTubeEmbeds(nextHtml);
 	nextHtml = processExternalLinks(nextHtml);

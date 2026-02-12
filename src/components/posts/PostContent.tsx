@@ -4,6 +4,7 @@ import { processMarkdown } from "@/lib/markdown";
 import { processAllEmbeds } from "@/lib/embeds";
 import { MouseEvent, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/ui/Modal";
+import SafeImage from "@/components/ui/SafeImage";
 
 interface PostContentProps {
 	content: string;
@@ -15,9 +16,24 @@ interface WindowWithHighlightJs extends Window {
 	};
 }
 
+interface LinkPreviewPayload {
+	badge?: string;
+	title?: string;
+	subtitle?: string;
+	description?: string;
+	imageUrl?: string;
+	iconUrl?: string;
+	authorName?: string;
+	authorAvatarUrl?: string;
+	status?: string;
+	chips?: string[];
+	metrics?: string[];
+}
+
 export default function PostContent({ content }: PostContentProps) {
 	const contentRef = useRef<HTMLDivElement>(null);
 	const postCardMetaCacheRef = useRef<Map<string, string[]>>(new Map());
+	const externalCardMetaCacheRef = useRef<Map<string, LinkPreviewPayload>>(new Map());
 	const [selectedImage, setSelectedImage] = useState<{ src: string; alt: string } | null>(null);
 
 	useEffect(() => {
@@ -34,6 +50,7 @@ export default function PostContent({ content }: PostContentProps) {
 		if (!root) {
 			return;
 		}
+		let isDisposed = false;
 
 		const cardsByPostId = new Map<string, HTMLAnchorElement[]>();
 		root.querySelectorAll<HTMLAnchorElement>(".external-link-card[data-post-id]").forEach((card) => {
@@ -45,13 +62,28 @@ export default function PostContent({ content }: PostContentProps) {
 			list.push(card);
 			cardsByPostId.set(postId, list);
 		});
+		const cardsByPreviewUrl = new Map<string, HTMLAnchorElement[]>();
+		root.querySelectorAll<HTMLAnchorElement>(".external-link-card[data-preview-url]").forEach((card) => {
+			const previewUrl = card.dataset.previewUrl;
+			if (!previewUrl) {
+				return;
+			}
+			const list = cardsByPreviewUrl.get(previewUrl) ?? [];
+			list.push(card);
+			cardsByPreviewUrl.set(previewUrl, list);
+		});
+
+		const ensureCardBody = (card: HTMLAnchorElement) => {
+			return card.querySelector<HTMLSpanElement>(".external-link-card__body") ?? card;
+		};
 
 		const renderMeta = (card: HTMLAnchorElement, chips: string[]) => {
-			let metaContainer = card.querySelector<HTMLDivElement>(".external-link-card__meta");
+			const body = ensureCardBody(card);
+			let metaContainer = body.querySelector<HTMLDivElement>(".external-link-card__meta");
 			if (!metaContainer) {
 				metaContainer = document.createElement("div");
 				metaContainer.className = "external-link-card__meta";
-				card.appendChild(metaContainer);
+				body.appendChild(metaContainer);
 			}
 			metaContainer.innerHTML = "";
 			chips.forEach((chip) => {
@@ -60,6 +92,95 @@ export default function PostContent({ content }: PostContentProps) {
 				chipNode.textContent = chip;
 				metaContainer?.appendChild(chipNode);
 			});
+		};
+		const renderStatus = (card: HTMLAnchorElement, status?: string) => {
+			const body = ensureCardBody(card);
+			const existing = body.querySelector<HTMLSpanElement>(".external-link-card__status");
+			if (!status) {
+				existing?.remove();
+				return;
+			}
+			const statusNode = existing ?? document.createElement("span");
+			statusNode.className = "external-link-card__status";
+			statusNode.textContent = status;
+			if (!existing) {
+				body.appendChild(statusNode);
+			}
+		};
+		const renderAuthor = (card: HTMLAnchorElement, authorName?: string, authorAvatarUrl?: string) => {
+			const body = ensureCardBody(card);
+			const existing = body.querySelector<HTMLSpanElement>(".external-link-card__author");
+			if (!authorName && !authorAvatarUrl) {
+				existing?.remove();
+				return;
+			}
+			const authorNode = existing ?? document.createElement("span");
+			authorNode.className = "external-link-card__author";
+			authorNode.innerHTML = "";
+
+			if (authorAvatarUrl) {
+				const avatar = document.createElement("img");
+				avatar.src = authorAvatarUrl;
+				avatar.alt = "";
+				avatar.className = "external-link-card__author-avatar";
+				avatar.loading = "lazy";
+				avatar.decoding = "async";
+				authorNode.appendChild(avatar);
+			}
+
+			if (authorName) {
+				const name = document.createElement("span");
+				name.className = "external-link-card__author-name";
+				name.textContent = authorName;
+				authorNode.appendChild(name);
+			}
+
+			if (!existing) {
+				body.appendChild(authorNode);
+			}
+		};
+		const renderPreviewCard = (card: HTMLAnchorElement, preview: LinkPreviewPayload) => {
+			const body = ensureCardBody(card);
+			const badgeNode = card.querySelector<HTMLElement>(".external-link-card__badge");
+			if (badgeNode && preview.badge) {
+				badgeNode.textContent = preview.badge;
+			}
+
+			const titleNode = card.querySelector<HTMLElement>(".external-link-card__title");
+			if (titleNode && preview.title) {
+				titleNode.textContent = preview.title;
+			}
+
+			const subtitleNode = card.querySelector<HTMLElement>(".external-link-card__subtitle");
+			if (subtitleNode) {
+				subtitleNode.textContent = preview.subtitle || subtitleNode.textContent || "";
+			}
+			const existingDescription = body.querySelector<HTMLElement>(".external-link-card__description");
+			if (preview.description) {
+				const descriptionNode = existingDescription ?? document.createElement("span");
+				descriptionNode.className = "external-link-card__description";
+				descriptionNode.textContent = preview.description;
+				if (!existingDescription) {
+					body.appendChild(descriptionNode);
+				}
+			} else {
+				existingDescription?.remove();
+			}
+
+			const thumbnailNode = card.querySelector<HTMLImageElement>(".external-link-card__thumb");
+			const iconNode = card.querySelector<HTMLImageElement>(".external-link-card__icon");
+			const mediaImageUrl = preview.imageUrl || preview.authorAvatarUrl || preview.iconUrl;
+			if (thumbnailNode && mediaImageUrl) {
+				thumbnailNode.src = mediaImageUrl;
+			}
+			if (iconNode && preview.iconUrl) {
+				iconNode.src = preview.iconUrl;
+			}
+
+			renderAuthor(card, preview.authorName, preview.authorAvatarUrl);
+			renderStatus(card, preview.status);
+			const chips = [...(preview.metrics ?? []), ...(preview.chips ?? [])];
+			renderMeta(card, chips);
 		};
 
 		const countComments = (nodes: Array<{ replies?: unknown[] }>): number =>
@@ -100,16 +221,60 @@ export default function PostContent({ content }: PostContentProps) {
 						`추천 ${post.likes ?? 0}`,
 						`댓글 ${commentsCount}`,
 					];
+					if (isDisposed) {
+						return;
+					}
 					postCardMetaCacheRef.current.set(postId, chips);
 					cards.forEach((card) => renderMeta(card, chips));
 				} catch (error) {
 					console.error("Failed to hydrate post card metadata:", error);
+					if (isDisposed) {
+						return;
+					}
 					const chips = ["카테고리: 내부링크", "메타데이터 조회 실패"];
 					postCardMetaCacheRef.current.set(postId, chips);
 					cards.forEach((card) => renderMeta(card, chips));
 				}
 			})();
 		});
+
+		cardsByPreviewUrl.forEach((cards, previewUrl) => {
+			const cached = externalCardMetaCacheRef.current.get(previewUrl);
+			if (cached) {
+				cards.forEach((card) => renderPreviewCard(card, cached));
+				return;
+			}
+
+			void (async () => {
+				try {
+					const endpoint = `/api/link-preview?url=${encodeURIComponent(previewUrl)}`;
+					const response = await fetch(endpoint, { cache: "force-cache" });
+					if (!response.ok) {
+						throw new Error(`Failed to load link preview metadata: ${response.status}`);
+					}
+					const data = (await response.json()) as { preview?: LinkPreviewPayload };
+					if (!data.preview || isDisposed) {
+						return;
+					}
+					externalCardMetaCacheRef.current.set(previewUrl, data.preview);
+					cards.forEach((card) => renderPreviewCard(card, data.preview as LinkPreviewPayload));
+				} catch (error) {
+					console.error("Failed to hydrate external link metadata:", error);
+					if (isDisposed) {
+						return;
+					}
+					const fallback: LinkPreviewPayload = {
+						chips: ["메타데이터 조회 실패"],
+					};
+					externalCardMetaCacheRef.current.set(previewUrl, fallback);
+					cards.forEach((card) => renderPreviewCard(card, fallback));
+				}
+			})();
+		});
+
+		return () => {
+			isDisposed = true;
+		};
 	}, [content]);
 
 	let html = processMarkdown(content);
@@ -122,6 +287,12 @@ export default function PostContent({ content }: PostContentProps) {
 		}
 
 		if (!contentRef.current?.contains(target)) {
+			return;
+		}
+		if (target.closest(".external-link-card")) {
+			return;
+		}
+		if (!target.classList.contains("md-image") && !target.closest(".embed-container")) {
 			return;
 		}
 
@@ -144,17 +315,20 @@ export default function PostContent({ content }: PostContentProps) {
 			<Modal
 				isOpen={selectedImage !== null}
 				onClose={() => setSelectedImage(null)}
-				title="이미지 미리보기"
+				hideCloseButton
 				size="xl"
 				variant="sidebarLike"
-				bodyClassName="p-3"
+				className="!max-w-[96vw] !border-none !bg-transparent !shadow-none"
+				bodyClassName="!overflow-visible !p-0"
 			>
 				{selectedImage && (
-					<div className="flex items-center justify-center max-h-[70vh]">
-						<img
+					<div className="relative h-[82vh] w-[96vw] max-w-[1440px]">
+						<SafeImage
 							src={selectedImage.src}
 							alt={selectedImage.alt}
-							className="max-h-[68vh] w-auto max-w-full rounded-md object-contain"
+							fill
+							sizes="96vw"
+							className="object-contain"
 						/>
 					</div>
 				)}

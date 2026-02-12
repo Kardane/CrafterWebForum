@@ -51,6 +51,18 @@ describe("embed utils", () => {
 		expect(embed).toContain("<iframe");
 	});
 
+	it("converts markdown youtube links into iframe embeds", () => {
+		const markdownHtml = processMarkdown("[영상](https://youtu.be/dQw4w9WgXcQ)");
+		const html = processAllEmbeds(markdownHtml);
+		expect(html).toContain("youtube.com/embed/dQw4w9WgXcQ");
+		expect(html).toContain("<iframe");
+	});
+
+	it("converts imgur page links into image embeds", () => {
+		const html = processAllEmbeds("https://imgur.com/abcDEF1");
+		expect(html).toContain("<img src=\"https://i.imgur.com/abcDEF1.png\"");
+	});
+
 	it("escapeHtml escapes special characters", () => {
 		expect(escapeHtml('<script>alert("xss")</script>')).toBe(
 			"&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;"
