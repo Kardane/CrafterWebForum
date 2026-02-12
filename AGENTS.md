@@ -168,7 +168,7 @@ Run from each app directory:
 - Avoid duplicating equivalent endpoints under different namespaces
 - Prefer one canonical profile/password API line (`/api/users/me*`) and keep `/api/auth/*` only as explicit deprecation bridge
 - `/api/auth/me|profile|reauth` now return `410 Gone`; do not reintroduce business logic on these paths
-- `/api/auth/password` is still a deprecated bridge and must keep deprecation headers targeting `/api/users/me/password` until final removal
+- `/api/auth/password` is a `410 Gone` tombstone path; do not reintroduce password-change logic on this endpoint
 
 ### Data Layer
 
@@ -204,10 +204,7 @@ Before PR merge:
 
 ## Current Hotspots to Prioritize
 
-- Reduce remaining `@next/next/no-img-element` warnings on high-traffic surfaces (`posts`, `comments`, `sidebar`, `profile`)
 - Re-measure production Web Vitals after auth-shell refactor (target: FCP/LCP < 2.5s, CLS < 0.1)
-- Evaluate Next.js `allowedDevOrigins` for `127.0.0.1` dev/e2e warning path
-- Remove deprecated `/api/auth/password` after client migration 확인 (`/api/auth/me|profile|reauth`는 이미 `410 Gone`)
 - Rotate Turso auth token after migration since token was exposed in interactive session
 
 ## Legacy Report #2 Status (2026-02-11)

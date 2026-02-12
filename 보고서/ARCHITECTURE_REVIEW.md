@@ -7,7 +7,7 @@
 - 최종 검증일: 2026-02-12
 
 ### 최신 검증 커맨드
-- `npm run lint` -> 성공 (`8 warnings, 0 errors`)
+- `npm run lint` -> 성공 (`0 warnings, 0 errors`)
 - `npm test` -> 성공 (`25 files, 100 tests passed`)
 - `npm run build` -> 성공 (Turbopack production build 완료)
 - `npx next build --webpack` -> 이번 회차 미실행 (직전 실패 이력: 2026-02-12, 원인 재수집 필요)
@@ -89,7 +89,7 @@ legacy/                   # 레거시 동작 참조
 - 댓글 계약 통일: `author` + `replies` 트리
 - 계정 canonical API: `/api/users/me*`
 - `/api/auth/me|profile|reauth`는 `410 Gone` tombstone 응답으로 전환
-- `/api/auth/password`는 deprecation bridge로만 유지 (`/api/users/me/password`로 이관 헤더 제공)
+- `/api/auth/password`는 `410 Gone` tombstone 응답으로 고정
 
 ### 3.3 레이트리밋 공통화
 - 공통 엔진: `src/lib/rate-limit.ts`
@@ -176,6 +176,9 @@ legacy/                   # 레거시 동작 참조
 32. 인증 배경/로고를 `next/image` 기반으로 전환하고 고정 치수/`sizes`/`quality`로 CLS 리스크 완화
 33. `MainLayout`의 auth 레이아웃 분기 확대 (`/pending`, `/auth/*` 포함)로 인증 UX 일관성 강화
 34. `next.config.ts` 이미지 최적화 설정 보강 (`formats: avif/webp`, `qualities: [62, 75]`)
+35. `SafeImage` 공통 컴포넌트 도입 및 주요 화면 `<img>` 8건을 `next/image` 기반으로 치환해 lint 경고 제거
+36. `/api/auth/password` 정책을 bridge가 아닌 `410 Gone` tombstone 고정 상태로 문서/테스트 기준 일치화
+37. `next.config.ts`에 `allowedDevOrigins: ["127.0.0.1", "localhost"]`를 추가해 dev/e2e 교차 origin 경고 제거
 
 ### 5.1 레거시 2번 항목 반영 현황 (2026-02-12 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14
@@ -189,27 +192,15 @@ legacy/                   # 레거시 동작 참조
 - Turso 토큰 재발급 후 Vercel env 동기화 필요
 
 ### Medium
-1. `@next/next/no-img-element` 경고 잔존
-- 현재 8개 경고가 남아 있으며 `posts/comments/sidebar/profile` 표면에서 점진적 `next/image` 전환 필요
-
-2. deprecated auth 라인 정리 작업 진행 중
-- `/api/auth/me|profile|reauth`는 410으로 고정됐지만 `/api/auth/password`는 아직 bridge 상태
-- 클라이언트 호출 경로를 완전히 `/api/users/me*`로 정리한 뒤 최종 제거 필요
-
-3. dev/e2e 환경의 `allowedDevOrigins` 경고
-- Playwright 실행 중 `127.0.0.1 -> /_next/*` 교차 origin 경고가 출력됨
-- 차기 Next.js 메이저 대비 사전 설정 검토 필요
-
-4. 프로덕션 CWV 재측정 필요
+1. 프로덕션 CWV 재측정 필요
 - 인증 페이지 렌더 구조는 경량화했지만, Vercel 실측 FCP/LCP/CLS 재수집으로 개선폭 확인 필요
 
 ## 7. 우선순위 제안
-1. `/api/auth/password` 호출처를 `/api/users/me/password`로 완전 이관 후 bridge 제거
-2. `posts/comments/sidebar/profile`의 `<img>`를 트래픽 우선순위 기준으로 `next/image` 전환
-3. Vercel Web Vitals(FCP/LCP/CLS)를 인증 페이지 기준으로 재측정하고 개선값 기록
-4. `allowedDevOrigins` 설정 여부를 결정하고 CI/dev 표준값으로 문서화
+1. Vercel Web Vitals(FCP/LCP/CLS)를 인증 페이지 기준으로 재측정하고 개선값 기록
+2. Turso 토큰 회전 및 배포 환경 변수 동기화
+3. `npx next build --webpack` fallback 경로 재검증으로 빌드 이중화 신뢰도 확보
 
 ## 8. 결론
 핵심 백엔드 구조(인증/인가, API 계약, 레이트리밋, 관리자 운영 플로우)는 안정화 상태를 유지
-이번 회차에서 auth 화면 공통화와 이미지 최적화 경로를 정리해 성능 병목 지점을 구조적으로 축소
-현재 우선 리스크는 기능 결함보다 운영 품질 항목(토큰 회전, deprecated 경로 제거, 잔존 이미지 경고, 실측 CWV 추적)에 집중됨
+이번 회차에서 Medium 1,2,3(`no-img-element`, deprecated `/api/auth/password` bridge 상태, `allowedDevOrigins` 경고)을 모두 해소
+현재 우선 리스크는 기능 결함보다 운영 품질 항목(토큰 회전, 실측 CWV 추적)에 집중됨
