@@ -1,4 +1,6 @@
 #!/bin/bash
+# legacy: WSL (Ubuntu) bootstrap script only
+# for Windows native setup, use npm run setup:win
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
 nvm install --lts

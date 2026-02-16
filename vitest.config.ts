@@ -1,5 +1,32 @@
+import fs from "node:fs";
 import path from "node:path";
+import { config as loadDotenv } from "dotenv";
 import { defineConfig } from "vitest/config";
+
+function loadVitestEnv() {
+	const root = __dirname;
+	const candidatePaths = [".env.local", ".env", ".env.example"].map((name) =>
+		path.join(root, name)
+	);
+
+	for (const candidatePath of candidatePaths) {
+		if (!fs.existsSync(candidatePath)) {
+			continue;
+		}
+
+		loadDotenv({ path: candidatePath, override: false });
+	}
+
+	if (!process.env.DATABASE_URL) {
+		process.env.DATABASE_URL = "file:./dev.db";
+	}
+
+	if (!process.env.NEXTAUTH_SECRET) {
+		process.env.NEXTAUTH_SECRET = "test-nextauth-secret-32chars-minimum";
+	}
+}
+
+loadVitestEnv();
 
 export default defineConfig({
 	test: {
