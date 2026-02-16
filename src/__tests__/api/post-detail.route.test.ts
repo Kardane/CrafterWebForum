@@ -127,4 +127,51 @@ describe("GET /api/posts/[id]", () => {
 				totalCommentCount: 2,
 			});
 		});
+
+	it("skips read upsert when read count is already synced", async () => {
+		authMock.mockResolvedValue({ user: { id: "1" } });
+		postFindFirstMock.mockResolvedValue({
+			id: 10,
+			title: "title",
+			content: "content",
+			tags: "[]",
+			likes: 2,
+			views: 7,
+			createdAt: new Date("2026-01-01T00:00:00.000Z"),
+			updatedAt: new Date("2026-01-01T01:00:00.000Z"),
+			authorId: 1,
+			author: {
+				id: 1,
+				nickname: "writer",
+				minecraftUuid: "uuid-1",
+			},
+		});
+		likeFindFirstMock.mockResolvedValue(null);
+		commentFindManyMock.mockResolvedValue([
+			{
+				id: 100,
+				content: "parent",
+				createdAt: new Date("2026-01-01T02:00:00.000Z"),
+				updatedAt: new Date("2026-01-01T02:00:00.000Z"),
+				isPinned: 0,
+				parentId: null,
+				author: {
+					id: 2,
+					nickname: "alice",
+					minecraftUuid: null,
+					role: "user",
+				},
+			},
+		]);
+		postReadFindUniqueMock.mockResolvedValue({
+			lastReadCommentCount: 1,
+		});
+
+		const { GET } = await import("@/app/api/posts/[id]/route");
+		const req = new Request("http://localhost/api/posts/10");
+		const res = await GET(req as never, { params: Promise.resolve({ id: "10" }) });
+
+		expect(res.status).toBe(200);
+		expect(postReadUpsertMock).not.toHaveBeenCalled();
+	});
 	});
