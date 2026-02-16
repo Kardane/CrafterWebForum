@@ -13,7 +13,7 @@ interface PostCardProps {
 	title: string;
 	content: string;
 	authorName: string;
-	authorUuid?: string;
+	authorUuid?: string | null;
 	createdAt: string | Date;
 	updatedAt: string | Date;
 	viewCount: number;

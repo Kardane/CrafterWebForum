@@ -1,6 +1,5 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import Link from "next/link";
 import Image from "next/image";
 import { MessageCircle } from "lucide-react";
@@ -10,6 +9,9 @@ import CommentSection from "@/components/comments/CommentSection";
 import PostStickyHeader from "@/components/posts/PostStickyHeader";
 import { PostLikeStateProvider } from "@/components/posts/PostLikeStateProvider";
 import { toSessionUserId } from "@/lib/session-user";
+import { getPostDetail } from "@/lib/services/post-detail-service";
+
+export const preferredRegion = "icn1";
 
 interface PostDetailPageProps {
 	params: Promise<{ id: string }>;
@@ -26,30 +28,16 @@ function countCommentsWithReplies(
 	}, 0);
 }
 
-async function getPostDetail(id: string) {
-	const requestHeaders = await headers();
-	const host =
-		requestHeaders.get("x-forwarded-host") ??
-		requestHeaders.get("host") ??
-		null;
-	const protocol = requestHeaders.get("x-forwarded-proto") ?? "http";
-
-	// 서버 컴포넌트 내부 호출 시 쿠키를 전달해야 인증 세션이 유지됨
-	const baseUrl = host
-		? `${protocol}://${host}`
-		: process.env.NEXTAUTH_URL ?? "http://127.0.0.1:3000";
-	const cookieHeader = requestHeaders.get("cookie");
-
-	const res = await fetch(`${baseUrl}/api/posts/${id}`, {
-		cache: "no-store",
-		headers: cookieHeader ? { cookie: cookieHeader } : undefined,
-	});
-
-	if (!res.ok) {
-		return null;
-	}
-
-	return res.json();
+function renderNotFound() {
+	return (
+		<div className="flex flex-col items-center justify-center min-h-[400px] text-center">
+			<h2 className="text-2xl font-bold mb-4">게시글을 찾을 수 없습니다</h2>
+			<p className="text-text-secondary mb-6">삭제되었거나 존재하지 않는 게시글입니다</p>
+			<Link href="/" className="btn btn-primary">
+				목록으로 돌아가기
+			</Link>
+		</div>
+	);
 }
 
 function getMinecraftHeadUrl(uuid: string | null, size = 32): string | null {
@@ -64,22 +52,23 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 		redirect("/login");
 	}
 
-	const data = await getPostDetail(id);
+	const sessionUserId = toSessionUserId(session.user.id);
+	if (!sessionUserId) {
+		redirect("/login");
+	}
+
+	const postId = Number.parseInt(id, 10);
+	if (!Number.isInteger(postId)) {
+		return renderNotFound();
+	}
+
+	const data = await getPostDetail({ postId, sessionUserId });
 	if (!data?.post) {
-		return (
-			<div className="flex flex-col items-center justify-center min-h-[400px] text-center">
-				<h2 className="text-2xl font-bold mb-4">게시글을 찾을 수 없습니다</h2>
-				<p className="text-text-secondary mb-6">삭제되었거나 존재하지 않는 게시글입니다.</p>
-				<Link href="/" className="btn btn-primary">
-					목록으로 돌아가기
-				</Link>
-			</div>
-		);
+		return renderNotFound();
 	}
 
 	const { post, comments, readMarker } = data;
 	const totalCommentCount = countCommentsWithReplies(comments);
-	const sessionUserId = toSessionUserId(session.user.id);
 	const isOwner = sessionUserId === post.author_id;
 
 	return (

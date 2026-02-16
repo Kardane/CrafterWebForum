@@ -11,7 +11,7 @@ interface Post {
 	title: string;
 	content: string;
 	authorName: string;
-	authorUuid?: string;
+	authorUuid?: string | null;
 	createdAt: string;
 	updatedAt: string;
 	views: number;

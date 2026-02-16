@@ -63,6 +63,7 @@ model Post {
   postReads   PostRead[]
 
   @@index([authorId])
+  @@index([deletedAt, updatedAt])
 }
 
 // ============================================
@@ -85,6 +86,7 @@ model Comment {
   replies Comment[] @relation("CommentReplies")
 
   @@index([postId])
+  @@index([postId, createdAt])
   @@index([parentId])
 }
 

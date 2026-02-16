@@ -1,150 +1,69 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
-import { prisma } from '@/lib/prisma';
-import { buildCommentTree } from '@/lib/comments';
-import { toSessionUserId } from '@/lib/session-user';
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { toSessionUserId } from "@/lib/session-user";
+import { getPostDetail } from "@/lib/services/post-detail-service";
+import { createServerTimingHeader } from "@/lib/server-timing";
 
-/**
- * GET /api/posts/[id]
- * 게시글 상세 조회 (댓글 포함, 읽음 상태 업데이트)
- */
+export const preferredRegion = "icn1";
+
 export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
 	void request;
+	const requestStart = performance.now();
 	try {
 		const { id } = await params;
+
+		const authStart = performance.now();
 		const session = await auth();
 		if (!session?.user) {
-			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 		}
 
 		const sessionUserId = toSessionUserId(session.user.id);
 		if (!sessionUserId) {
-			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 		}
+		const authMs = performance.now() - authStart;
 
-		const postId = parseInt(id, 10);
+		const postId = Number.parseInt(id, 10);
 		if (Number.isNaN(postId)) {
-			return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
+			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
-		// 게시글 조회 (작성자 정보 포함)
-		const post = await prisma.post.findFirst({
-			where: {
-				id: postId,
-				deletedAt: null,
-			},
-			include: {
-				author: {
-					select: {
-						id: true,
-						nickname: true,
-						minecraftUuid: true,
-					},
-				},
-			},
-		});
-
-		if (!post) {
-			return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+		const detail = await getPostDetail({ postId, sessionUserId });
+		if (!detail) {
+			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
-		const userLiked = await prisma.like.findFirst({
-			where: {
-				postId: post.id,
-				userId: sessionUserId,
-			},
+		const response = NextResponse.json({
+			post: detail.post,
+			comments: detail.comments,
+			readMarker: detail.readMarker,
 		});
+		response.headers.set(
+			"Server-Timing",
+			createServerTimingHeader([
+				{ name: "auth", duration: authMs },
+				{ name: "db_post", duration: detail.timing.dbPostMs },
+				{ name: "db_like", duration: detail.timing.dbLikeMs },
+				{ name: "db_comments", duration: detail.timing.dbCommentsMs },
+				{ name: "db_read", duration: detail.timing.dbReadMs },
+				{ name: "db_write", duration: detail.timing.dbWriteMs },
+				{ name: "serialize", duration: detail.timing.serializeMs },
+				{ name: "total", duration: performance.now() - requestStart },
+			])
+		);
 
-		// 댓글 조회 (생성순 유지)
-		const comments = await prisma.comment.findMany({
-			where: {
-				postId: post.id,
-			},
-			include: {
-				author: {
-					select: {
-						id: true,
-						nickname: true,
-						minecraftUuid: true,
-						role: true,
-					},
-				},
-			},
-			orderBy: [{ createdAt: 'asc' }],
-		});
-
-		const previousRead = await prisma.postRead.findUnique({
-			where: {
-				userId_postId: {
-					userId: sessionUserId,
-					postId: post.id,
-				},
-			},
-			select: {
-				lastReadCommentCount: true,
-			},
-		});
-
-		const commentsWithPostAuthorFlag = comments.map((comment) => ({
-			...comment,
-			isPostAuthor: comment.author.id === post.authorId,
-		}));
-
-		// 읽음 상태 업데이트
-		await prisma.postRead.upsert({
-			where: {
-				userId_postId: {
-					userId: sessionUserId,
-					postId: post.id,
-				},
-			},
-			update: {
-				lastReadCommentCount: comments.length,
-				updatedAt: new Date(),
-			},
-			create: {
-				userId: sessionUserId,
-				postId: post.id,
-				lastReadCommentCount: comments.length,
-			},
-		});
-
-		const responsePost = {
-			id: post.id,
-			title: post.title,
-			content: post.content,
-			tags: post.tags ? JSON.parse(post.tags as string) : [],
-			likes: post.likes,
-			views: post.views,
-			createdAt: post.createdAt,
-			updatedAt: post.updatedAt,
-			author_id: post.authorId,
-			author_name: post.author.nickname,
-			author_uuid: post.author.minecraftUuid,
-			user_liked: !!userLiked,
-		};
-
-		return NextResponse.json({
-			post: responsePost,
-			comments: buildCommentTree(commentsWithPostAuthorFlag),
-			readMarker: {
-				lastReadCommentCount: previousRead?.lastReadCommentCount ?? 0,
-				totalCommentCount: comments.length,
-			},
-		});
+		return response;
 	} catch (error) {
-		console.error('[API] GET /api/posts/[id] error:', error);
-		return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+		console.error("[API] GET /api/posts/[id] error:", error);
+		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
 
-/**
- * PATCH /api/posts/[id]
- * 게시글 수정 (작성자만 가능)
- */
 export async function PATCH(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
@@ -153,24 +72,24 @@ export async function PATCH(
 		const { id } = await params;
 		const session = await auth();
 		if (!session?.user) {
-			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 		}
 
 		const sessionUserId = toSessionUserId(session.user.id);
 		if (!sessionUserId) {
-			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 		}
 
-		const postId = parseInt(id, 10);
+		const postId = Number.parseInt(id, 10);
 		if (Number.isNaN(postId)) {
-			return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
+			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
 		const body = await request.json();
 		const { title, content, tags } = body;
 
 		if (!title || !content) {
-			return NextResponse.json({ error: 'Title and content are required' }, { status: 400 });
+			return NextResponse.json({ error: "Title and content are required" }, { status: 400 });
 		}
 
 		const post = await prisma.post.findFirst({
@@ -181,11 +100,11 @@ export async function PATCH(
 		});
 
 		if (!post) {
-			return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
 		if (post.authorId !== sessionUserId) {
-			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
 
 		await prisma.post.update({
@@ -198,17 +117,13 @@ export async function PATCH(
 			},
 		});
 
-		return NextResponse.json({ success: true, message: 'Post updated successfully' });
+		return NextResponse.json({ success: true, message: "Post updated successfully" });
 	} catch (error) {
-		console.error('[API] PATCH /api/posts/[id] error:', error);
-		return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+		console.error("[API] PATCH /api/posts/[id] error:", error);
+		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
 
-/**
- * DELETE /api/posts/[id]
- * 게시글 삭제 (Soft Delete, 작성자만 가능)
- */
 export async function DELETE(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
@@ -218,17 +133,17 @@ export async function DELETE(
 		const { id } = await params;
 		const session = await auth();
 		if (!session?.user) {
-			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 		}
 
 		const sessionUserId = toSessionUserId(session.user.id);
 		if (!sessionUserId) {
-			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 		}
 
-		const postId = parseInt(id, 10);
+		const postId = Number.parseInt(id, 10);
 		if (Number.isNaN(postId)) {
-			return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 });
+			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
 		const post = await prisma.post.findFirst({
@@ -239,11 +154,11 @@ export async function DELETE(
 		});
 
 		if (!post) {
-			return NextResponse.json({ error: 'Post not found' }, { status: 404 });
+			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
-		if (post.authorId !== sessionUserId && session.user.role !== 'admin') {
-			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+		if (post.authorId !== sessionUserId && session.user.role !== "admin") {
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
 
 		await prisma.post.update({
@@ -253,9 +168,9 @@ export async function DELETE(
 			},
 		});
 
-		return NextResponse.json({ success: true, message: 'Post deleted successfully' });
+		return NextResponse.json({ success: true, message: "Post deleted successfully" });
 	} catch (error) {
-		console.error('[API] DELETE /api/posts/[id] error:', error);
-		return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+		console.error("[API] DELETE /api/posts/[id] error:", error);
+		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
