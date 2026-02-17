@@ -49,6 +49,17 @@ describe("GET /api/posts/[id]", () => {
 		expect(res.status).toBe(401);
 	}, 15_000);
 
+	it("returns 403 when user is pending approval", async () => {
+		authMock.mockResolvedValue({ user: { id: "1", isApproved: 0 } });
+
+		const { GET } = await import("@/app/api/posts/[id]/route");
+		const req = new Request("http://localhost/api/posts/1");
+		const res = await GET(req as never, { params: Promise.resolve({ id: "1" }) });
+
+		expect(res.status).toBe(403);
+		await expect(res.json()).resolves.toEqual({ error: "pending_approval" });
+	});
+
 	it("returns nested comment tree with author object", async () => {
 		authMock.mockResolvedValue({ user: { id: "1" } });
 		postFindFirstMock.mockResolvedValue({

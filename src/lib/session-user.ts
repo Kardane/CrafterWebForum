@@ -8,3 +8,10 @@ export function toSessionUserId(rawUserId: unknown): number | null {
 	}
 	return parsed;
 }
+
+export function isSessionUserApproved(rawIsApproved: unknown): boolean {
+	if (rawIsApproved === 0 || rawIsApproved === "0") {
+		return false;
+	}
+	return true;
+}

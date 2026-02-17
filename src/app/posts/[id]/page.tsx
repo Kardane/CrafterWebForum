@@ -8,7 +8,7 @@ import LikeButton from "@/components/posts/LikeButton";
 import CommentSection from "@/components/comments/CommentSection";
 import PostStickyHeader from "@/components/posts/PostStickyHeader";
 import { PostLikeStateProvider } from "@/components/posts/PostLikeStateProvider";
-import { toSessionUserId } from "@/lib/session-user";
+import { isSessionUserApproved, toSessionUserId } from "@/lib/session-user";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 
 export const preferredRegion = "icn1";
@@ -45,6 +45,9 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 	const session = await auth();
 	if (!session?.user) {
 		redirect("/login");
+	}
+	if (!isSessionUserApproved(session.user.isApproved)) {
+		redirect("/pending");
 	}
 
 	const sessionUserId = toSessionUserId(session.user.id);
