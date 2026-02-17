@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
 			posts: data.posts,
 			metadata: data.metadata,
 		});
+		response.headers.set("Cache-Control", "private, max-age=15, stale-while-revalidate=45");
 		response.headers.set(
 			"Server-Timing",
 			createServerTimingHeader([

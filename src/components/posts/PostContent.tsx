@@ -30,6 +30,14 @@ interface LinkPreviewPayload {
 	metrics?: string[];
 }
 
+interface PostMetaItemPayload {
+	id: number;
+	category: string;
+	views: number;
+	likes: number;
+	comments: number;
+}
+
 export default function PostContent({ content }: PostContentProps) {
 	const contentRef = useRef<HTMLDivElement>(null);
 	const postCardMetaCacheRef = useRef<Map<string, string[]>>(new Map());
@@ -51,6 +59,7 @@ export default function PostContent({ content }: PostContentProps) {
 			return;
 		}
 		let isDisposed = false;
+		const controller = new AbortController();
 
 		const cardsByPostId = new Map<string, HTMLAnchorElement[]>();
 		root.querySelectorAll<HTMLAnchorElement>(".external-link-card[data-post-id]").forEach((card) => {
@@ -183,94 +192,126 @@ export default function PostContent({ content }: PostContentProps) {
 			renderMeta(card, chips);
 		};
 
-		const countComments = (nodes: Array<{ replies?: unknown[] }>): number =>
-			nodes.reduce((sum, node) => {
-				const replyNodes = Array.isArray(node.replies)
-					? (node.replies as Array<{ replies?: unknown[] }>)
-					: [];
-				return sum + 1 + countComments(replyNodes);
-			}, 0);
+		const buildPostMetaChips = (item: PostMetaItemPayload) => {
+			return [
+				`카테고리: ${item.category || "일반"}`,
+				`조회 ${item.views ?? 0}`,
+				`추천 ${item.likes ?? 0}`,
+				`댓글 ${item.comments ?? 0}`,
+			];
+		};
 
+		const postMetaFallback = ["카테고리: 내부링크", "메타데이터 조회 실패"];
+		const uncachedPostIds: string[] = [];
 		cardsByPostId.forEach((cards, postId) => {
 			const cached = postCardMetaCacheRef.current.get(postId);
 			if (cached) {
 				cards.forEach((card) => renderMeta(card, cached));
 				return;
 			}
+			uncachedPostIds.push(postId);
+		});
 
+		if (uncachedPostIds.length > 0) {
 			void (async () => {
 				try {
-					const response = await fetch(`/api/posts/${postId}`, { cache: "no-store" });
+					const endpoint = `/api/posts/meta?ids=${encodeURIComponent(uncachedPostIds.join(","))}`;
+					const response = await fetch(endpoint, {
+						cache: "force-cache",
+						signal: controller.signal,
+					});
 					if (!response.ok) {
 						throw new Error(`Failed to load post metadata: ${response.status}`);
 					}
-					const data = (await response.json()) as {
-						post?: { views: number; likes: number; tags?: string[] };
-						comments?: Array<{ replies?: unknown[] }>;
-					};
-					const post = data.post;
-					if (!post) {
-						return;
-					}
 
-					const commentsCount = Array.isArray(data.comments) ? countComments(data.comments) : 0;
-					const firstTag = Array.isArray(post.tags) && post.tags.length > 0 ? post.tags[0] : "일반";
-					const chips = [
-						`카테고리: ${firstTag}`,
-						`조회 ${post.views ?? 0}`,
-						`추천 ${post.likes ?? 0}`,
-						`댓글 ${commentsCount}`,
-					];
+					const payload = (await response.json()) as { items?: PostMetaItemPayload[] };
+					const itemById = new Map(
+						(payload.items ?? []).map((item) => [String(item.id), item] as const)
+					);
 					if (isDisposed) {
 						return;
 					}
-					postCardMetaCacheRef.current.set(postId, chips);
-					cards.forEach((card) => renderMeta(card, chips));
+
+					uncachedPostIds.forEach((postId) => {
+						const cards = cardsByPostId.get(postId) ?? [];
+						const item = itemById.get(postId);
+						const chips = item ? buildPostMetaChips(item) : postMetaFallback;
+						postCardMetaCacheRef.current.set(postId, chips);
+						cards.forEach((card) => renderMeta(card, chips));
+					});
 				} catch (error) {
+					const fetchError = error as { name?: string };
+					if (fetchError.name === "AbortError") {
+						return;
+					}
 					console.error("Failed to hydrate post card metadata:", error);
 					if (isDisposed) {
 						return;
 					}
-					const chips = ["카테고리: 내부링크", "메타데이터 조회 실패"];
-					postCardMetaCacheRef.current.set(postId, chips);
-					cards.forEach((card) => renderMeta(card, chips));
+					uncachedPostIds.forEach((postId) => {
+						const cards = cardsByPostId.get(postId) ?? [];
+						postCardMetaCacheRef.current.set(postId, postMetaFallback);
+						cards.forEach((card) => renderMeta(card, postMetaFallback));
+					});
 				}
 			})();
-		});
+		}
 
+		const uncachedPreviewEntries: Array<[string, HTMLAnchorElement[]]> = [];
 		cardsByPreviewUrl.forEach((cards, previewUrl) => {
 			const cached = externalCardMetaCacheRef.current.get(previewUrl);
 			if (cached) {
 				cards.forEach((card) => renderPreviewCard(card, cached));
 				return;
 			}
+			uncachedPreviewEntries.push([previewUrl, cards]);
+		});
 
+		if (uncachedPreviewEntries.length > 0) {
 			void (async () => {
-				try {
-					const endpoint = `/api/link-preview?url=${encodeURIComponent(previewUrl)}`;
-					const response = await fetch(endpoint, { cache: "force-cache" });
-					if (!response.ok) {
-						throw new Error(`Failed to load link preview metadata: ${response.status}`);
-					}
-					const data = (await response.json()) as { preview?: LinkPreviewPayload };
-					if (!data.preview || isDisposed) {
-						return;
-					}
-					externalCardMetaCacheRef.current.set(previewUrl, data.preview);
-					cards.forEach((card) => renderPreviewCard(card, data.preview as LinkPreviewPayload));
-				} catch (error) {
-					console.error("Failed to hydrate external link metadata:", error);
+				const maxConcurrentFetches = 4;
+				for (let index = 0; index < uncachedPreviewEntries.length; index += maxConcurrentFetches) {
+					const batch = uncachedPreviewEntries.slice(index, index + maxConcurrentFetches);
+					await Promise.all(
+						batch.map(async ([previewUrl, cards]) => {
+							try {
+								const endpoint = `/api/link-preview?url=${encodeURIComponent(previewUrl)}`;
+								const response = await fetch(endpoint, {
+									cache: "force-cache",
+									signal: controller.signal,
+								});
+								if (!response.ok) {
+									throw new Error(`Failed to load link preview metadata: ${response.status}`);
+								}
+								const data = (await response.json()) as { preview?: LinkPreviewPayload };
+								if (!data.preview || isDisposed) {
+									return;
+								}
+								externalCardMetaCacheRef.current.set(previewUrl, data.preview);
+								cards.forEach((card) => renderPreviewCard(card, data.preview as LinkPreviewPayload));
+							} catch (error) {
+								const fetchError = error as { name?: string };
+								if (fetchError.name === "AbortError") {
+									return;
+								}
+								console.error("Failed to hydrate external link metadata:", error);
+								if (isDisposed) {
+									return;
+								}
+								const fallback: LinkPreviewPayload = {
+									chips: ["메타데이터 조회 실패"],
+								};
+								externalCardMetaCacheRef.current.set(previewUrl, fallback);
+								cards.forEach((card) => renderPreviewCard(card, fallback));
+							}
+						})
+					);
 					if (isDisposed) {
 						return;
 					}
-					const fallback: LinkPreviewPayload = {
-						chips: ["메타데이터 조회 실패"],
-					};
-					externalCardMetaCacheRef.current.set(previewUrl, fallback);
-					cards.forEach((card) => renderPreviewCard(card, fallback));
 				}
 			})();
-		});
+		}
 
 		// 이미지 에러 핸들링
 		root.querySelectorAll("img").forEach((img) => {
@@ -291,6 +332,7 @@ export default function PostContent({ content }: PostContentProps) {
 
 		return () => {
 			isDisposed = true;
+			controller.abort();
 		};
 	}, [content]);
 

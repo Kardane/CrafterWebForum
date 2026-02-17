@@ -1,5 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { extractFirstImage, getPreviewText } from "@/lib/utils";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 12;
@@ -18,7 +19,8 @@ export interface ListPostsResult {
 	posts: Array<{
 		id: number;
 		title: string;
-		content: string;
+		preview: string;
+		thumbnailUrl: string | null;
 		tags: string[];
 		likes: number;
 		views: number;
@@ -111,6 +113,7 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 	}
 
 	const orderBy = resolveOrderBy(input.sort);
+	const shouldIncludePostReads = sessionUserId !== null;
 
 	const dbMainStart = performance.now();
 	const [posts, total] = await prisma.$transaction([
@@ -131,15 +134,19 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 						comments: true,
 					},
 				},
-				postReads: {
-					where: {
-						userId: sessionUserId ?? -1,
-					},
-					select: {
-						lastReadCommentCount: true,
-					},
-					take: 1,
-				},
+				...(shouldIncludePostReads
+					? {
+							postReads: {
+								where: {
+									userId: sessionUserId as number,
+								},
+								select: {
+									lastReadCommentCount: true,
+								},
+								take: 1,
+							},
+						}
+					: {}),
 			},
 		}),
 		prisma.post.count({ where: whereCondition }),
@@ -148,7 +155,7 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 
 	let likedPostIds: number[] = [];
 	let dbLikesMs = 0;
-	if (sessionUserId) {
+	if (sessionUserId && posts.length > 0) {
 		const dbLikesStart = performance.now();
 		const likes = await prisma.like.findMany({
 			where: {
@@ -162,10 +169,12 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 	}
 
 	const serializeStart = performance.now();
+	const likedPostIdSet = new Set(likedPostIds);
 	const formattedPosts = posts.map((post) => ({
 		id: post.id,
 		title: post.title,
-		content: post.content,
+		preview: getPreviewText(post.content),
+		thumbnailUrl: extractFirstImage(post.content),
 		tags: parseTags(post.tags),
 		likes: post.likes,
 		views: post.views,
@@ -175,10 +184,11 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 		authorUuid: post.author.minecraftUuid,
 		commentCount: post._count.comments,
 		unreadCount: Math.max(
-			post._count.comments - (post.postReads?.[0]?.lastReadCommentCount ?? 0),
+			post._count.comments -
+				("postReads" in post ? post.postReads?.[0]?.lastReadCommentCount ?? 0 : 0),
 			0
 		),
-		userLiked: likedPostIds.includes(post.id),
+		userLiked: likedPostIdSet.has(post.id),
 	}));
 	const serializeMs = performance.now() - serializeStart;
 

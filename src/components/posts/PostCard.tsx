@@ -11,7 +11,9 @@ import { extractFirstImage, getPreviewText } from "@/lib/utils";
 interface PostCardProps {
 	id: number;
 	title: string;
-	content: string;
+	content?: string;
+	preview?: string;
+	thumbnailUrl?: string | null;
 	authorName: string;
 	authorUuid?: string | null;
 	createdAt: string | Date;
@@ -29,6 +31,8 @@ export default function PostCard({
 	id,
 	title,
 	content,
+	preview,
+	thumbnailUrl,
 	authorName,
 	createdAt,
 	updatedAt,
@@ -39,8 +43,8 @@ export default function PostCard({
 	userLiked,
 	onNavigate,
 }: PostCardProps) {
-	const thumb = extractFirstImage(content);
-	const preview = getPreviewText(content);
+	const thumb = thumbnailUrl ?? (content ? extractFirstImage(content) : null);
+	const previewText = preview ?? (content ? getPreviewText(content) : "");
 	const activityDate = updatedAt || createdAt;
 	const timeAgo = formatDistanceToNow(new Date(activityDate), {
 		addSuffix: true,
@@ -74,7 +78,7 @@ export default function PostCard({
 
 						<div className="text-sm text-text-muted line-clamp-2 break-all">
 							<span className="font-medium text-text-secondary mr-2">{authorName}:</span>
-							{preview}
+							{previewText}
 						</div>
 					</div>
 

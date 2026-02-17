@@ -99,47 +99,65 @@ export async function getPostDetail(
 		return null;
 	}
 
-	const dbLikeStart = performance.now();
-	const userLiked = await prisma.like.findFirst({
-		where: {
-			postId: post.id,
-			userId: input.sessionUserId,
-		},
-	});
-	const dbLikeMs = performance.now() - dbLikeStart;
-
-	const dbCommentsStart = performance.now();
-	const comments = await prisma.comment.findMany({
-		where: {
-			postId: post.id,
-		},
-		include: {
-			author: {
-				select: {
-					id: true,
-					nickname: true,
-					minecraftUuid: true,
-					role: true,
-				},
-			},
-		},
-		orderBy: [{ createdAt: "asc" }],
-	});
-	const dbCommentsMs = performance.now() - dbCommentsStart;
-
-	const dbReadStart = performance.now();
-	const previousRead = await prisma.postRead.findUnique({
-		where: {
-			userId_postId: {
+	const likePromise = (async () => {
+		const startedAt = performance.now();
+		const data = await prisma.like.findFirst({
+			where: {
+				postId: post.id,
 				userId: input.sessionUserId,
+			},
+		});
+		return { data, ms: performance.now() - startedAt };
+	})();
+
+	const commentsPromise = (async () => {
+		const startedAt = performance.now();
+		const data = await prisma.comment.findMany({
+			where: {
 				postId: post.id,
 			},
-		},
-		select: {
-			lastReadCommentCount: true,
-		},
-	});
-	const dbReadMs = performance.now() - dbReadStart;
+			include: {
+				author: {
+					select: {
+						id: true,
+						nickname: true,
+						minecraftUuid: true,
+						role: true,
+					},
+				},
+			},
+			orderBy: [{ createdAt: "asc" }],
+		});
+		return { data, ms: performance.now() - startedAt };
+	})();
+
+	const readPromise = (async () => {
+		const startedAt = performance.now();
+		const data = await prisma.postRead.findUnique({
+			where: {
+				userId_postId: {
+					userId: input.sessionUserId,
+					postId: post.id,
+				},
+			},
+			select: {
+				lastReadCommentCount: true,
+			},
+		});
+		return { data, ms: performance.now() - startedAt };
+	})();
+
+	const [likedResult, commentsResult, readResult] = await Promise.all([
+		likePromise,
+		commentsPromise,
+		readPromise,
+	]);
+	const userLiked = likedResult.data;
+	const dbLikeMs = likedResult.ms;
+	const comments = commentsResult.data;
+	const dbCommentsMs = commentsResult.ms;
+	const previousRead = readResult.data;
+	const dbReadMs = readResult.ms;
 
 	const commentsWithPostAuthorFlag = comments.map((comment) => ({
 		...comment,

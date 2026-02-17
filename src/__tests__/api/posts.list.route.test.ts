@@ -74,7 +74,14 @@ describe("GET /api/posts", () => {
 		const res = await GET(req as never);
 		expect(res.status).toBe(200);
 		const payload = (await res.json()) as {
-			posts: Array<{ id: number; unreadCount: number; userLiked: boolean; tags: string[] }>;
+			posts: Array<{
+				id: number;
+				unreadCount: number;
+				userLiked: boolean;
+				tags: string[];
+				preview: string;
+				thumbnailUrl: string | null;
+			}>;
 			metadata: { total: number; page: number; limit: number; totalPages: number };
 		};
 
@@ -84,12 +91,16 @@ describe("GET /api/posts", () => {
 			unreadCount: 3,
 			userLiked: true,
 			tags: ["질문"],
+			preview: "hello",
+			thumbnailUrl: null,
 		});
 		expect(payload.posts[1]).toMatchObject({
 			id: 12,
 			unreadCount: 0,
 			userLiked: false,
 			tags: [],
+			preview: "world",
+			thumbnailUrl: null,
 		});
 		expect(payload.metadata).toMatchObject({
 			total: 2,
@@ -123,12 +134,14 @@ describe("GET /api/posts", () => {
 		const res = await GET(req as never);
 		expect(res.status).toBe(200);
 		const payload = (await res.json()) as {
-			posts: Array<{ unreadCount: number; userLiked: boolean }>;
+			posts: Array<{ unreadCount: number; userLiked: boolean; preview: string; thumbnailUrl: string | null }>;
 		};
 
 		expect(payload.posts[0]).toMatchObject({
 			unreadCount: 4,
 			userLiked: false,
+			preview: "guest content",
+			thumbnailUrl: null,
 		});
 		expect(likeFindManyMock).not.toHaveBeenCalled();
 		expect(postFindManyMock).toHaveBeenCalledWith(

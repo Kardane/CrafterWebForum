@@ -9,7 +9,8 @@ import { text } from "@/lib/system-text";
 interface Post {
 	id: number;
 	title: string;
-	content: string;
+	preview: string;
+	thumbnailUrl: string | null;
 	authorName: string;
 	authorUuid?: string | null;
 	createdAt: string;
@@ -37,6 +38,19 @@ interface PostsResponse {
 		limit: number;
 		totalPages: number;
 	};
+}
+
+const POSTS_PAGE_CACHE_TTL_MS = 45_000;
+const postsPageCache = new Map<
+	string,
+	{
+		payload: PostsResponse;
+		expiresAt: number;
+	}
+>();
+
+function buildPostsPageCacheKey(baseParams: URLSearchParams, page: number) {
+	return `${baseParams.toString()}::page=${page}`;
 }
 
 export default function PostList({
@@ -70,7 +84,25 @@ export default function PostList({
 		setHasMore(initialPage < totalPages);
 		setIsLoadingMore(false);
 		setLoadError(null);
-	}, [initialPosts, initialPage, totalPages, searchQuery]);
+
+		const initialParams = new URLSearchParams(searchQuery);
+		initialParams.delete("page");
+		if (!initialParams.get("limit")) {
+			initialParams.set("limit", String(initialLimit));
+		}
+		postsPageCache.set(buildPostsPageCacheKey(initialParams, initialPage), {
+			payload: {
+				posts: initialPosts,
+				metadata: {
+					total: initialPosts.length,
+					page: initialPage,
+					limit: initialLimit,
+					totalPages,
+				},
+			},
+			expiresAt: Date.now() + POSTS_PAGE_CACHE_TTL_MS,
+		});
+	}, [initialPosts, initialPage, initialLimit, searchQuery, totalPages]);
 
 	const baseParams = useMemo(() => {
 		const params = new URLSearchParams(searchParams.toString());
@@ -91,15 +123,35 @@ export default function PostList({
 		const nextPage = currentPage + 1;
 		const nextParams = new URLSearchParams(baseParams.toString());
 		nextParams.set("page", String(nextPage));
+		const cacheKey = buildPostsPageCacheKey(baseParams, nextPage);
+
+		const cached = postsPageCache.get(cacheKey);
+		if (cached && cached.expiresAt > Date.now()) {
+			const data = cached.payload;
+			setPosts((prev) => {
+				const existingIds = new Set(prev.map((post) => post.id));
+				const nextPosts = data.posts.filter((post) => !existingIds.has(post.id));
+				return [...prev, ...nextPosts];
+			});
+			setCurrentPage(data.metadata.page);
+			setHasMore(data.metadata.page < data.metadata.totalPages);
+			setIsLoadingMore(false);
+			return;
+		}
+		if (cached && cached.expiresAt <= Date.now()) {
+			postsPageCache.delete(cacheKey);
+		}
 
 		try {
-			const response = await fetch(`/api/posts?${nextParams.toString()}`, {
-				cache: "no-store",
-			});
+			const response = await fetch(`/api/posts?${nextParams.toString()}`);
 			if (!response.ok) {
 				throw new Error(`failed_to_fetch_next_page_${response.status}`);
 			}
 			const data = (await response.json()) as PostsResponse;
+			postsPageCache.set(cacheKey, {
+				payload: data,
+				expiresAt: Date.now() + POSTS_PAGE_CACHE_TTL_MS,
+			});
 			setPosts((prev) => {
 				const existingIds = new Set(prev.map((post) => post.id));
 				const nextPosts = data.posts.filter((post) => !existingIds.has(post.id));
@@ -165,7 +217,8 @@ export default function PostList({
 						key={post.id}
 						id={post.id}
 						title={post.title}
-						content={post.content}
+						preview={post.preview}
+						thumbnailUrl={post.thumbnailUrl}
 						authorName={post.authorName}
 						authorUuid={post.authorUuid}
 						createdAt={post.createdAt}
