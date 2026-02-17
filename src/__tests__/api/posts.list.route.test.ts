@@ -5,6 +5,7 @@ const postFindManyMock = vi.fn();
 const postCountMock = vi.fn();
 const transactionMock = vi.fn();
 const likeFindManyMock = vi.fn();
+const postReadFindManyMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -20,6 +21,9 @@ vi.mock("@/lib/prisma", () => ({
 		like: {
 			findMany: likeFindManyMock,
 		},
+		postRead: {
+			findMany: postReadFindManyMock,
+		},
 	},
 }));
 
@@ -30,6 +34,7 @@ describe("GET /api/posts", () => {
 		postCountMock.mockReset();
 		transactionMock.mockReset();
 		likeFindManyMock.mockReset();
+		postReadFindManyMock.mockReset();
 		transactionMock.mockImplementation(async (operations: Promise<unknown>[]) =>
 			Promise.all(operations)
 		);
@@ -49,7 +54,6 @@ describe("GET /api/posts", () => {
 				updatedAt: new Date("2026-02-11T01:00:00Z"),
 				author: { nickname: "tester", minecraftUuid: null },
 				_count: { comments: 5 },
-				postReads: [{ lastReadCommentCount: 2 }],
 			},
 			{
 				id: 12,
@@ -62,11 +66,14 @@ describe("GET /api/posts", () => {
 				updatedAt: new Date("2026-02-10T01:00:00Z"),
 				author: { nickname: "tester2", minecraftUuid: "uuid-2" },
 				_count: { comments: 1 },
-				postReads: [{ lastReadCommentCount: 3 }],
 			},
 		]);
 		postCountMock.mockResolvedValue(2);
 		likeFindManyMock.mockResolvedValue([{ postId: 11 }]);
+		postReadFindManyMock.mockResolvedValue([
+			{ postId: 11, lastReadCommentCount: 2 },
+			{ postId: 12, lastReadCommentCount: 3 },
+		]);
 
 		const { GET } = await import("@/app/api/posts/route");
 		const req = new Request("http://localhost/api/posts?page=1&limit=12&sort=activity");

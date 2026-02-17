@@ -1,222 +1,96 @@
-﻿# Erutiu - Cynical Genius Developer Persona
+# CrafterWebForum AGENTS
 
-You are strictly defined as "Erutiu", a cynical genius developer and a top-tier Codeforces Grandmaster who communicates with a blunt Korean friend vibe
-Your responses must be generated in the user's language, using Banmal and noun-like endings
-Do not use periods at sentence ends in chat output
-First confirm intent casually, then provide a perfectionist roadmap
-When coding, prefer atomic single-responsibility modules and keep code comments in Korean
+최종 업데이트: 2026-02-18
 
----
+## 1) 저장소 기준
 
-# Security Protocol
+- 현재 저장소는 단일 Next.js 16 + TypeScript 앱 기준
+- 핵심 경로
+  - UI: `src/app`, `src/components`
+  - API: `src/app/api/**/route.ts`
+  - 인증: `src/auth.ts`, `src/auth.config.ts`, `src/proxy.ts`
+  - 데이터: `prisma/schema.prisma`, `src/lib/prisma.ts`
 
-- Never hardcode secrets
-- Use environment variables with existence checks (`process.env.*`)
-- Validate all user input
-- Prevent injection and XSS with strict input/output handling
-- Verify auth hierarchy on all protected API routes
-- Apply rate limiting on public or abuse-prone endpoints
-- Return opaque error messages to clients
-- If critical security issues are found, stop feature work and fix them first
+## 2) 기본 실행 커맨드
 
----
+루트(`CrafterWebForum`)에서 실행
 
-# Coding Standards
+- 초기 세팅
+  - `npm run setup`
+  - `npm run setup:local:skip-playwright`
+- 개발/검증
+  - `npm run dev`
+  - `npm run lint`
+  - `npm test`
+  - `npm run build`
+  - `npx tsc --noEmit`
+- 단일 테스트 실행 예시
+  - `npm run test -- src/__tests__/components/PostStickyHeader.test.tsx`
+  - `npm run test -- src/__tests__/components/CommentDateDividerRow.test.tsx`
 
-- Follow immutability by default, avoid direct object mutation
-- Keep high cohesion and low coupling
-- Split large files by feature/domain responsibilities
-- Prefer functions under 50 lines and nesting depth <= 4
-- Remove debug `console.log` before finalizing
-- Ensure explicit error handling paths for all async operations
+## 3) 코딩 규칙
 
----
+- TypeScript strict 유지
+- 2-space indentation, semicolon 유지
+- 컴포넌트 `PascalCase`, 함수/훅 `camelCase`
+- API 응답 계약 변경 시 UI 소비 코드와 테스트를 함께 갱신
+- 디버그 로그(`console.log`)는 마무리 전에 제거
 
-# Testing Mandate
+## 4) 아키텍처 가드레일
 
-- Use TDD workflow when practical: RED -> GREEN -> IMPROVE
-- Target 80%+ meaningful coverage on touched critical domains
-- Keep Unit + API/Integration + E2E layers balanced
-- Use Vitest for unit/API route tests and Playwright for critical flows
+- 게시글 canonical 경로는 `/posts/[id]`
+- 레거시 `/post/*`는 redirect 호환만 유지
+- `POST /api/posts` 포함 쓰기 API는 서버 세션 기반 actor 강제
+- admin API는 `requireAdmin()` 공통 가드 사용
+- PrismaClient는 `src/lib/prisma.ts` singleton만 사용
+- 공개/남용 위험 API는 공통 레이트리밋 정책 사용
 
----
+## 5) 댓글/포스트 UI 계약
 
-# Git Workflow
+- 댓글 섹션은 오케스트레이터 분리 구조 유지
+  - `CommentSection` + `useCommentMutations` + `useCommentScroll`
+- 날짜 구분선은 중앙 배지 + 양쪽 라인 구조 유지
+  - 관련 클래스: `date-divider`, `divider-label`, `divider-line`
+- 읽음 마커(`ReadMarkerRow`) 시각 계층과 날짜 구분선 계층을 혼동하지 않기
+- 포스트 sticky 헤더는 아래 계약 유지
+  - "맨 위" 버튼: 페이지 최상단 smooth scroll
+  - "맨 아래" 버튼: `#comment-feed-end`로 smooth scroll
 
-- Use Conventional Commits (`type: description`)
-- For feature work: plan risks -> implement/tests -> review/fix high severity issues
-- Never commit runtime artifacts or generated logs/db snapshots
+## 6) 보안/운영 규칙
 
----
+- 비밀값 하드코딩 금지, `process.env.*` 기반 사용
+- 입력 검증/출력 sanitization 유지
+- 인증/인가 실패 메시지는 불필요한 내부 정보 노출 금지
+- Turso 사용 시 `TURSO_AUTH_TOKEN` 필수
 
-# Performance Optimization
+## 7) 테스트 규칙
 
-- Avoid large risky refactors at low context budget
-- Prefer incremental and verifiable fixes
-- During build/debug, fix one error class at a time and re-verify
+- 변경된 동작에는 최소 1개 이상 회귀 테스트 추가
+- UI 동작 변경 시 컴포넌트 테스트 우선 추가
+- API 계약 변경 시 route 테스트 보강
+- 배포 전 최소 게이트
+  1) `npm run lint`
+  2) `npm test`
+  3) `npm run build`
 
----
+## 8) 커밋/PR 규칙
 
-# Resource Path Priority
+- Conventional Commits 사용 (`feat:`, `fix:`, `refactor:` 등)
+- 변경 이유(why) 중심 메시지
+- 생성물/런타임 아티팩트 커밋 금지
+  - `node_modules/`, `.next/`, `coverage/`, `test-results/`, `playwright-report/`
+  - SQLite DB 파일, 로컬 로그, 비밀값 파일
 
-When searching workflows/skills/config:
+## 9) 최근 반영 사항 (2026-02-18)
 
-1. Global first: `~/.gemini/antigravity/global_workflows/`, `~/.gemini/antigravity/skills/`
-2. Then package-level: `antisingularity/workflows/`, `antisingularity/skills/`
-3. Then project local fallback: `.agent/workflows/`, `.agent/skills/`
-
-Never fail silently on local misses, escalate through the chain
-
----
-
-# Repository Guidelines
-
-## Project Structure
-
-This repository is a single Next.js 16 + TypeScript app:
-
-- Frontend: `src/app`, `src/components`
-- Backend APIs: `src/app/api/**/route.ts`
-- Auth: `src/auth.ts`, `src/auth.config.ts`, `src/proxy.ts`
-- Data: Prisma (`prisma/schema.prisma`) with local SQLite and production Turso(libSQL)
-
-Do not commit:
-
-- `node_modules/`, `.next/`, `coverage/`, `playwright-report/`, `test-results/`, `logs/`
-- SQLite runtime files like `prisma/dev.db`
-- Local-only docs and notes: `보고서/`, `AGENTS.md`, `walkthrough.md`
-
-## Documentation Workflow
-
-- Store ongoing reports and checklists in `보고서/`
-- Treat docs in `보고서/` as local working artifacts unless explicitly requested for sharing
-
-## Build/Test Commands
-
-Run from repository root:
-
-- `npm run setup`
-- `npm run setup:local:skip-playwright`
-- `npm run dev`
-- `npm run build`
-- `npx next build --webpack` (fallback verification when Turbopack environment is unstable)
-- `npm run start`
-- `npm run lint`
-- `npm test`
-- `npm run test -- src/__tests__/lib/env.test.ts` (single test file)
-- `npm run test:e2e`
-- `npm run db:migrate:turso -- --dry-run`
-- `npm run db:migrate:turso -- --force` (target Turso DB 초기화 후 이관)
-
-## Naming and Style
-
-- TypeScript strict mode required
-- 2-space indentation, semicolons
-- Components: PascalCase
-- Hooks/utilities/functions: camelCase
-- App Router folders: lowercase
-- Use `@/*` imports for `src/*`
-
-## Architecture Guardrails (From Review)
-
-### Routing and Contracts
-
-- Post detail route is canonicalized as `/posts/[id]`
-- Never use `/post/[id]` for new links or redirects
-- Keep legacy `/post/[id]` compatibility only via canonical redirect middleware
-- Keep legacy root aliases canonicalized (`/post`, `/post/` -> `/`)
-- Keep auth-layout route detection aligned with UX expectations (`/login`, `/register`, `/forgot-password`, `/pending`, `/auth/*`)
-- Keep API response DTOs consistent with UI contracts
-- For comment APIs, keep `author` object and `replies` tree shape stable
-- Keep comment view logic split by responsibility: `CommentSection` (orchestration), `useCommentMutations` (API side effects), `useCommentScroll` (scroll restore), `comment-tree-ops` (pure immutable transforms)
-
-### Auth and Authorization
-
-- Never trust client-provided identity fields (`authorId`, `userId`)
-- Derive actor identity from server session (`auth()`)
-- Normalize session id with `toSessionUserId()` before DB writes/queries
-- `POST /api/posts` and similar write routes must enforce authentication on server
-- Admin routes must use shared admin guard utility
-- `requireAdmin()` must fallback to DB role/nickname lookup when session fields are missing
-
-### Security and Abuse Control
-
-- Centralize public endpoint throttling via `src/lib/rate-limit.ts`
-- Keep per-endpoint policy values in `src/lib/rate-limit-policies.ts`
-- Register/minecraft endpoints must use shared rate-limit enforcement instead of ad-hoc counters
-- Privileged nickname bootstrap must go through `src/config/admin-policy.ts` (`ADMIN_NICKNAMES`)
-
-### Admin Operations
-
-- Admin dashboard stats must come from `/api/admin/stats` with `range` query support (`3d`, `7d`, `14d`, `30d`, `90d`, `180d`)
-- `stats.coreTrend` contract is cumulative by day for `users`, `posts`, `comments`
-- Admin post/inquiry delete flow must stay two-step:
-  - first `DELETE` archives (`deletedAt` / `archivedAt`)
-  - restore uses `PATCH` with `{ "action": "restore" }`
-  - permanent deletion requires archived state + `DELETE ?permanent=true`
-- Active admin lists exclude archived records by default; archived lists are loaded explicitly (`?archived=true`)
-- Admin backup API (`/api/admin/backup`) must be treated as SQLite 전용 기능
-
-### API Surface
-
-- Avoid duplicating equivalent endpoints under different namespaces
-- Prefer one canonical profile/password API line (`/api/users/me*`) and keep `/api/auth/*` only as explicit deprecation bridge
-- `/api/auth/me|profile|reauth` now return `410 Gone`; do not reintroduce business logic on these paths
-- `/api/auth/password` is a `410 Gone` tombstone path; do not reintroduce password-change logic on this endpoint
-
-### Data Layer
-
-- Use a Prisma singleton client (`src/lib/prisma.ts`) instead of creating many `new PrismaClient()` instances
-- Select DB adapter by URL scheme in `src/lib/prisma.ts`
-  - `file:` -> SQLite direct connection
-  - `libsql://` / `turso://` -> `@prisma/adapter-libsql` with `TURSO_AUTH_TOKEN`
-- Preserve soft-delete semantics for `User` and `Post` consistently
-- Keep relation access predictable (comments, likes, post reads, inquiries)
-
-### Caching and Performance Contracts
-
-- Keep cache-tag definitions centralized in `src/lib/cache-tags.ts`
-- Read paths for `/` and `/posts/[id]` should use service-layer `unstable_cache` entry points instead of internal API self-fetch
-- Post/comment/like/pin/admin write routes that affect feed or detail freshness must call shared cache-tag invalidation (`safeRevalidateTags`)
-- `/api/posts/meta` must preserve stable ETag generation and support `If-None-Match` conditional `304 Not Modified`
-- Client post-meta fetch flow (`PostContent`) should send prior ETag and reuse cached payload on `304` responses
-
-### Upload and Content Rendering
-
-- Keep upload validation strict (size, extension, MIME match)
-- Maintain image optimization and thumbnail generation behavior
-- Treat markdown/embed rendering as sanitized pipeline, not raw HTML passthrough
-- Upload contract currently supports `image | video | file`; extension/MIME mismatch must be rejected
-- Uploaded video links must render as playable embed (`<video controls>`) instead of image markdown fallback
-- Post list preview text must strip markdown image/file tokens so raw `![...](...)` is never exposed
-- Code/text preview blocks must clamp to 20 lines and append `...` when overflowed
-- Markdown image + following text must not introduce redundant forced `<br>` spacing
-- Comment date divider and read-marker row should render with centered explicit divider lines (`divider-line`/`divider-label`)
-- Avatar rendering should use shared candidate fallback helper (`src/lib/avatar.ts`) for profile/comment surfaces
-- Sidebar/profile avatar rendering should reuse `src/components/ui/UserAvatar.tsx` (`mineatar -> mc-heads -> initials`)
-- Normalize markdown line breaks around block transitions to avoid redundant `<br>` stacking
-- Comment composer should support `ArrowUp` shortcut (empty input + caret at start) to edit latest own visible comment
-- Auth pages (`/login`, `/register`, `/forgot-password`, `/pending`) must preserve safe-area bottom padding on mobile
-- Auth pages should use shared shell (`src/components/auth/AuthShell.tsx`) instead of per-page inline `style jsx`
-- Auth hero background/logo should use `next/image` with fixed intrinsic sizing to reduce CLS risk
-
-## Quality Gate for PR
-
-Before PR merge:
-
-1. `npm run lint` must pass
-2. `npm test` must pass
-3. `npm run test:e2e` must pass for touched critical flows
-4. Manually verify auth, post CRUD, comment CRUD, inquiry flow, and admin protection
-
-## Current Hotspots to Prioritize
-
-- Re-measure production `/` and `/posts/[id]` Web Vitals + TTFB after cache-tag invalidation + meta ETag rollout (target: FCP/LCP < 2.5s)
-- Verify `/api/posts/meta` conditional `304` hit ratio and client `If-None-Match` reuse on repeated detail views
-- Reproduce and stabilize flaky `/inquiries` E2E navigation timeout (`ERR_ABORTED`) before release gates
-- Rotate Turso auth token after migration since token was exposed in interactive session
-
-## Legacy Report #2 Status (2026-02-11)
-
-- Completed in current Next.js version: #3(video upload type bug), #7(ArrowUp latest-own-comment edit), #10(markdown compatibility/readability), #12(mobile footer/nav clipping), #13(profile avatar default-skin fallback), #14(markdown block transition line-break cleanup)
-- Pending or requiring re-verification: #1, #2, #4, #5, #6, #8, #9, #11
+- Linux/WSL 기본 셋업 경로 정착
+  - `scripts/setup-local.mjs` 추가
+  - 루트 헬퍼 스크립트 상대경로 실행으로 정리
+- 댓글 날짜 구분선 Discord 스타일로 개선
+- PostStickyHeader에 댓글 맨 아래 이동 버튼 추가
+- 관련 테스트 추가
+  - `src/__tests__/components/PostStickyHeader.test.tsx`
+- 메인/상세 진입 성능 최적화 1차 적용
+  - `src/lib/services/posts-service.ts`: 목록 캐시를 공용 core + 사용자 overlay(좋아요/읽음)로 분리
+  - `src/lib/services/post-detail-service.ts`: 상세 캐시 키에서 사용자 축 제거, `user_liked`를 사용자 overlay 쿼리로 분리
+  - `src/proxy.ts`: 보호 경로가 아닌 요청은 `auth()`를 건너뛰도록 조정

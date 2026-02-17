@@ -18,13 +18,16 @@ export async function proxy(request: NextRequest) {
 		return NextResponse.redirect(redirectUrl, 308);
 	}
 
-	const session = await auth();
-
 	const protectedRoutes = ["/admin", "/profile"];
 	const adminRoutes = ["/admin"];
 
 	const isProtectedRoute = protectedRoutes.some((route) => pathname.startsWith(route));
 	const isAdminRoute = adminRoutes.some((route) => pathname.startsWith(route));
+	if (!isProtectedRoute && !isAdminRoute) {
+		return NextResponse.next();
+	}
+
+	const session = await auth();
 
 	if (isProtectedRoute && !session?.user) {
 		const loginUrl = new URL("/login", request.url);

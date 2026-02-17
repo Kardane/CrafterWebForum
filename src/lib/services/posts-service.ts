@@ -59,6 +59,39 @@ interface NormalizedListPostsInput {
 	sessionUserId: number | null;
 }
 
+interface NormalizedListPostsCoreInput {
+	page: number;
+	limit: number;
+	tag: string | null;
+	sort: string;
+	search: string;
+}
+
+interface CachedListPostCore {
+	id: number;
+	title: string;
+	preview: string;
+	thumbnailUrl: string | null;
+	tags: string[];
+	likes: number;
+	views: number;
+	createdAt: string;
+	updatedAt: string;
+	authorName: string;
+	authorUuid: string | null;
+	commentCount: number;
+}
+
+interface CachedListPostsCoreResult {
+	posts: CachedListPostCore[];
+	metadata: ListPostsResult["metadata"];
+	timing: {
+		queryMainMs: number;
+		serializeMs: number;
+		totalMs: number;
+	};
+}
+
 function normalizePositiveInt(value: number | undefined, fallback: number, max?: number) {
 	if (!Number.isInteger(value) || !value || value <= 0) {
 		return fallback;
@@ -114,7 +147,17 @@ function normalizeListPostsInput(input: ListPostsInput): NormalizedListPostsInpu
 	};
 }
 
-function buildListPostsCacheKey(input: NormalizedListPostsInput) {
+function toCoreInput(input: NormalizedListPostsInput): NormalizedListPostsCoreInput {
+	return {
+		page: input.page,
+		limit: input.limit,
+		tag: input.tag,
+		sort: input.sort,
+		search: input.search,
+	};
+}
+
+function buildListPostsCacheKey(input: NormalizedListPostsCoreInput) {
 	return [
 		`posts:list:${POSTS_LIST_CACHE_VERSION}`,
 		`page:${input.page}`,
@@ -122,17 +165,17 @@ function buildListPostsCacheKey(input: NormalizedListPostsInput) {
 		`tag:${input.tag ?? "all"}`,
 		`sort:${input.sort}`,
 		`search:${encodeURIComponent(input.search)}`,
-		`user:${input.sessionUserId ?? "guest"}`,
 	];
 }
 
-async function listPostsUncached(input: NormalizedListPostsInput): Promise<ListPostsResult> {
+async function listPostsCoreUncached(
+	input: NormalizedListPostsCoreInput
+): Promise<CachedListPostsCoreResult> {
 	const totalStart = performance.now();
 	const page = input.page;
 	const limit = input.limit;
 	const tag = input.tag;
 	const search = input.search;
-	const sessionUserId = input.sessionUserId;
 	const skip = (page - 1) * limit;
 
 	const whereCondition: Prisma.PostWhereInput = {
@@ -154,7 +197,6 @@ async function listPostsUncached(input: NormalizedListPostsInput): Promise<ListP
 	}
 
 	const orderBy = resolveOrderBy(input.sort);
-	const shouldIncludePostReads = sessionUserId !== null;
 
 	const queryMainStart = performance.now();
 	const [posts, total] = await prisma.$transaction([
@@ -175,42 +217,13 @@ async function listPostsUncached(input: NormalizedListPostsInput): Promise<ListP
 						comments: true,
 					},
 				},
-				...(shouldIncludePostReads
-					? {
-							postReads: {
-								where: {
-									userId: sessionUserId as number,
-								},
-								select: {
-									lastReadCommentCount: true,
-								},
-								take: 1,
-							},
-						}
-					: {}),
 			},
 		}),
 		prisma.post.count({ where: whereCondition }),
 	]);
 	const queryMainMs = performance.now() - queryMainStart;
 
-	let likedPostIds: number[] = [];
-	let queryAuxMs = 0;
-	if (sessionUserId && posts.length > 0) {
-		const queryAuxStart = performance.now();
-		const likes = await prisma.like.findMany({
-			where: {
-				userId: sessionUserId,
-				postId: { in: posts.map((post) => post.id) },
-			},
-			select: { postId: true },
-		});
-		queryAuxMs = performance.now() - queryAuxStart;
-		likedPostIds = likes.map((like) => like.postId);
-	}
-
 	const serializeStart = performance.now();
-	const likedPostIdSet = new Set(likedPostIds);
 	const formattedPosts = posts.map((post) => ({
 		id: post.id,
 		title: post.title,
@@ -224,12 +237,6 @@ async function listPostsUncached(input: NormalizedListPostsInput): Promise<ListP
 		authorName: post.author.nickname,
 		authorUuid: post.author.minecraftUuid,
 		commentCount: post._count.comments,
-		unreadCount: Math.max(
-			post._count.comments -
-				("postReads" in post ? post.postReads?.[0]?.lastReadCommentCount ?? 0 : 0),
-			0
-		),
-		userLiked: likedPostIdSet.has(post.id),
 	}));
 	const serializeMs = performance.now() - serializeStart;
 
@@ -243,7 +250,6 @@ async function listPostsUncached(input: NormalizedListPostsInput): Promise<ListP
 		},
 		timing: {
 			queryMainMs,
-			queryAuxMs,
 			serializeMs,
 			totalMs: performance.now() - totalStart,
 		},
@@ -251,25 +257,85 @@ async function listPostsUncached(input: NormalizedListPostsInput): Promise<ListP
 }
 
 export async function listPosts(input: ListPostsInput): Promise<ListPostsResult> {
+	const totalStart = performance.now();
 	const normalizedInput = normalizeListPostsInput(input);
+	const coreInput = toCoreInput(normalizedInput);
+	let core: CachedListPostsCoreResult;
 	if (process.env.NODE_ENV === "test") {
-		return listPostsUncached(normalizedInput);
+		core = await listPostsCoreUncached(coreInput);
+	} else {
+		const cachedListPosts = unstable_cache(
+			async () => listPostsCoreUncached(coreInput),
+			buildListPostsCacheKey(coreInput),
+			{
+				revalidate: POSTS_LIST_REVALIDATE_SECONDS,
+				tags: getPostListCacheTags(coreInput.tag),
+			}
+		);
+		try {
+			core = await cachedListPosts();
+		} catch (error) {
+			if (error instanceof Error && error.message.includes("incrementalCache missing")) {
+				core = await listPostsCoreUncached(coreInput);
+			} else {
+				throw error;
+			}
+		}
 	}
 
-	const cachedListPosts = unstable_cache(
-		async () => listPostsUncached(normalizedInput),
-		buildListPostsCacheKey(normalizedInput),
-		{
-			revalidate: POSTS_LIST_REVALIDATE_SECONDS,
-			tags: getPostListCacheTags(normalizedInput.tag),
-		}
-	);
-	try {
-		return await cachedListPosts();
-	} catch (error) {
-		if (error instanceof Error && error.message.includes("incrementalCache missing")) {
-			return listPostsUncached(normalizedInput);
-		}
-		throw error;
+	const sessionUserId = normalizedInput.sessionUserId;
+	const postIds = core.posts.map((post) => post.id);
+	let queryAuxMs = 0;
+	let likedPostIdSet = new Set<number>();
+	let readCountByPostId = new Map<number, number>();
+
+	if (sessionUserId && postIds.length > 0) {
+		const queryAuxStart = performance.now();
+		const [likes, reads] = await Promise.all([
+			prisma.like.findMany({
+				where: {
+					userId: sessionUserId,
+					postId: { in: postIds },
+				},
+				select: { postId: true },
+			}),
+			prisma.postRead.findMany({
+				where: {
+					userId: sessionUserId,
+					postId: { in: postIds },
+				},
+				select: {
+					postId: true,
+					lastReadCommentCount: true,
+				},
+			}),
+		]);
+		queryAuxMs = performance.now() - queryAuxStart;
+		likedPostIdSet = new Set(likes.map((like) => like.postId));
+		readCountByPostId = new Map(
+			reads.map((read) => [read.postId, read.lastReadCommentCount])
+		);
 	}
+
+	const serializeStart = performance.now();
+	const posts = core.posts.map((post) => {
+		const lastReadCommentCount = readCountByPostId.get(post.id) ?? 0;
+		return {
+			...post,
+			unreadCount: Math.max(post.commentCount - lastReadCommentCount, 0),
+			userLiked: likedPostIdSet.has(post.id),
+		};
+	});
+	const overlaySerializeMs = performance.now() - serializeStart;
+
+	return {
+		posts,
+		metadata: core.metadata,
+		timing: {
+			queryMainMs: core.timing.queryMainMs,
+			queryAuxMs,
+			serializeMs: core.timing.serializeMs + overlaySerializeMs,
+			totalMs: performance.now() - totalStart,
+		},
+	};
 }

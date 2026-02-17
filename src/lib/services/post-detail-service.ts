@@ -44,12 +44,11 @@ export interface GetPostDetailResult {
 }
 
 interface CachedPostDetailCoreResult {
-	post: GetPostDetailResult["post"];
+	post: Omit<GetPostDetailResult["post"], "user_liked">;
 	comments: TreeComment[];
 	totalCommentCount: number;
 	timing: {
 		queryPostMs: number;
-		queryLikeMs: number;
 		queryCommentsMs: number;
 		serializeMs: number;
 	};
@@ -93,12 +92,11 @@ function buildPostDetailCacheKey(input: GetPostDetailInput) {
 	return [
 		`posts:detail:${POST_DETAIL_CACHE_VERSION}`,
 		`post:${input.postId}`,
-		`user:${input.sessionUserId}`,
 	];
 }
 
 async function getPostDetailCoreUncached(
-	input: GetPostDetailInput
+	input: Pick<GetPostDetailInput, "postId">
 ): Promise<CachedPostDetailCoreResult | null> {
 	const queryPostStart = performance.now();
 	const post = await prisma.post.findFirst({
@@ -122,17 +120,6 @@ async function getPostDetailCoreUncached(
 		return null;
 	}
 
-	const likePromise = (async () => {
-		const startedAt = performance.now();
-		const data = await prisma.like.findFirst({
-			where: {
-				postId: post.id,
-				userId: input.sessionUserId,
-			},
-		});
-		return { data, ms: performance.now() - startedAt };
-	})();
-
 	const commentsPromise = (async () => {
 		const startedAt = performance.now();
 		const data = await prisma.comment.findMany({
@@ -154,8 +141,7 @@ async function getPostDetailCoreUncached(
 		return { data, ms: performance.now() - startedAt };
 	})();
 
-	const [likedResult, commentsResult] = await Promise.all([likePromise, commentsPromise]);
-	const queryLikeMs = likedResult.ms;
+	const commentsResult = await commentsPromise;
 	const comments = commentsResult.data;
 	const queryCommentsMs = commentsResult.ms;
 
@@ -177,7 +163,6 @@ async function getPostDetailCoreUncached(
 		author_id: post.authorId,
 		author_name: post.author.nickname,
 		author_uuid: post.author.minecraftUuid,
-		user_liked: Boolean(likedResult.data),
 	};
 	const responseComments = serializeCommentTree(buildCommentTree(commentsWithPostAuthorFlag));
 	const serializeMs = performance.now() - serializeStart;
@@ -188,7 +173,6 @@ async function getPostDetailCoreUncached(
 		totalCommentCount: comments.length,
 		timing: {
 			queryPostMs,
-			queryLikeMs,
 			queryCommentsMs,
 			serializeMs,
 		},
@@ -199,10 +183,11 @@ export async function getPostDetail(
 	input: GetPostDetailInput
 ): Promise<GetPostDetailResult | null> {
 	const totalStart = performance.now();
+	const coreInput = { postId: input.postId };
 	const loadCore =
 		process.env.NODE_ENV === "test"
-			? async () => getPostDetailCoreUncached(input)
-			: unstable_cache(async () => getPostDetailCoreUncached(input), buildPostDetailCacheKey(input), {
+			? async () => getPostDetailCoreUncached(coreInput)
+			: unstable_cache(async () => getPostDetailCoreUncached(coreInput), buildPostDetailCacheKey(input), {
 					revalidate: POST_DETAIL_REVALIDATE_SECONDS,
 					tags: [buildPostDetailTag(input.postId)],
 			  });
@@ -212,7 +197,7 @@ export async function getPostDetail(
 		core = await loadCore();
 	} catch (error) {
 		if (error instanceof Error && error.message.includes("incrementalCache missing")) {
-			core = await getPostDetailCoreUncached(input);
+			core = await getPostDetailCoreUncached(coreInput);
 		} else {
 			throw error;
 		}
@@ -221,8 +206,16 @@ export async function getPostDetail(
 		return null;
 	}
 
+	const likeStart = performance.now();
+	const likePromise = prisma.like.findFirst({
+		where: {
+			postId: input.postId,
+			userId: input.sessionUserId,
+		},
+	});
+
 	const readStart = performance.now();
-	const previousRead = await prisma.postRead.findUnique({
+	const readPromise = prisma.postRead.findUnique({
 		where: {
 			userId_postId: {
 				userId: input.sessionUserId,
@@ -233,6 +226,9 @@ export async function getPostDetail(
 			lastReadCommentCount: true,
 		},
 	});
+
+	const [liked, previousRead] = await Promise.all([likePromise, readPromise]);
+	const queryLikeMs = performance.now() - likeStart;
 	const queryReadMs = performance.now() - readStart;
 
 	const nextReadCount = core.totalCommentCount;
@@ -264,7 +260,10 @@ export async function getPostDetail(
 	}
 
 	return {
-		post: core.post,
+		post: {
+			...core.post,
+			user_liked: Boolean(liked),
+		},
 		comments: core.comments,
 		readMarker: {
 			lastReadCommentCount: previousRead?.lastReadCommentCount ?? 0,
@@ -272,7 +271,7 @@ export async function getPostDetail(
 		},
 		timing: {
 			queryPostMs: core.timing.queryPostMs,
-			queryLikeMs: core.timing.queryLikeMs,
+			queryLikeMs,
 			queryCommentsMs: core.timing.queryCommentsMs,
 			queryReadMs,
 			writeReadMs,

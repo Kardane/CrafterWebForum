@@ -1,16 +1,17 @@
-# CrafterForumWeb_NextJS 아키텍처 리뷰
+# CrafterWebForum 아키텍처 리뷰
 
 ## 0. 리뷰 범위
-- 대상: `CrafterForumWeb_NextJS`
+- 대상: `CrafterWebForum`
 - 기준: `src/app`, `src/components`, `src/app/api`, `src/lib`, `src/auth*`, `src/proxy.ts`, `prisma/schema.prisma`
 - 레거시 비교 기준: `legacy/` (동작 참고용)
-- 최종 검증일: 2026-02-17
+- 최종 검증일: 2026-02-18
 
 ### 최신 검증 커맨드
 - `npm run lint` -> 성공 (`0 warnings, 0 errors`)
-- `npm test` -> 성공 (`30 files, 124 tests passed`)
+- `npm test` -> 성공 (`34 files, 136 tests passed`)
 - `npm run build` -> 성공 (Turbopack production build 완료)
 - `npx next build --webpack` -> 성공 (`@prisma/adapter-libsql` import 체인 외부화 + Turbopack 병행 설정으로 fallback 빌드 복구)
+- `npx tsc --noEmit` -> 성공
 - `npm run dev` -> 단독 실행 미검증 (단, `npm run test:e2e`의 `webServer` 구동은 성공)
 - `npm run test:e2e` -> 이번 회차 사용자 요청으로 스킵
 - `npm run db:migrate:turso -- --force` -> 이번 회차 미실행 (직전 성공 이력: 2026-02-11)
@@ -224,6 +225,13 @@ legacy/                   # 레거시 동작 참조
 53. `src/lib/cache-tags.ts` 도입으로 posts 목록/상세 캐시 태그를 일원화하고, 쓰기 API에서 `safeRevalidateTags()` 기반 무효화 정책 적용
 54. `/api/posts/meta`에 ETag 및 `If-None-Match` 조건부 `304 Not Modified` 응답을 추가해 동일 요청 payload 재전송 비용 절감
 55. `PostContent` 메타 fetch에 이전 ETag 재사용(`If-None-Match`)을 적용해 `304` 응답 시 캐시 데이터 재활용 경로 확보
+56. Linux/WSL 기본 셋업 경로 도입: `scripts/setup-local.mjs` 추가, 루트 헬퍼 스크립트(`setup.sh`, `run_dev.sh`, `run_test_wsl.sh`, `npm_wsl.sh`)를 저장소 상대경로 실행으로 정리
+57. 댓글 날짜 구분선을 Discord 스타일 중앙 배지 + 양쪽 라인 구조로 개편하고 sticky 헤더에 "맨 아래" 버튼(`comment-feed-end` smooth scroll) 추가
+58. 회귀 테스트 보강: `src/__tests__/components/PostStickyHeader.test.tsx` 추가로 하단 이동 버튼 렌더/동작 보장
+59. `src/lib/services/posts-service.ts`를 공용 코어 캐시 + 사용자 오버레이(좋아요/읽음) 구조로 분리해 사용자별 캐시 파편화 완화
+60. `src/lib/services/post-detail-service.ts` 상세 캐시 키에서 사용자 축 제거, `user_liked`를 사용자별 보조 쿼리로 분리
+61. `src/proxy.ts`에서 비보호 경로 요청은 `auth()`를 건너뛰게 해 초기 진입 인증 오버헤드 감소
+62. 목록 오버레이 분리 경로 회귀 보호를 위해 `src/__tests__/api/posts.list.route.test.ts` mock 경로(`postRead.findMany`) 보강
 
 ### 5.1 레거시 2번 항목 반영 현황 (2026-02-17 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14
@@ -238,7 +246,7 @@ legacy/                   # 레거시 동작 참조
 
 ### Medium
 1. 프로덕션 메인/상세 실측 재검증 필요
-- `/`와 `/posts/[id]` 기준으로 self-fetch 제거, 캐시 태그 무효화, `/api/posts/meta` 조건부 `304`까지 적용 완료
+- `/`와 `/posts/[id]` 기준으로 self-fetch 제거, 캐시 태그 무효화, `/api/posts/meta` 조건부 `304`, 목록/상세 캐시의 user 축 분리까지 적용 완료
 - 배포 반영 후 `/`, `/posts/[id]`의 FCP/LCP/TTFB, `Server-Timing`, `/api/posts/meta` 304 hit 비율을 재수집해 개선폭 확인 필요
 2. E2E 단일 시나리오 플래키 리스크
 - `e2e/posts.spec.ts`의 `/inquiries` 접근 케이스가 간헐적으로 `page.goto ... ERR_ABORTED` 타임아웃을 보일 수 있음
@@ -251,5 +259,5 @@ legacy/                   # 레거시 동작 참조
 
 ## 8. 결론
 핵심 백엔드 구조(인증/인가, API 계약, 레이트리밋, 관리자 운영 플로우)는 안정화 상태를 유지
-이번 회차에서 메인/게시글 상세 데이터 경로 최적화에 캐시 태그 무효화와 `/api/posts/meta` ETag 기반 조건부 응답까지 결합해 재조회 비용을 추가로 낮춤
+이번 회차에서 메인/게시글 상세 데이터 경로 최적화에 캐시 태그 무효화, `/api/posts/meta` ETag 기반 조건부 응답, 목록/상세 캐시의 사용자 축 분리까지 결합해 재조회 비용을 추가로 낮춤
 현재 우선 리스크는 운영 검증 항목(프로덕션 실측 재수집, `/inquiries` E2E 안정화, 토큰 회전)에 집중됨
