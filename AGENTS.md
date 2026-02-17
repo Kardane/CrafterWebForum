@@ -131,6 +131,7 @@ Run from each app directory:
 - Post detail route is canonicalized as `/posts/[id]`
 - Never use `/post/[id]` for new links or redirects
 - Keep legacy `/post/[id]` compatibility only via canonical redirect middleware
+- Keep legacy root aliases canonicalized (`/post`, `/post/` -> `/`)
 - Keep auth-layout route detection aligned with UX expectations (`/login`, `/register`, `/forgot-password`, `/pending`, `/auth/*`)
 - Keep API response DTOs consistent with UI contracts
 - For comment APIs, keep `author` object and `replies` tree shape stable
@@ -186,7 +187,12 @@ Run from each app directory:
 - Treat markdown/embed rendering as sanitized pipeline, not raw HTML passthrough
 - Upload contract currently supports `image | video | file`; extension/MIME mismatch must be rejected
 - Uploaded video links must render as playable embed (`<video controls>`) instead of image markdown fallback
+- Post list preview text must strip markdown image/file tokens so raw `![...](...)` is never exposed
+- Code/text preview blocks must clamp to 20 lines and append `...` when overflowed
+- Markdown image + following text must not introduce redundant forced `<br>` spacing
+- Comment date divider and read-marker row should render with centered explicit divider lines (`divider-line`/`divider-label`)
 - Avatar rendering should use shared candidate fallback helper (`src/lib/avatar.ts`) for profile/comment surfaces
+- Sidebar/profile avatar rendering should reuse `src/components/ui/UserAvatar.tsx` (`mineatar -> mc-heads -> initials`)
 - Normalize markdown line breaks around block transitions to avoid redundant `<br>` stacking
 - Comment composer should support `ArrowUp` shortcut (empty input + caret at start) to edit latest own visible comment
 - Auth pages (`/login`, `/register`, `/forgot-password`, `/pending`) must preserve safe-area bottom padding on mobile
@@ -204,7 +210,8 @@ Before PR merge:
 
 ## Current Hotspots to Prioritize
 
-- Re-measure production Web Vitals after auth-shell refactor (target: FCP/LCP < 2.5s, CLS < 0.1)
+- Re-measure production `/` and `/posts/[id]` Web Vitals + TTFB after self-fetch 제거 리팩터링 (target: FCP/LCP < 2.5s)
+- Recover `npx next build --webpack` fallback path (currently fails in `@prisma/adapter-libsql` import chain parsing)
 - Rotate Turso auth token after migration since token was exposed in interactive session
 
 ## Legacy Report #2 Status (2026-02-11)

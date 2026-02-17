@@ -4,15 +4,15 @@
 - 대상: `CrafterForumWeb_NextJS`
 - 기준: `src/app`, `src/components`, `src/app/api`, `src/lib`, `src/auth*`, `src/proxy.ts`, `prisma/schema.prisma`
 - 레거시 비교 기준: `legacy/` (동작 참고용)
-- 최종 검증일: 2026-02-12
+- 최종 검증일: 2026-02-17
 
 ### 최신 검증 커맨드
 - `npm run lint` -> 성공 (`0 warnings, 0 errors`)
-- `npm test` -> 성공 (`25 files, 100 tests passed`)
+- `npm test` -> 성공 (`30 files, 124 tests passed`)
 - `npm run build` -> 성공 (Turbopack production build 완료)
-- `npx next build --webpack` -> 이번 회차 미실행 (직전 실패 이력: 2026-02-12, 원인 재수집 필요)
+- `npx next build --webpack` -> 성공 (`@prisma/adapter-libsql` import 체인 외부화 + Turbopack 병행 설정으로 fallback 빌드 복구)
 - `npm run dev` -> 단독 실행 미검증 (단, `npm run test:e2e`의 `webServer` 구동은 성공)
-- `npm run test:e2e` -> 성공 (`5 passed`)
+- `npm run test:e2e` -> 이번 회차 사용자 요청으로 스킵
 - `npm run db:migrate:turso -- --force` -> 이번 회차 미실행 (직전 성공 이력: 2026-02-11)
 
 ## 1. 한눈에 보는 구조
@@ -24,7 +24,7 @@
 - 데이터: Prisma (`prisma/schema.prisma`) + DB 어댑터 분기
   - local: SQLite (`prisma/dev.db`)
   - production: Turso(libSQL)
-- 공통 서비스: `src/lib/*` (rate limit, session id normalize, comments DTO/ops, embed pipeline, user service)
+- 공통 서비스: `src/lib/*` (rate limit, session id normalize, comments DTO/ops, embed pipeline, posts query service, server timing)
 
 ## 2. 레이어 구성
 ```text
@@ -37,6 +37,8 @@ src/
     auth/
       AuthShell.tsx               # 인증 페이지 공통 레이아웃 셸
       AuthShell.module.css        # 인증 페이지 공통 스타일
+    ui/
+      UserAvatar.tsx              # 공통 유저 아바타(fallback 체인)
     comments/
       CommentSection.tsx          # 댓글 오케스트레이터
       useCommentMutations.ts      # 댓글 API mutation 훅
@@ -51,12 +53,16 @@ src/
   lib/                    # 공통 서버 유틸/서비스
     prisma.ts             # Prisma singleton
     database-url.ts       # DB URL 스킴 판별
+    server-timing.ts      # Server-Timing 헤더 유틸
     admin-auth.ts         # 관리자 인가 공통 가드
     rate-limit.ts         # 공통 레이트리밋 엔진
     rate-limit-policies.ts# 정책 값 분리
     comments.ts           # 댓글 DTO 트리 계약
     comment-stream.ts     # 댓글 연속 compact 스트림 로직
     comment-tree-ops.ts   # 댓글 트리 불변 조작 유틸
+    services/
+      posts-service.ts        # 게시글 목록 쿼리 서비스
+      post-detail-service.ts  # 게시글 상세 쿼리 서비스
     embeds/
       index.ts            # 임베드 파이프라인 진입점
       youtube.ts          # YouTube/Streamable 임베드
@@ -85,7 +91,9 @@ legacy/                   # 레거시 동작 참조
 
 ### 3.2 라우팅/계약
 - 게시글 canonical 경로: `/posts/[id]`
-- 레거시 `/post/[id]`는 호환 redirect 레이어로만 유지
+- 레거시 경로 redirect 정책 고정:
+  - `/post`, `/post/` -> `/`
+  - `/post/[id]` -> `/posts/[id]`
 - 댓글 계약 통일: `author` + `replies` 트리
 - 계정 canonical API: `/api/users/me*`
 - `/api/auth/me|profile|reauth`는 `410 Gone` tombstone 응답으로 전환
@@ -128,6 +136,21 @@ legacy/                   # 레거시 동작 참조
   - 대부분 테이블 100% 이전
   - FK 무결성 깨진 `PostRead` 4건은 안전하게 제외
 
+### 3.6 메인/게시글 상세 성능 경로 최적화
+- 배포 환경에서 `/`와 `/post/*` 로드 지연(4초+) 이슈를 기준으로 데이터 경로를 재설계
+- `/`와 `/posts/[id]` 페이지의 내부 API self-fetch를 제거하고 서비스 레이어 직접 호출로 단일 DB hop 유지
+- `src/lib/services/posts-service.ts`, `src/lib/services/post-detail-service.ts`를 API/페이지 공용 데이터 소스로 통일
+- `/api/posts`, `/api/posts/[id]`에 `Server-Timing` 헤더를 추가해 병목 지점(쿼리/직렬화) 추적 가능 상태 확보
+- 목록/상세 페이지와 관련 API에 `preferredRegion = "icn1"`를 명시해 배포 리전 일관성 확보
+
+### 3.7 콘텐츠 렌더링 안정화
+- 포스트 목록 미리보기에서 이미지 마크다운 원문(`![...](...)`)이 노출되지 않도록 정규화 순서를 보정
+- 마크다운 렌더 시 이미지 앞뒤 불필요한 `<br>`를 제거해 이미지 다음 텍스트가 과도하게 벌어지지 않도록 보정
+- 코드/텍스트 블록 미리보기는 최대 20줄까지만 렌더하고 초과분은 `...`로 절단
+- 댓글 스트림의 날짜 구분선/`여기부터 새 댓글` 마커를 중앙 정렬형 라인 구조(`divider-line`)로 통일
+- 프로필/사이드바 아바타는 `UserAvatar` 단일 컴포넌트로 통합하고 `mineatar -> mc-heads -> initials` fallback 체인 적용
+- 본문 외부 링크 카드 이미지 로드 실패 시 카드 레이아웃이 깨지지 않도록 안전한 숨김 처리 적용
+
 ## 4. 데이터 레이어 상태
 
 ### 4.1 모델/상태 필드
@@ -140,6 +163,10 @@ legacy/                   # 레거시 동작 참조
 - PrismaClient는 `src/lib/prisma.ts` singleton만 사용
 - Turso 사용 시 `@prisma/adapter-libsql`로 연결하고 `TURSO_AUTH_TOKEN` 존재를 런타임에서 검증
 - 세션 사용자 ID는 `toSessionUserId()`로 정규화 후 DB 접근
+
+### 4.3 조회 성능 인덱스
+- `Post`: `@@index([deletedAt, updatedAt])` 추가로 메인 목록(soft-delete 제외 + 최신순) 조회 비용 완화
+- `Comment`: `@@index([postId, createdAt])` 추가로 게시글 상세 댓글 시계열 조회 비용 완화
 
 ## 5. 최근 완료된 유지보수 개선
 1. 게시글 생성 API의 서버측 actor derivation 강제
@@ -179,8 +206,23 @@ legacy/                   # 레거시 동작 참조
 35. `SafeImage` 공통 컴포넌트 도입 및 주요 화면 `<img>` 8건을 `next/image` 기반으로 치환해 lint 경고 제거
 36. `/api/auth/password` 정책을 bridge가 아닌 `410 Gone` tombstone 고정 상태로 문서/테스트 기준 일치화
 37. `next.config.ts`에 `allowedDevOrigins: ["127.0.0.1", "localhost"]`를 추가해 dev/e2e 교차 origin 경고 제거
+38. Windows 네이티브 개발 전환을 위한 `setup:win`/doctor/db-setup 스크립트 체계화 및 `.env.example`/README 정리
+39. `/`와 `/posts/[id]` 페이지에서 내부 API self-fetch 제거, 서비스 레이어 직접 호출로 왕복 지연 최소화
+40. `/api/posts`, `/api/posts/[id]`를 서비스 레이어 공용화 + `Server-Timing` 계측 추가
+41. `src/proxy.ts`에서 legacy redirect를 강화해 `/post`, `/post/`, `/post/[id]` canonical 경로 고정
+42. `src/__tests__/proxy.redirects.test.ts` 추가로 legacy redirect 회귀 보호
+43. `src/__tests__/api/post-detail.route.test.ts` 보강으로 read sync 상태에서 불필요한 `postRead.upsert` 생략 보장
+44. `prisma/schema.prisma`에 목록/상세 조회 경로용 인덱스(`Post`, `Comment`) 추가
+45. 포스트 목록 미리보기 정규화 보강으로 이미지 마크다운 원문 노출 이슈 수정
+46. 마크다운 렌더 단계에서 이미지 인접 불필요 `<br>` 제거
+47. 코드/텍스트 블록 미리보기를 20줄 제한 + `...` 절단 정책으로 통일
+48. 댓글 날짜 구분선/읽음 마커를 중앙 라인 구조(`divider-line`)로 개편
+49. `UserAvatar` 공통 컴포넌트 도입 및 사이드바 프로필 아바타 렌더링 통합
+50. `PostContent` 외부 링크 카드 이미지 `onerror` 방어 로직 추가
+51. 렌더링 회귀 테스트 보강(`utils`, `markdown`, `CommentDateDividerRow`, `ReadMarkerRow`, `UserAvatar`)
+52. `next.config.ts`에 `serverExternalPackages`/`turbopack` 설정을 보강해 `npx next build --webpack` fallback 빌드 경로 복구
 
-### 5.1 레거시 2번 항목 반영 현황 (2026-02-12 재확인)
+### 5.1 레거시 2번 항목 반영 현황 (2026-02-17 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14
 - 미완료 또는 재검증 필요: #1, #2, #4, #5, #6, #8, #9, #11
 
@@ -192,15 +234,19 @@ legacy/                   # 레거시 동작 참조
 - Turso 토큰 재발급 후 Vercel env 동기화 필요
 
 ### Medium
-1. 프로덕션 CWV 재측정 필요
-- 인증 페이지 렌더 구조는 경량화했지만, Vercel 실측 FCP/LCP/CLS 재수집으로 개선폭 확인 필요
+1. 프로덕션 메인/상세 실측 재검증 필요
+- `/`와 `/post/*`의 4초+ 로드 이슈 기준으로 경로 최적화는 적용 완료
+- 배포 반영 후 `/`, `/posts/[id]`에 대해 FCP/LCP/TTFB와 `Server-Timing` 로그를 재수집해 개선폭 확인 필요
+2. E2E 단일 시나리오 플래키 리스크
+- `e2e/posts.spec.ts`의 `/inquiries` 접근 케이스가 간헐적으로 `page.goto ... ERR_ABORTED` 타임아웃을 보일 수 있음
+- 이번 회차는 사용자 요청으로 e2e를 스킵했으므로 배포 전 재측정/재현 검증 필요
 
 ## 7. 우선순위 제안
-1. Vercel Web Vitals(FCP/LCP/CLS)를 인증 페이지 기준으로 재측정하고 개선값 기록
-2. Turso 토큰 회전 및 배포 환경 변수 동기화
-3. `npx next build --webpack` fallback 경로 재검증으로 빌드 이중화 신뢰도 확보
+1. 성능 개선 커밋 배포 후 `/`, `/posts/[id]` 실측(Web Vitals + `Server-Timing`) 재수집 및 병목 재분류
+2. `/inquiries` E2E 단일 실패(`ERR_ABORTED`)의 재현 조건 수집 및 테스트 안정화
+3. Turso 토큰 회전 및 배포 환경 변수 동기화
 
 ## 8. 결론
 핵심 백엔드 구조(인증/인가, API 계약, 레이트리밋, 관리자 운영 플로우)는 안정화 상태를 유지
-이번 회차에서 Medium 1,2,3(`no-img-element`, deprecated `/api/auth/password` bridge 상태, `allowedDevOrigins` 경고)을 모두 해소
-현재 우선 리스크는 기능 결함보다 운영 품질 항목(토큰 회전, 실측 CWV 추적)에 집중됨
+이번 회차에서 메인/게시글 상세 데이터 경로 최적화와 콘텐츠 렌더링 안정화(미리보기/줄바꿈/구분선/아바타)를 함께 정리
+현재 우선 리스크는 운영 검증 항목(프로덕션 실측 재수집, `/inquiries` E2E 안정화, 토큰 회전)에 집중됨
