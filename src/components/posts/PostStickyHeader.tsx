@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ArrowUp, MessageCircle, Pin } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, MessageCircle, Pin } from "lucide-react";
 import LikeButton from "./LikeButton";
 import { OPEN_PINNED_COMMENTS_EVENT } from "@/constants/comments";
 
@@ -88,12 +88,29 @@ export default function PostStickyHeader({
 							className="btn btn-secondary btn-sm"
 							onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
 							title="맨 위로"
+							aria-label="맨 위로 스크롤"
 						>
 							<ArrowUp size={14} />
 							맨 위
 						</button>
-					</div>
+
+						<button
+							type="button"
+							className="btn btn-secondary btn-sm"
+							onClick={() => {
+								const target = document.getElementById("comment-feed-end");
+								if (target) {
+									target.scrollIntoView({ behavior: "smooth", block: "end" });
+								}
+							}}
+							title="댓글 끝으로"
+							aria-label="댓글 끝으로 스크롤"
+						>
+							<ArrowDown size={14} />
+							맨 아래
+					</button>
 				</div>
 			</div>
-		);
+		</div>
+	);
 }

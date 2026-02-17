@@ -85,7 +85,7 @@ function toDateLabel(value: string): string {
 	const d = String(date.getDate()).padStart(2, "0");
 	const w = ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
 
-	return `------ ${y}.${m}.${d} (${w}) ------`;
+	return `${y}년 ${m}월 ${d}일 (${w})`;
 }
 
 /**
@@ -540,16 +540,19 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					display: flex;
 					align-items: center;
 					width: 100%;
-					gap: 10px;
-					margin: 12px 0 8px;
+					gap: 12px;
+					margin: 16px 0 12px;
 				}
 
 				.date-divider .divider-label {
-					font-size: 0.78rem;
-					font-weight: 600;
+					font-size: 0.72rem;
+					font-weight: 500;
 					color: var(--text-muted);
-					letter-spacing: 0.02em;
+					background: var(--bg-tertiary);
+					padding: 3px 10px;
+					border-radius: 999px;
 					white-space: nowrap;
+					flex-shrink: 0;
 				}
 
 				.read-marker .divider-label {
@@ -563,18 +566,13 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				}
 
 				.date-divider .divider-line {
-					display: none;
+					height: 1px;
+					flex: 1;
+					background: color-mix(in srgb, var(--border) 50%, transparent);
 				}
 				.read-marker .divider-line {
 					height: 1px;
 					flex: 1;
-				}
-
-				.date-divider .divider-line {
-					background: color-mix(in srgb, var(--border) 72%, transparent);
-				}
-
-				.read-marker .divider-line {
 					background: color-mix(in srgb, var(--warning) 45%, transparent);
 				}
 
