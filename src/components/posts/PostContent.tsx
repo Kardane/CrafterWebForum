@@ -272,6 +272,23 @@ export default function PostContent({ content }: PostContentProps) {
 			})();
 		});
 
+		// 이미지 에러 핸들링
+		root.querySelectorAll("img").forEach((img) => {
+			img.onerror = () => {
+				// 이미지가 링크 카드 내부의 것인지 확인
+				if (img.closest(".external-link-card")) {
+					// 썸네일이나 아이콘이면 숨김 처리
+					if (img.classList.contains("external-link-card__thumb") || img.classList.contains("external-link-card__icon")) {
+						img.style.display = "none";
+					}
+					// 작성자 아바타면 기본 아이콘으로 대체하거나 숨김
+					if (img.classList.contains("external-link-card__author-avatar")) {
+						img.style.display = "none";
+					}
+				}
+			};
+		});
+
 		return () => {
 			isDisposed = true;
 		};

@@ -22,6 +22,8 @@ function normalizeMarkdownLineBreaks(html: string): string {
 	let normalized = html
 		.replace(/<br>\s*(<\/(?:h[1-6]|ul|ol|blockquote|pre)>)/gi, "$1")
 		.replace(/(<(?:h[1-6]|ul|ol|blockquote|pre)\b[^>]*>)\s*<br>/gi, "$1")
+		.replace(/<br>\s*(<img\b[^>]*class="[^"]*\bmd-image\b[^"]*"[^>]*>)/gi, "$1")
+		.replace(/(<img\b[^>]*class="[^"]*\bmd-image\b[^"]*"[^>]*>)\s*<br>/gi, "$1")
 		.replace(/<br>\s*(<hr class="md-hr">)/gi, "$1")
 		.replace(/(<hr class="md-hr">)\s*<br>/gi, "$1");
 
@@ -32,6 +34,14 @@ function normalizeMarkdownLineBreaks(html: string): string {
 
 	// 연속 개행은 최대 2줄까지만 유지
 	return normalized.replace(/(?:<br>\s*){3,}/gi, "<br><br>");
+}
+
+function limitCodePreviewLines(code: string, maxLines = 20): string {
+	const lines = code.split(/\r?\n/);
+	if (lines.length <= maxLines) {
+		return code;
+	}
+	return `${lines.slice(0, maxLines).join("\n")}\n...`;
 }
 
 /**
@@ -127,7 +137,8 @@ export function processMarkdown(text: string): string {
 	// 4. 코드 블록 복원
 	html = html.replace(/\x1FCODE(\d+)CODE\x1F/g, (match, index) => {
 		const block = codeBlocks[parseInt(index)];
-		return `<pre><code class="language-${block.lang}">${escapeHtml(block.code)}</code></pre>`;
+		const limitedCode = limitCodePreviewLines(block.code, 20);
+		return `<pre><code class="language-${block.lang}">${escapeHtml(limitedCode)}</code></pre>`;
 	});
 
 	// 5. 마크다운 링크 복원

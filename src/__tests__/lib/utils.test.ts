@@ -20,4 +20,13 @@ describe("content utils", () => {
 		expect(getPreviewText(content)).toContain("추가 텍스트");
 		expect(getPreviewText(content)).not.toContain("vercel-storage");
 	});
+
+	it("strips markdown image tokens from preview text", () => {
+		const content = "본문\n![첨부 이미지](https://x.public.blob.vercel-storage.com/uploads/2026/02/a.webp)\n마무리";
+		const preview = getPreviewText(content);
+		expect(preview).toContain("본문");
+		expect(preview).toContain("마무리");
+		expect(preview).not.toContain("![");
+		expect(preview).not.toContain("](");
+	});
 });

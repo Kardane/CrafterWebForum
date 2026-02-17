@@ -4,13 +4,15 @@
  */
 
 interface ReadMarkerRowProps {
-	rowKey: string;
+	rowKey?: string;
 }
 
 export default function ReadMarkerRow({ rowKey }: ReadMarkerRowProps) {
 	return (
 		<div key={rowKey} className="read-marker">
-			<span>여기부터 새 댓글</span>
+			<span className="divider-line" aria-hidden="true" />
+			<span className="divider-label">여기부터 새 댓글</span>
+			<span className="divider-line" aria-hidden="true" />
 		</div>
 	);
 }

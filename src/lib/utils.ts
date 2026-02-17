@@ -31,12 +31,14 @@ export function getPreviewText(content: string, limit: number = 100): string {
 
 	const text = content
 		.replace(/```[\s\S]*?```/g, '') // 코드 블록
+		.replace(/!\[[^\]]*]\([^)]+\)/g, ' ') // 이미지 마크다운 제거
+		.replace(/\[(?:📦\s*)?([^\]]+)\]\(([^)]+)\)/g, '$1') // 링크 텍스트 유지
 		.replace(
 			/(https?:\/\/(?:i\.)?imgur\.com\/[^\s]+|https?:\/\/[^\s]+\/uploads\/[^\s]+|\/uploads\/[^\s]+)/gi,
 			''
 		) // 이미지 URL
 		.replace(/https?:\/\/[^\s]+/gi, '') // 일반 URL
-		.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // 링크 텍스트
+		.replace(/!\[[^\]]*]\(\s*\)/g, ' ') // URL 제거 후 남은 이미지 토큰 정리
 		.replace(/#{1,6}\s+/g, '') // 헤더
 		.replace(/[*_]{1,2}([^*_]+)[*_]{1,2}/g, '$1') // 강조
 		.replace(/~~([^~]+)~~/g, '$1') // 취소선
@@ -46,6 +48,7 @@ export function getPreviewText(content: string, limit: number = 100): string {
 		.replace(/^\d+\.\s+/gm, '') // 숫자 리스트
 		.replace(/^[-*_]{3,}$/gm, '') // 수평선
 		.replace(/\n+/g, ' ') // 줄바꿈 -> 공백
+		.replace(/\s{2,}/g, ' ')
 		.trim();
 
 	return text.length > limit ? text.substring(0, limit) + "..." : text;

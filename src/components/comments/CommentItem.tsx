@@ -520,7 +520,7 @@ export default function CommentItem({
 
 					.comment-body :global(.post-content .md-image),
 					.comment-body :global(.post-content .embed-container) {
-						margin-top: 0;
+						margin: 2px 0;
 					}
 
 					.comment-body :global(.post-content hr) {

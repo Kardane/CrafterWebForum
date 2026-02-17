@@ -12,4 +12,9 @@ describe("ReadMarkerRow", () => {
 		render(<ReadMarkerRow />);
 		expect(screen.getByText("여기부터 새 댓글").parentElement).toHaveClass("read-marker");
 	});
+
+	it("좌우 구분선 요소를 렌더링해야 함", () => {
+		const { container } = render(<ReadMarkerRow />);
+		expect(container.querySelectorAll(".divider-line")).toHaveLength(2);
+	});
 });

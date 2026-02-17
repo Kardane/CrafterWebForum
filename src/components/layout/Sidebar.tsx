@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import classNames from "classnames";
 import { Settings, HelpCircle, Shield } from "lucide-react";
 import SidebarSettingsModal from "../sidebar/SidebarSettingsModal";
 import SafeImage from "@/components/ui/SafeImage";
+import UserAvatar from "@/components/ui/UserAvatar";
 import { DEFAULT_SETTINGS, getSidebarSettings, normalizeSidebarUrl } from "@/lib/sidebar-settings";
 import { SidebarLink, DEFAULT_LINKS, compareSidebarLinks } from "@/lib/sidebar-links";
 import { isPrivilegedNickname } from "@/config/admin-policy";
@@ -16,21 +16,6 @@ import { isPrivilegedNickname } from "@/config/admin-policy";
 interface SidebarProps {
 	isOpen: boolean;
 	onClose: () => void;
-}
-
-/**
- * 마인크래프트 헤드 이미지 URL
- */
-function getMinecraftHeadUrl(uuid: string | null, size = 32): string | null {
-	if (!uuid) return null;
-	return `https://api.mineatar.io/face/${uuid}?scale=${Math.ceil(size / 8)}`;
-}
-
-/**
- * 이니셜 추출
- */
-function getInitials(name: string): string {
-	return name ? name.charAt(0).toUpperCase() : "?";
 }
 
 function buildSidebarLinks(settings = DEFAULT_SETTINGS): SidebarLink[] {
@@ -223,21 +208,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 					<div className="border-t border-bg-tertiary bg-bg-tertiary p-3">
 						<div className="flex items-center gap-2 rounded px-2 py-1.5 hover:bg-bg-secondary">
 							<Link href="/profile" className="flex min-w-0 flex-1 items-center gap-2">
-								<div className="h-8 w-8 shrink-0 overflow-hidden rounded-md border border-border bg-bg-secondary">
-									{user.minecraftUuid ? (
-										<Image
-											src={getMinecraftHeadUrl(user.minecraftUuid) || ""}
-											alt={user.nickname}
-											width={32}
-											height={32}
-											className="h-full w-full object-cover"
-										/>
-									) : (
-										<div className="flex h-full w-full items-center justify-center text-xs font-semibold text-text-muted">
-											{getInitials(user.nickname)}
-										</div>
-									)}
-								</div>
+								<UserAvatar
+									nickname={user.nickname}
+									uuid={user.minecraftUuid}
+									size={32}
+									className="h-8 w-8"
+								/>
 								<div className="min-w-0">
 									<div className="truncate text-sm font-medium text-text-primary">{user.nickname}</div>
 									<div className="text-[11px] text-text-muted">

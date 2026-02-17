@@ -12,4 +12,9 @@ describe("CommentDateDividerRow", () => {
 		render(<CommentDateDividerRow label="테스트" />);
 		expect(screen.getByText("테스트").parentElement).toHaveClass("date-divider");
 	});
+
+	it("좌우 구분선 요소를 렌더링해야 함", () => {
+		const { container } = render(<CommentDateDividerRow label="테스트" />);
+		expect(container.querySelectorAll(".divider-line")).toHaveLength(2);
+	});
 });

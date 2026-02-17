@@ -531,36 +531,46 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				.read-marker {
 					display: flex;
 					align-items: center;
+					width: 100%;
 					gap: 10px;
 					margin: 10px 0;
-					color: var(--text-muted);
-					font-size: 0.78rem;
-					font-weight: 600;
 				}
 
 				.date-divider {
 					display: flex;
 					align-items: center;
+					width: 100%;
 					gap: 10px;
 					margin: 12px 0 8px;
-					color: var(--text-muted);
+				}
+
+				.date-divider .divider-label {
 					font-size: 0.82rem;
 					font-weight: 600;
+					color: var(--text-muted);
 				}
 
-				.read-marker {
-					color: var(--warning);
+				.read-marker .divider-label {
 					font-size: 0.82rem;
 					font-weight: 700;
+					color: var(--warning);
+					background: color-mix(in srgb, var(--warning) 14%, transparent);
+					padding: 2px 10px;
+					border-radius: 999px;
+					border: 1px solid color-mix(in srgb, var(--warning) 42%, transparent);
 				}
 
-				.date-divider::before,
-				.date-divider::after,
-				.read-marker::before,
-				.read-marker::after {
-					content: "";
+				.date-divider .divider-line,
+				.read-marker .divider-line {
 					height: 1px;
 					flex: 1;
+				}
+
+				.date-divider .divider-line {
+					background: color-mix(in srgb, var(--border) 72%, transparent);
+				}
+
+				.read-marker .divider-line {
 					background: color-mix(in srgb, var(--warning) 45%, transparent);
 				}
 
