@@ -539,18 +539,19 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				.date-divider {
 					display: flex;
 					align-items: center;
+					justify-content: center;
 					width: 100%;
-					gap: 12px;
+					gap: 8px;
 					margin: 16px 0 12px;
 				}
 
 				.date-divider .divider-label {
-					font-size: 0.72rem;
+					font-size: 8px;
 					font-weight: 500;
 					color: var(--text-muted);
-					background: var(--bg-tertiary);
-					padding: 3px 10px;
-					border-radius: 999px;
+					opacity: 0.5;
+					background: transparent;
+					padding: 0 4px;
 					white-space: nowrap;
 					flex-shrink: 0;
 				}
@@ -568,7 +569,8 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				.date-divider .divider-line {
 					height: 1px;
 					flex: 1;
-					background: color-mix(in srgb, var(--border) 50%, transparent);
+					background: color-mix(in srgb, var(--border) 65%, transparent);
+					opacity: 0.5;
 				}
 				.read-marker .divider-line {
 					height: 1px;

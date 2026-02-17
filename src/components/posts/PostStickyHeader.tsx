@@ -48,9 +48,8 @@ export default function PostStickyHeader({
 		<div className="sticky top-0 z-[45] transition-opacity duration-200 opacity-100">
 			<div className="rounded-b-lg border-x border-b border-border bg-bg-secondary/95 px-3 py-2 shadow-sm backdrop-blur">
 				<div className="flex items-center gap-3">
-					<Link href="/" className="btn btn-secondary btn-sm">
+					<Link href="/" className="btn btn-secondary btn-sm" title="목록" aria-label="목록으로 이동">
 						<ArrowLeft size={14} />
-						목록
 					</Link>
 
 					<div className="min-w-0 flex-1">
@@ -73,15 +72,15 @@ export default function PostStickyHeader({
 							<span>{commentCount}</span>
 						</div>
 
-						<button
-							type="button"
-							className="btn btn-secondary btn-sm"
-							onClick={() => window.dispatchEvent(new CustomEvent(OPEN_PINNED_COMMENTS_EVENT))}
-							title="고정 댓글 보기"
-						>
-							<Pin size={14} />
-							고정 댓글
-						</button>
+					<button
+						type="button"
+						className="btn btn-secondary btn-sm"
+						onClick={() => window.dispatchEvent(new CustomEvent(OPEN_PINNED_COMMENTS_EVENT))}
+						title="고정 댓글 보기"
+						aria-label="고정 댓글 보기"
+					>
+						<Pin size={14} />
+					</button>
 
 						<button
 							type="button"
@@ -89,10 +88,9 @@ export default function PostStickyHeader({
 							onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
 							title="맨 위로"
 							aria-label="맨 위로 스크롤"
-						>
-							<ArrowUp size={14} />
-							맨 위
-						</button>
+					>
+						<ArrowUp size={14} />
+					</button>
 
 						<button
 							type="button"
@@ -105,9 +103,8 @@ export default function PostStickyHeader({
 							}}
 							title="댓글 끝으로"
 							aria-label="댓글 끝으로 스크롤"
-						>
-							<ArrowDown size={14} />
-							맨 아래
+					>
+						<ArrowDown size={14} />
 					</button>
 				</div>
 			</div>
