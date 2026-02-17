@@ -501,11 +501,11 @@ export default function CommentItem({
 
 				.comment-content-row {
 					display: flex;
-					flex-direction: column;
+					flex-direction: row;
 					align-items: flex-start;
-					gap: 2px;
+					gap: 8px;
 					position: relative;
-					width: fit-content;
+					width: 100%;
 					max-width: 100%;
 				}
 
@@ -514,6 +514,8 @@ export default function CommentItem({
 					font-size: 0.9rem;
 					line-height: 1.5;
 					max-width: min(100%, 820px);
+					min-width: 0;
+					flex: 1 1 auto;
 				}
 
 				.comment-body :global(.link-text) {
@@ -536,9 +538,13 @@ export default function CommentItem({
 					white-space: nowrap;
 					pointer-events: none;
 					font-family: inherit;
-					position: absolute;
-					right: 4px;
-					bottom: -14px;
+					position: static;
+					align-self: center;
+					max-width: min(36%, 220px);
+					overflow: hidden;
+					text-overflow: ellipsis;
+					text-align: right;
+					flex: 0 0 auto;
 				}
 
 				.comment-wrapper:hover .comment-hover-time {
@@ -602,9 +608,13 @@ export default function CommentItem({
 				}
 
 				@media (max-width: 768px) {
+					.comment-content-row {
+						gap: 6px;
+					}
+
 					.comment-hover-time {
 						font-size: 0.65rem;
-						right: 2px;
+						max-width: min(42%, 180px);
 					}
 				}
 

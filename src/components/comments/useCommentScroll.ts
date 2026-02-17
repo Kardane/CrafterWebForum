@@ -35,9 +35,21 @@ export function useCommentScroll({
 	// 댓글 피드 최하단으로 스크롤
 	const scrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
 		requestAnimationFrame(() => {
+			streamRef.current?.scrollTo({
+				top: streamRef.current.scrollHeight,
+				behavior,
+			});
 			document.getElementById("comment-feed-end")?.scrollIntoView({ behavior, block: "end" });
+			window.scrollTo({ top: document.documentElement.scrollHeight, behavior });
+
+			requestAnimationFrame(() => {
+				if (streamRef.current) {
+					streamRef.current.scrollTop = streamRef.current.scrollHeight;
+				}
+				window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "auto" });
+			});
 		});
-	}, []);
+	}, [streamRef]);
 
 	// 특정 댓글 요소로 스크롤 (재시도 포함)
 	const scrollToCommentElement = useCallback(

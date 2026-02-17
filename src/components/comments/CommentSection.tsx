@@ -16,7 +16,7 @@ import ReadMarkerRow from "./ReadMarkerRow";
 import ThreadToggleRow from "./ThreadToggleRow";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/useToast";
-import { OPEN_PINNED_COMMENTS_EVENT } from "@/constants/comments";
+import { OPEN_PINNED_COMMENTS_EVENT, SCROLL_COMMENT_FEED_BOTTOM_EVENT } from "@/constants/comments";
 import {
 	flattenCommentsForStream,
 	toReplyPreview,
@@ -296,9 +296,14 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	// --- 이벤트/이펙트 ---
 	useEffect(() => {
 		const openPinnedModal = () => setIsPinnedModalOpen(true);
+		const scrollFeedBottom = () => scrollToBottom("smooth");
 		window.addEventListener(OPEN_PINNED_COMMENTS_EVENT, openPinnedModal);
-		return () => window.removeEventListener(OPEN_PINNED_COMMENTS_EVENT, openPinnedModal);
-	}, []);
+		window.addEventListener(SCROLL_COMMENT_FEED_BOTTOM_EVENT, scrollFeedBottom);
+		return () => {
+			window.removeEventListener(OPEN_PINNED_COMMENTS_EVENT, openPinnedModal);
+			window.removeEventListener(SCROLL_COMMENT_FEED_BOTTOM_EVENT, scrollFeedBottom);
+		};
+	}, [scrollToBottom]);
 
 	// 작성기 높이 리저브 관측
 	useEffect(() => {

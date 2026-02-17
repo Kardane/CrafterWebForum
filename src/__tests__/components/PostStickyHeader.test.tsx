@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PostStickyHeader from "@/components/posts/PostStickyHeader";
+import { SCROLL_COMMENT_FEED_BOTTOM_EVENT } from "@/constants/comments";
 
 vi.mock("next/link", () => ({
 	default: ({ children, href, className }: { children: ReactNode; href: string; className?: string }) => (
@@ -38,11 +39,8 @@ describe("PostStickyHeader", () => {
 	});
 
 	it("맨 아래 버튼 클릭 시 댓글 끝으로 스크롤해야 함", () => {
-		const target = document.createElement("div");
-		target.id = "comment-feed-end";
-		const scrollSpy = vi.fn();
-		target.scrollIntoView = scrollSpy;
-		document.body.appendChild(target);
+		const eventSpy = vi.fn();
+		window.addEventListener(SCROLL_COMMENT_FEED_BOTTOM_EVENT, eventSpy);
 
 		render(
 			<PostStickyHeader
@@ -58,7 +56,7 @@ describe("PostStickyHeader", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "댓글 끝으로 스크롤" }));
 
-		expect(scrollSpy).toHaveBeenCalledTimes(1);
-		expect(scrollSpy).toHaveBeenCalledWith({ behavior: "smooth", block: "end" });
+		expect(eventSpy).toHaveBeenCalledTimes(1);
+		window.removeEventListener(SCROLL_COMMENT_FEED_BOTTOM_EVENT, eventSpy);
 	});
 });

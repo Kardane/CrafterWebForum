@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { ArrowDown, ArrowLeft, ArrowUp, MessageCircle, Pin } from "lucide-react";
 import LikeButton from "./LikeButton";
-import { OPEN_PINNED_COMMENTS_EVENT } from "@/constants/comments";
+import { OPEN_PINNED_COMMENTS_EVENT, SCROLL_COMMENT_FEED_BOTTOM_EVENT } from "@/constants/comments";
 
 interface PostStickyHeaderProps {
 	postId: number;
@@ -92,17 +92,12 @@ export default function PostStickyHeader({
 						<ArrowUp size={14} />
 					</button>
 
-						<button
-							type="button"
-							className="btn btn-secondary btn-sm"
-							onClick={() => {
-								const target = document.getElementById("comment-feed-end");
-								if (target) {
-									target.scrollIntoView({ behavior: "smooth", block: "end" });
-								}
-							}}
-							title="댓글 끝으로"
-							aria-label="댓글 끝으로 스크롤"
+					<button
+						type="button"
+						className="btn btn-secondary btn-sm"
+						onClick={() => window.dispatchEvent(new CustomEvent(SCROLL_COMMENT_FEED_BOTTOM_EVENT))}
+						title="댓글 끝으로"
+						aria-label="댓글 끝으로 스크롤"
 					>
 						<ArrowDown size={14} />
 					</button>
