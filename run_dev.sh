@@ -1,8 +1,9 @@
-#!/bin/bash
-# legacy: WSL (Ubuntu) helper script only
-# for Windows native setup, use npm run dev
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-cd /home/parkj_ubuntu/projects/CrafterForumWeb_NextJS
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
 echo "Starting Next.js dev server..."
-npm run dev
+npm run dev "$@"

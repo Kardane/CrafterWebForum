@@ -73,13 +73,7 @@ Never fail silently on local misses, escalate through the chain
 
 ## Project Structure
 
-This workspace contains two apps:
-
-- `CrafterForumWeb/`: legacy Node/Express app
-- `CrafterForumWeb_NextJS/`: active Next.js 16 + TypeScript app
-- `legacy/`: imported legacy snapshot used only as behavior reference during migration
-
-`CrafterForumWeb_NextJS` architecture is a single-repo BFF style app:
+This repository is a single Next.js 16 + TypeScript app:
 
 - Frontend: `src/app`, `src/components`
 - Backend APIs: `src/app/api/**/route.ts`
@@ -91,29 +85,28 @@ Do not commit:
 - `node_modules/`, `.next/`, `coverage/`, `playwright-report/`, `test-results/`, `logs/`
 - SQLite runtime files like `prisma/dev.db`
 - Local-only docs and notes: `보고서/`, `AGENTS.md`, `walkthrough.md`
-- Legacy reference source: `legacy/`
 
 ## Documentation Workflow
 
 - Store ongoing reports and checklists in `보고서/`
 - Treat docs in `보고서/` as local working artifacts unless explicitly requested for sharing
-- Use `legacy/` only for UI/behavior comparison, not for direct server logic reuse
 
 ## Build/Test Commands
 
-Run from each app directory:
+Run from repository root:
 
-- `cd CrafterForumWeb && npm run dev`
-- `cd CrafterForumWeb && npm start`
-- `cd CrafterForumWeb_NextJS && npm run dev`
-- `cd CrafterForumWeb_NextJS && npm run build`
-- `cd CrafterForumWeb_NextJS && npx next build --webpack` (fallback verification when Turbopack environment is unstable)
-- `cd CrafterForumWeb_NextJS && npm run start`
-- `cd CrafterForumWeb_NextJS && npm run lint`
-- `cd CrafterForumWeb_NextJS && npm test`
-- `cd CrafterForumWeb_NextJS && npm run test:e2e`
-- `cd CrafterForumWeb_NextJS && npm run db:migrate:turso -- --dry-run`
-- `cd CrafterForumWeb_NextJS && npm run db:migrate:turso -- --force` (target Turso DB 초기화 후 이관)
+- `npm run setup`
+- `npm run setup:local:skip-playwright`
+- `npm run dev`
+- `npm run build`
+- `npx next build --webpack` (fallback verification when Turbopack environment is unstable)
+- `npm run start`
+- `npm run lint`
+- `npm test`
+- `npm run test -- src/__tests__/lib/env.test.ts` (single test file)
+- `npm run test:e2e`
+- `npm run db:migrate:turso -- --dry-run`
+- `npm run db:migrate:turso -- --force` (target Turso DB 초기화 후 이관)
 
 ## Naming and Style
 
