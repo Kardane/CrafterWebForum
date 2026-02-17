@@ -180,6 +180,14 @@ Run from each app directory:
 - Preserve soft-delete semantics for `User` and `Post` consistently
 - Keep relation access predictable (comments, likes, post reads, inquiries)
 
+### Caching and Performance Contracts
+
+- Keep cache-tag definitions centralized in `src/lib/cache-tags.ts`
+- Read paths for `/` and `/posts/[id]` should use service-layer `unstable_cache` entry points instead of internal API self-fetch
+- Post/comment/like/pin/admin write routes that affect feed or detail freshness must call shared cache-tag invalidation (`safeRevalidateTags`)
+- `/api/posts/meta` must preserve stable ETag generation and support `If-None-Match` conditional `304 Not Modified`
+- Client post-meta fetch flow (`PostContent`) should send prior ETag and reuse cached payload on `304` responses
+
 ### Upload and Content Rendering
 
 - Keep upload validation strict (size, extension, MIME match)
@@ -210,8 +218,9 @@ Before PR merge:
 
 ## Current Hotspots to Prioritize
 
-- Re-measure production `/` and `/posts/[id]` Web Vitals + TTFB after self-fetch 제거 리팩터링 (target: FCP/LCP < 2.5s)
-- Recover `npx next build --webpack` fallback path (currently fails in `@prisma/adapter-libsql` import chain parsing)
+- Re-measure production `/` and `/posts/[id]` Web Vitals + TTFB after cache-tag invalidation + meta ETag rollout (target: FCP/LCP < 2.5s)
+- Verify `/api/posts/meta` conditional `304` hit ratio and client `If-None-Match` reuse on repeated detail views
+- Reproduce and stabilize flaky `/inquiries` E2E navigation timeout (`ERR_ABORTED`) before release gates
 - Rotate Turso auth token after migration since token was exposed in interactive session
 
 ## Legacy Report #2 Status (2026-02-11)

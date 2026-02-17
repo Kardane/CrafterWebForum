@@ -221,6 +221,9 @@ legacy/                   # 레거시 동작 참조
 50. `PostContent` 외부 링크 카드 이미지 `onerror` 방어 로직 추가
 51. 렌더링 회귀 테스트 보강(`utils`, `markdown`, `CommentDateDividerRow`, `ReadMarkerRow`, `UserAvatar`)
 52. `next.config.ts`에 `serverExternalPackages`/`turbopack` 설정을 보강해 `npx next build --webpack` fallback 빌드 경로 복구
+53. `src/lib/cache-tags.ts` 도입으로 posts 목록/상세 캐시 태그를 일원화하고, 쓰기 API에서 `safeRevalidateTags()` 기반 무효화 정책 적용
+54. `/api/posts/meta`에 ETag 및 `If-None-Match` 조건부 `304 Not Modified` 응답을 추가해 동일 요청 payload 재전송 비용 절감
+55. `PostContent` 메타 fetch에 이전 ETag 재사용(`If-None-Match`)을 적용해 `304` 응답 시 캐시 데이터 재활용 경로 확보
 
 ### 5.1 레거시 2번 항목 반영 현황 (2026-02-17 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14
@@ -235,18 +238,18 @@ legacy/                   # 레거시 동작 참조
 
 ### Medium
 1. 프로덕션 메인/상세 실측 재검증 필요
-- `/`와 `/post/*`의 4초+ 로드 이슈 기준으로 경로 최적화는 적용 완료
-- 배포 반영 후 `/`, `/posts/[id]`에 대해 FCP/LCP/TTFB와 `Server-Timing` 로그를 재수집해 개선폭 확인 필요
+- `/`와 `/posts/[id]` 기준으로 self-fetch 제거, 캐시 태그 무효화, `/api/posts/meta` 조건부 `304`까지 적용 완료
+- 배포 반영 후 `/`, `/posts/[id]`의 FCP/LCP/TTFB, `Server-Timing`, `/api/posts/meta` 304 hit 비율을 재수집해 개선폭 확인 필요
 2. E2E 단일 시나리오 플래키 리스크
 - `e2e/posts.spec.ts`의 `/inquiries` 접근 케이스가 간헐적으로 `page.goto ... ERR_ABORTED` 타임아웃을 보일 수 있음
 - 이번 회차는 사용자 요청으로 e2e를 스킵했으므로 배포 전 재측정/재현 검증 필요
 
 ## 7. 우선순위 제안
-1. 성능 개선 커밋 배포 후 `/`, `/posts/[id]` 실측(Web Vitals + `Server-Timing`) 재수집 및 병목 재분류
+1. 성능 개선 커밋 배포 후 `/`, `/posts/[id]` 실측(Web Vitals + `Server-Timing`)과 캐시 태그 무효화/`/api/posts/meta` 304 hit를 함께 재검증
 2. `/inquiries` E2E 단일 실패(`ERR_ABORTED`)의 재현 조건 수집 및 테스트 안정화
 3. Turso 토큰 회전 및 배포 환경 변수 동기화
 
 ## 8. 결론
 핵심 백엔드 구조(인증/인가, API 계약, 레이트리밋, 관리자 운영 플로우)는 안정화 상태를 유지
-이번 회차에서 메인/게시글 상세 데이터 경로 최적화와 콘텐츠 렌더링 안정화(미리보기/줄바꿈/구분선/아바타)를 함께 정리
+이번 회차에서 메인/게시글 상세 데이터 경로 최적화에 캐시 태그 무효화와 `/api/posts/meta` ETag 기반 조건부 응답까지 결합해 재조회 비용을 추가로 낮춤
 현재 우선 리스크는 운영 검증 항목(프로덕션 실측 재수집, `/inquiries` E2E 안정화, 토큰 회전)에 집중됨
