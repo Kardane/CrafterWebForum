@@ -49,6 +49,41 @@ interface PostMetaItemPayload {
 	comments: number;
 }
 
+const POST_META_QUERY_CACHE_MAX_ENTRIES = 100;
+const postMetaPayloadByQueryKey = new Map<string, PostMetaItemPayload[]>();
+const postMetaEtagByQueryKey = new Map<string, string>();
+
+function setQueryCacheEntry<T>(map: Map<string, T>, key: string, value: T) {
+	if (map.has(key)) {
+		map.delete(key);
+	}
+	map.set(key, value);
+	if (map.size > POST_META_QUERY_CACHE_MAX_ENTRIES) {
+		const oldestKey = map.keys().next().value;
+		if (oldestKey) {
+			map.delete(oldestKey);
+		}
+	}
+}
+
+function normalizePostMetaIds(rawIds: string[]) {
+	return Array.from(
+		new Set(
+			rawIds
+				.map((id) => Number.parseInt(id, 10))
+				.filter((id) => Number.isInteger(id) && id > 0)
+		)
+	).sort((a, b) => a - b);
+}
+
+function buildPostMetaQueryKey(rawIds: string[]) {
+	const normalizedIds = normalizePostMetaIds(rawIds);
+	if (normalizedIds.length === 0) {
+		return null;
+	}
+	return normalizedIds.join(",");
+}
+
 export default function PostContent({ content }: PostContentProps) {
 	const contentRef = useRef<HTMLDivElement>(null);
 	const postCardMetaCacheRef = useRef<Map<string, string[]>>(new Map());
@@ -242,19 +277,57 @@ export default function PostContent({ content }: PostContentProps) {
 		if (uncachedPostIds.length > 0) {
 			void (async () => {
 				try {
-					const endpoint = `/api/posts/meta?ids=${encodeURIComponent(uncachedPostIds.join(","))}`;
+					const queryKey = buildPostMetaQueryKey(uncachedPostIds);
+					if (!queryKey) {
+						return;
+					}
+					const endpoint = `/api/posts/meta?ids=${encodeURIComponent(queryKey)}`;
+					const requestHeaders = new Headers();
+					const knownEtag = postMetaEtagByQueryKey.get(queryKey);
+					if (knownEtag) {
+						requestHeaders.set("If-None-Match", knownEtag);
+					}
+
+					let items: PostMetaItemPayload[];
 					const response = await fetch(endpoint, {
 						cache: "force-cache",
 						signal: controller.signal,
+						headers: requestHeaders,
 					});
-					if (!response.ok) {
-						throw new Error(`Failed to load post metadata: ${response.status}`);
+					if (response.status === 304) {
+						const cachedItems = postMetaPayloadByQueryKey.get(queryKey);
+						if (cachedItems) {
+							items = cachedItems;
+						} else {
+							const retry = await fetch(endpoint, {
+								cache: "force-cache",
+								signal: controller.signal,
+							});
+							if (!retry.ok) {
+								throw new Error(`Failed to load post metadata: ${retry.status}`);
+							}
+							const retryPayload = (await retry.json()) as { items?: PostMetaItemPayload[] };
+							items = retryPayload.items ?? [];
+							setQueryCacheEntry(postMetaPayloadByQueryKey, queryKey, items);
+							const retryEtag = retry.headers.get("etag");
+							if (retryEtag) {
+								setQueryCacheEntry(postMetaEtagByQueryKey, queryKey, retryEtag);
+							}
+						}
+					} else {
+						if (!response.ok) {
+							throw new Error(`Failed to load post metadata: ${response.status}`);
+						}
+						const payload = (await response.json()) as { items?: PostMetaItemPayload[] };
+						items = payload.items ?? [];
+						setQueryCacheEntry(postMetaPayloadByQueryKey, queryKey, items);
+						const responseEtag = response.headers.get("etag");
+						if (responseEtag) {
+							setQueryCacheEntry(postMetaEtagByQueryKey, queryKey, responseEtag);
+						}
 					}
 
-					const payload = (await response.json()) as { items?: PostMetaItemPayload[] };
-					const itemById = new Map(
-						(payload.items ?? []).map((item) => [String(item.id), item] as const)
-					);
+					const itemById = new Map(items.map((item) => [String(item.id), item] as const));
 					if (isDisposed) {
 						return;
 					}
