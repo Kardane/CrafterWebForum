@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+﻿import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "crypto";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { createServerTimingHeader } from "@/lib/server-timing";
@@ -6,6 +7,14 @@ import { createServerTimingHeader } from "@/lib/server-timing";
 export const preferredRegion = "icn1";
 
 const MAX_POST_META_IDS = 30;
+
+interface PostMetaItemPayload {
+	id: number;
+	category: string;
+	views: number;
+	likes: number;
+	comments: number;
+}
 
 function parseTags(rawTags: string | null): string[] {
 	if (!rawTags) {
@@ -34,6 +43,24 @@ function parseIds(rawIds: string | null): number[] {
 				.filter((id) => Number.isInteger(id) && id > 0)
 		)
 	);
+}
+
+function buildWeakEtag(items: PostMetaItemPayload[]) {
+	const hash = createHash("sha1").update(JSON.stringify(items)).digest("base64url");
+	return `W/"${hash}"`;
+}
+
+function hasMatchingEtag(ifNoneMatch: string | null, etag: string) {
+	if (!ifNoneMatch) {
+		return false;
+	}
+	if (ifNoneMatch.trim() === "*") {
+		return true;
+	}
+	return ifNoneMatch
+		.split(",")
+		.map((token) => token.trim())
+		.some((token) => token === etag);
 }
 
 export async function GET(request: NextRequest) {
@@ -75,7 +102,7 @@ export async function GET(request: NextRequest) {
 		const dbMs = performance.now() - dbStart;
 
 		const rowById = new Map(posts.map((row) => [row.id, row]));
-		const items = ids
+		const items: PostMetaItemPayload[] = ids
 			.map((id) => {
 				const row = rowById.get(id);
 				if (!row) {
@@ -90,10 +117,27 @@ export async function GET(request: NextRequest) {
 					comments: row._count.comments,
 				};
 			})
-			.filter((item): item is NonNullable<typeof item> => item !== null);
+			.filter((item): item is PostMetaItemPayload => item !== null);
+		const etag = buildWeakEtag(items);
+
+		if (hasMatchingEtag(request.headers.get("if-none-match"), etag)) {
+			const response = new NextResponse(null, { status: 304 });
+			response.headers.set("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
+			response.headers.set("ETag", etag);
+			response.headers.set(
+				"Server-Timing",
+				createServerTimingHeader([
+					{ name: "auth", duration: authMs },
+					{ name: "db", duration: dbMs },
+					{ name: "total", duration: performance.now() - startedAt },
+				])
+			);
+			return response;
+		}
 
 		const response = NextResponse.json({ items });
 		response.headers.set("Cache-Control", "private, max-age=30, stale-while-revalidate=120");
+		response.headers.set("ETag", etag);
 		response.headers.set(
 			"Server-Timing",
 			createServerTimingHeader([
@@ -108,4 +152,3 @@ export async function GET(request: NextRequest) {
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
-

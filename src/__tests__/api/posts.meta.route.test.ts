@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 
 const authMock = vi.fn();
@@ -86,5 +86,35 @@ describe("GET /api/posts/meta", () => {
 			{ id: 12, category: "일반", views: 3, likes: 0, comments: 1 },
 		]);
 	});
-});
 
+	it("returns 304 when if-none-match matches generated etag", async () => {
+		authMock.mockResolvedValue({ user: { id: "1" } });
+		postFindManyMock.mockResolvedValue([
+			{
+				id: 77,
+				tags: '["notice"]',
+				views: 8,
+				likes: 2,
+				_count: { comments: 1 },
+			},
+		]);
+
+		const { GET } = await import("@/app/api/posts/meta/route");
+		const url = "http://localhost/api/posts/meta?ids=77";
+		const first = await GET(new NextRequest(url));
+		expect(first.status).toBe(200);
+
+		const etag = first.headers.get("etag");
+		expect(etag).toBeTruthy();
+
+		const second = await GET(
+			new NextRequest(url, {
+				headers: {
+					"if-none-match": etag || "",
+				},
+			})
+		);
+		expect(second.status).toBe(304);
+		expect(second.headers.get("etag")).toBe(etag);
+	});
+});
