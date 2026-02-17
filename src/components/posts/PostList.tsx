@@ -53,6 +53,25 @@ function buildPostsPageCacheKey(baseParams: URLSearchParams, page: number) {
 	return `${baseParams.toString()}::page=${page}`;
 }
 
+function recordPostsCacheMetric(startMark: string, metricName: "posts_cache_hit" | "posts_cache_miss") {
+	try {
+		if (
+			typeof performance === "undefined" ||
+			typeof performance.mark !== "function" ||
+			typeof performance.measure !== "function"
+		) {
+			return;
+		}
+		const endMark = `${startMark}_end`;
+		performance.mark(endMark);
+		performance.measure(metricName, startMark, endMark);
+		performance.clearMarks(startMark);
+		performance.clearMarks(endMark);
+	} catch {
+		// 계측 실패는 사용자 동작에 영향을 주지 않도록 무시
+	}
+}
+
 export default function PostList({
 	initialPosts,
 	totalPages,
@@ -124,6 +143,12 @@ export default function PostList({
 		const nextParams = new URLSearchParams(baseParams.toString());
 		nextParams.set("page", String(nextPage));
 		const cacheKey = buildPostsPageCacheKey(baseParams, nextPage);
+		const cacheMetricStart = `posts_cache_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+		try {
+			performance.mark(cacheMetricStart);
+		} catch {
+			// 계측 시작 실패 시에도 로딩 로직은 유지
+		}
 
 		const cached = postsPageCache.get(cacheKey);
 		if (cached && cached.expiresAt > Date.now()) {
@@ -136,6 +161,7 @@ export default function PostList({
 			setCurrentPage(data.metadata.page);
 			setHasMore(data.metadata.page < data.metadata.totalPages);
 			setIsLoadingMore(false);
+			recordPostsCacheMetric(cacheMetricStart, "posts_cache_hit");
 			return;
 		}
 		if (cached && cached.expiresAt <= Date.now()) {
@@ -164,6 +190,7 @@ export default function PostList({
 			setLoadError(text("home.loadMoreFailed"));
 		} finally {
 			setIsLoadingMore(false);
+			recordPostsCacheMetric(cacheMetricStart, "posts_cache_miss");
 		}
 	}, [baseParams, currentPage, hasMore, isLoadingMore]);
 

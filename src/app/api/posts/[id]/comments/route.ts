@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { buildCommentTree } from "@/lib/comments";
 import { toSessionUserId } from "@/lib/session-user";
+import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
 
 /**
  * GET /api/posts/[id]/comments
@@ -181,6 +182,12 @@ export async function POST(
 			where: { id: postId },
 			data: { updatedAt: new Date() },
 		});
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId,
+				tags: parsePostTags(post.tags),
+			})
+		);
 
 		return NextResponse.json({
 			success: true,

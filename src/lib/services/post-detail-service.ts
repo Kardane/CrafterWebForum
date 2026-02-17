@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
+import { unstable_cache } from "next/cache";
+import { buildPostDetailTag } from "@/lib/cache-tags";
 import { buildCommentTree } from "@/lib/comments";
 import type { Comment as TreeComment } from "@/lib/comment-tree-ops";
+
+const POST_DETAIL_CACHE_VERSION = "v1";
+const POST_DETAIL_REVALIDATE_SECONDS = 30;
 
 interface GetPostDetailInput {
 	postId: number;
@@ -28,13 +33,25 @@ export interface GetPostDetailResult {
 		totalCommentCount: number;
 	};
 	timing: {
-		dbPostMs: number;
-		dbLikeMs: number;
-		dbCommentsMs: number;
-		dbReadMs: number;
-		dbWriteMs: number;
+		queryPostMs: number;
+		queryLikeMs: number;
+		queryCommentsMs: number;
+		queryReadMs: number;
+		writeReadMs: number;
 		serializeMs: number;
 		totalMs: number;
+	};
+}
+
+interface CachedPostDetailCoreResult {
+	post: GetPostDetailResult["post"];
+	comments: TreeComment[];
+	totalCommentCount: number;
+	timing: {
+		queryPostMs: number;
+		queryLikeMs: number;
+		queryCommentsMs: number;
+		serializeMs: number;
 	};
 }
 
@@ -72,12 +89,18 @@ function serializeCommentTree(nodes: ReturnType<typeof buildCommentTree>): TreeC
 	}));
 }
 
-export async function getPostDetail(
-	input: GetPostDetailInput
-): Promise<GetPostDetailResult | null> {
-	const totalStart = performance.now();
+function buildPostDetailCacheKey(input: GetPostDetailInput) {
+	return [
+		`posts:detail:${POST_DETAIL_CACHE_VERSION}`,
+		`post:${input.postId}`,
+		`user:${input.sessionUserId}`,
+	];
+}
 
-	const dbPostStart = performance.now();
+async function getPostDetailCoreUncached(
+	input: GetPostDetailInput
+): Promise<CachedPostDetailCoreResult | null> {
+	const queryPostStart = performance.now();
 	const post = await prisma.post.findFirst({
 		where: {
 			id: input.postId,
@@ -93,7 +116,7 @@ export async function getPostDetail(
 			},
 		},
 	});
-	const dbPostMs = performance.now() - dbPostStart;
+	const queryPostMs = performance.now() - queryPostStart;
 
 	if (!post) {
 		return null;
@@ -131,66 +154,15 @@ export async function getPostDetail(
 		return { data, ms: performance.now() - startedAt };
 	})();
 
-	const readPromise = (async () => {
-		const startedAt = performance.now();
-		const data = await prisma.postRead.findUnique({
-			where: {
-				userId_postId: {
-					userId: input.sessionUserId,
-					postId: post.id,
-				},
-			},
-			select: {
-				lastReadCommentCount: true,
-			},
-		});
-		return { data, ms: performance.now() - startedAt };
-	})();
-
-	const [likedResult, commentsResult, readResult] = await Promise.all([
-		likePromise,
-		commentsPromise,
-		readPromise,
-	]);
-	const userLiked = likedResult.data;
-	const dbLikeMs = likedResult.ms;
+	const [likedResult, commentsResult] = await Promise.all([likePromise, commentsPromise]);
+	const queryLikeMs = likedResult.ms;
 	const comments = commentsResult.data;
-	const dbCommentsMs = commentsResult.ms;
-	const previousRead = readResult.data;
-	const dbReadMs = readResult.ms;
+	const queryCommentsMs = commentsResult.ms;
 
 	const commentsWithPostAuthorFlag = comments.map((comment) => ({
 		...comment,
 		isPostAuthor: comment.author.id === post.authorId,
 	}));
-
-	const nextReadCount = comments.length;
-	const shouldSyncRead =
-		previousRead?.lastReadCommentCount !== nextReadCount &&
-		(previousRead !== null || nextReadCount > 0);
-
-	let dbWriteMs = 0;
-	if (shouldSyncRead) {
-		const dbWriteStart = performance.now();
-		await prisma.postRead.upsert({
-			where: {
-				userId_postId: {
-					userId: input.sessionUserId,
-					postId: post.id,
-				},
-			},
-			update: {
-				lastReadCommentCount: nextReadCount,
-				updatedAt: new Date(),
-			},
-			create: {
-				userId: input.sessionUserId,
-				postId: post.id,
-				lastReadCommentCount: nextReadCount,
-			},
-		});
-		dbWriteMs = performance.now() - dbWriteStart;
-	}
 
 	const serializeStart = performance.now();
 	const responsePost = {
@@ -205,7 +177,7 @@ export async function getPostDetail(
 		author_id: post.authorId,
 		author_name: post.author.nickname,
 		author_uuid: post.author.minecraftUuid,
-		user_liked: Boolean(userLiked),
+		user_liked: Boolean(likedResult.data),
 	};
 	const responseComments = serializeCommentTree(buildCommentTree(commentsWithPostAuthorFlag));
 	const serializeMs = performance.now() - serializeStart;
@@ -213,17 +185,98 @@ export async function getPostDetail(
 	return {
 		post: responsePost,
 		comments: responseComments,
+		totalCommentCount: comments.length,
+		timing: {
+			queryPostMs,
+			queryLikeMs,
+			queryCommentsMs,
+			serializeMs,
+		},
+	};
+}
+
+export async function getPostDetail(
+	input: GetPostDetailInput
+): Promise<GetPostDetailResult | null> {
+	const totalStart = performance.now();
+	const loadCore =
+		process.env.NODE_ENV === "test"
+			? async () => getPostDetailCoreUncached(input)
+			: unstable_cache(async () => getPostDetailCoreUncached(input), buildPostDetailCacheKey(input), {
+					revalidate: POST_DETAIL_REVALIDATE_SECONDS,
+					tags: [buildPostDetailTag(input.postId)],
+			  });
+
+	let core: CachedPostDetailCoreResult | null;
+	try {
+		core = await loadCore();
+	} catch (error) {
+		if (error instanceof Error && error.message.includes("incrementalCache missing")) {
+			core = await getPostDetailCoreUncached(input);
+		} else {
+			throw error;
+		}
+	}
+	if (!core) {
+		return null;
+	}
+
+	const readStart = performance.now();
+	const previousRead = await prisma.postRead.findUnique({
+		where: {
+			userId_postId: {
+				userId: input.sessionUserId,
+				postId: input.postId,
+			},
+		},
+		select: {
+			lastReadCommentCount: true,
+		},
+	});
+	const queryReadMs = performance.now() - readStart;
+
+	const nextReadCount = core.totalCommentCount;
+	const shouldSyncRead =
+		previousRead?.lastReadCommentCount !== nextReadCount &&
+		(previousRead !== null || nextReadCount > 0);
+
+	let writeReadMs = 0;
+	if (shouldSyncRead) {
+		const writeReadStart = performance.now();
+		await prisma.postRead.upsert({
+			where: {
+				userId_postId: {
+					userId: input.sessionUserId,
+					postId: input.postId,
+				},
+			},
+			update: {
+				lastReadCommentCount: nextReadCount,
+				updatedAt: new Date(),
+			},
+			create: {
+				userId: input.sessionUserId,
+				postId: input.postId,
+				lastReadCommentCount: nextReadCount,
+			},
+		});
+		writeReadMs = performance.now() - writeReadStart;
+	}
+
+	return {
+		post: core.post,
+		comments: core.comments,
 		readMarker: {
 			lastReadCommentCount: previousRead?.lastReadCommentCount ?? 0,
 			totalCommentCount: nextReadCount,
 		},
 		timing: {
-			dbPostMs,
-			dbLikeMs,
-			dbCommentsMs,
-			dbReadMs,
-			dbWriteMs,
-			serializeMs,
+			queryPostMs: core.timing.queryPostMs,
+			queryLikeMs: core.timing.queryLikeMs,
+			queryCommentsMs: core.timing.queryCommentsMs,
+			queryReadMs,
+			writeReadMs,
+			serializeMs: core.timing.serializeMs,
 			totalMs: performance.now() - totalStart,
 		},
 	};

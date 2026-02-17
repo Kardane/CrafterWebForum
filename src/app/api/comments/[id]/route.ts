@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { toSessionUserId } from '@/lib/session-user';
+import { getPostMutationTags, parsePostTags, safeRevalidateTags } from '@/lib/cache-tags';
 
 
 /**
@@ -67,6 +68,7 @@ export async function PATCH(
 				post: {
 					select: {
 						authorId: true,
+						tags: true,
 					},
 				},
 			},
@@ -76,6 +78,12 @@ export async function PATCH(
 			where: { id: comment.postId },
 			data: { updatedAt: new Date() },
 		});
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId: comment.postId,
+				tags: parsePostTags(updated.post.tags),
+			})
+		);
 
 		return NextResponse.json({
 			success: true,
@@ -133,6 +141,10 @@ export async function DELETE(
 		if (comment.authorId !== sessionUserId && session.user.role !== 'admin') {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
+		const postForTags = await prisma.post.findUnique?.({
+			where: { id: comment.postId },
+			select: { tags: true },
+		});
 
 		// 댓글 삭제 (대댓글도 함께 삭제)
 		await prisma.comment.deleteMany({
@@ -145,6 +157,12 @@ export async function DELETE(
 			where: { id: comment.postId },
 			data: { updatedAt: new Date() },
 		});
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId: comment.postId,
+				tags: parsePostTags(postForTags?.tags ?? null),
+			})
+		);
 
 		return NextResponse.json({
 			success: true,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { toSessionUserId } from '@/lib/session-user';
+import { getPostMutationTags, parsePostTags, safeRevalidateTags } from '@/lib/cache-tags';
 
 
 /**
@@ -39,6 +40,7 @@ export async function POST(
 		if (!post) {
 			return NextResponse.json({ error: 'Post not found' }, { status: 404 });
 		}
+		const postTags = parsePostTags(post.tags);
 
 		// 좋아요 여부 확인
 		const existing = await prisma.like.findFirst({
@@ -63,6 +65,12 @@ export async function POST(
 				where: { id: postId },
 				select: { likes: true },
 			});
+			safeRevalidateTags(
+				getPostMutationTags({
+					postId,
+					tags: postTags,
+				})
+			);
 
 			return NextResponse.json({
 				success: true,
@@ -88,6 +96,12 @@ export async function POST(
 				where: { id: postId },
 				select: { likes: true },
 			});
+			safeRevalidateTags(
+				getPostMutationTags({
+					postId,
+					tags: postTags,
+				})
+			);
 
 			return NextResponse.json({
 				success: true,

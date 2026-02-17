@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
+import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
 
 
 function parsePostId(value: string) {
@@ -46,6 +47,12 @@ export async function PATCH(
 			where: { id: postId },
 			data: { deletedAt: null },
 		});
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId,
+				tags: parsePostTags(post.tags),
+			})
+		);
 		console.info(
 			`[Admin] Post restored by ${admin.session.user.id}: target=${postId}`
 		);
@@ -84,6 +91,12 @@ export async function DELETE(
 				where: { id: postId },
 				data: { deletedAt: new Date() },
 			});
+			safeRevalidateTags(
+				getPostMutationTags({
+					postId,
+					tags: parsePostTags(post.tags),
+				})
+			);
 			console.warn(
 				`[Admin] Post archived by ${admin.session.user.id}: target=${postId}`
 			);
@@ -98,6 +111,12 @@ export async function DELETE(
 		}
 
 		await prisma.post.delete({ where: { id: postId } });
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId,
+				tags: parsePostTags(post.tags),
+			})
+		);
 		console.warn(
 			`[Admin] Post permanently deleted by ${admin.session.user.id}: target=${postId}`
 		);

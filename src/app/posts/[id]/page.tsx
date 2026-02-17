@@ -1,7 +1,6 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import Image from "next/image";
 import { MessageCircle } from "lucide-react";
 import PostContent from "@/components/posts/PostContent";
 import UserAvatar from "@/components/ui/UserAvatar";
@@ -39,11 +38,6 @@ function renderNotFound() {
 			</Link>
 		</div>
 	);
-}
-
-function getMinecraftHeadUrl(uuid: string | null, size = 32): string | null {
-	if (!uuid) return null;
-	return `https://api.mineatar.io/face/${uuid}?scale=${Math.ceil(size / 8)}`;
 }
 
 export default async function PostDetailPage({ params }: PostDetailPageProps) {

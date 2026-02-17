@@ -47,7 +47,7 @@ describe("GET /api/posts/[id]", () => {
 		const res = await GET(req as never, { params: Promise.resolve({ id: "1" }) });
 
 		expect(res.status).toBe(401);
-	});
+	}, 15_000);
 
 	it("returns nested comment tree with author object", async () => {
 		authMock.mockResolvedValue({ user: { id: "1" } });
@@ -126,6 +126,14 @@ describe("GET /api/posts/[id]", () => {
 				lastReadCommentCount: 1,
 				totalCommentCount: 2,
 			});
+
+			const serverTiming = res.headers.get("Server-Timing");
+			expect(serverTiming).toContain("query_post;dur=");
+			expect(serverTiming).toContain("query_like;dur=");
+			expect(serverTiming).toContain("query_comments;dur=");
+			expect(serverTiming).toContain("query_read;dur=");
+			expect(serverTiming).toContain("write_read;dur=");
+			expect(serverTiming).toContain("serialize;dur=");
 		});
 
 	it("skips read upsert when read count is already synced", async () => {

@@ -108,7 +108,13 @@ describe("GET /api/posts", () => {
 			limit: 12,
 			totalPages: 1,
 		});
-	});
+
+		const serverTiming = res.headers.get("Server-Timing");
+		expect(serverTiming).toContain("query_main;dur=");
+		expect(serverTiming).toContain("query_aux;dur=");
+		expect(serverTiming).toContain("serialize;dur=");
+		expect(serverTiming).toContain("total;dur=");
+	}, 15_000);
 
 	it("returns unreadCount based on total comments when unauthenticated", async () => {
 		authMock.mockResolvedValue(null);

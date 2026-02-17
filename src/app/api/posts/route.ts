@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { toSessionUserId } from "@/lib/session-user";
 import { listPosts } from "@/lib/services/posts-service";
 import { createServerTimingHeader } from "@/lib/server-timing";
+import { getPostMutationTags, safeRevalidateTags } from "@/lib/cache-tags";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -43,8 +44,8 @@ export async function GET(req: NextRequest) {
 			"Server-Timing",
 			createServerTimingHeader([
 				{ name: "auth", duration: authMs },
-				{ name: "db_main", duration: data.timing.dbMainMs },
-				{ name: "db_likes", duration: data.timing.dbLikesMs },
+				{ name: "query_main", duration: data.timing.queryMainMs },
+				{ name: "query_aux", duration: data.timing.queryAuxMs },
 				{ name: "serialize", duration: data.timing.serializeMs },
 				{ name: "total", duration: performance.now() - requestStart },
 			])
@@ -91,6 +92,12 @@ export async function POST(request: NextRequest) {
 				authorId: sessionUserId,
 			},
 		});
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId: post.id,
+				tags,
+			})
+		);
 
 		return NextResponse.json({
 			success: true,

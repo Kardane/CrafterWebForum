@@ -4,8 +4,19 @@ import { prisma } from "@/lib/prisma";
 import { toSessionUserId } from "@/lib/session-user";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 import { createServerTimingHeader } from "@/lib/server-timing";
+import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
 
 export const preferredRegion = "icn1";
+
+function normalizeTags(value: unknown) {
+	if (!Array.isArray(value)) {
+		return [];
+	}
+	return value
+		.filter((tag): tag is string => typeof tag === "string")
+		.map((tag) => tag.trim())
+		.filter((tag) => tag.length > 0);
+}
 
 export async function GET(
 	request: NextRequest,
@@ -47,11 +58,11 @@ export async function GET(
 			"Server-Timing",
 			createServerTimingHeader([
 				{ name: "auth", duration: authMs },
-				{ name: "db_post", duration: detail.timing.dbPostMs },
-				{ name: "db_like", duration: detail.timing.dbLikeMs },
-				{ name: "db_comments", duration: detail.timing.dbCommentsMs },
-				{ name: "db_read", duration: detail.timing.dbReadMs },
-				{ name: "db_write", duration: detail.timing.dbWriteMs },
+				{ name: "query_post", duration: detail.timing.queryPostMs },
+				{ name: "query_like", duration: detail.timing.queryLikeMs },
+				{ name: "query_comments", duration: detail.timing.queryCommentsMs },
+				{ name: "query_read", duration: detail.timing.queryReadMs },
+				{ name: "write_read", duration: detail.timing.writeReadMs },
 				{ name: "serialize", duration: detail.timing.serializeMs },
 				{ name: "total", duration: performance.now() - requestStart },
 			])
@@ -106,16 +117,24 @@ export async function PATCH(
 		if (post.authorId !== sessionUserId) {
 			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
+		const previousTags = parsePostTags(post.tags);
+		const nextTags = normalizeTags(tags);
 
 		await prisma.post.update({
 			where: { id: postId },
 			data: {
 				title,
 				content,
-				tags: JSON.stringify(tags || []),
+				tags: JSON.stringify(nextTags),
 				updatedAt: new Date(),
 			},
 		});
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId,
+				tags: [...previousTags, ...nextTags],
+			})
+		);
 
 		return NextResponse.json({ success: true, message: "Post updated successfully" });
 	} catch (error) {
@@ -160,6 +179,7 @@ export async function DELETE(
 		if (post.authorId !== sessionUserId && session.user.role !== "admin") {
 			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
+		const previousTags = parsePostTags(post.tags);
 
 		await prisma.post.update({
 			where: { id: postId },
@@ -167,6 +187,12 @@ export async function DELETE(
 				deletedAt: new Date(),
 			},
 		});
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId,
+				tags: previousTags,
+			})
+		);
 
 		return NextResponse.json({ success: true, message: "Post deleted successfully" });
 	} catch (error) {

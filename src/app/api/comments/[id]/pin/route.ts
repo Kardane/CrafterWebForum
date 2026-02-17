@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
+import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
 
 export async function POST(
 	_request: Request,
@@ -37,6 +38,16 @@ export async function POST(
 			where: { id: existing.postId },
 			data: { updatedAt: new Date() },
 		});
+		const postForTags = await prisma.post.findUnique?.({
+			where: { id: existing.postId },
+			select: { tags: true },
+		});
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId: existing.postId,
+				tags: parsePostTags(postForTags?.tags ?? null),
+			})
+		);
 
 		return NextResponse.json({
 			success: true,
