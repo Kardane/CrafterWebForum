@@ -18,6 +18,8 @@ const DOMAIN_ICON_OVERRIDES: Record<string, string> = {
 	"dcinside.com": "https://www.google.com/s2/favicons?domain=dcinside.com&sz=64",
 	"gall.dcinside.com": "https://www.google.com/s2/favicons?domain=dcinside.com&sz=64",
 	"m.dcinside.com": "https://www.google.com/s2/favicons?domain=dcinside.com&sz=64",
+	"curseforge.com": "https://www.google.com/s2/favicons?domain=curseforge.com&sz=64",
+	"legacy.curseforge.com": "https://www.google.com/s2/favicons?domain=curseforge.com&sz=64",
 };
 
 /**
@@ -141,11 +143,11 @@ export function buildExternalCardByUrl(rawUrl: string): string {
 				} else if (section === "pull" && sectionId) {
 					kind = "pull_request";
 					subtitle = `Pull Request #${sectionId}`;
-					} else if (section === "wiki") {
-						kind = "wiki";
-						const pageTitle = segments.slice(3).join("/") || "Home";
-						subtitle = `Wiki / ${safeDecodeURIComponent(pageTitle)}`;
-					} else if (section === "releases") {
+				} else if (section === "wiki") {
+					kind = "wiki";
+					const pageTitle = segments.slice(3).join("/") || "Home";
+					subtitle = `Wiki / ${safeDecodeURIComponent(pageTitle)}`;
+				} else if (section === "releases") {
 					kind = "release";
 					subtitle = "릴리스";
 				}
@@ -227,11 +229,12 @@ export function buildExternalCardByUrl(rawUrl: string): string {
 			});
 		}
 
-		if (hostname === "curseforge.com") {
+		if (hostname === "curseforge.com" || hostname === "legacy.curseforge.com") {
 			badge = "CurseForge";
 			title = segments.slice(0, 3).join("/") || "CurseForge 링크";
-			subtitle = "프로젝트 페이지";
+			subtitle = "전환 중...";
 			chips.push("카테고리: CurseForge");
+			extraAttributes = ` data-preview-url="${escapeHtml(safeUrl)}" data-preview-provider="curseforge" data-preview-kind="project"`;
 			return createCardHtml({
 				url: safeUrl,
 				badge,
@@ -239,6 +242,7 @@ export function buildExternalCardByUrl(rawUrl: string): string {
 				subtitle,
 				iconUrl,
 				chips,
+				extraAttributes,
 			});
 		}
 

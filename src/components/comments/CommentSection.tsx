@@ -80,12 +80,12 @@ function toDateLabel(value: string): string {
 	if (!Number.isFinite(date.getTime())) {
 		return "날짜 알 수 없음";
 	}
-	return date.toLocaleDateString("ko-KR", {
-		year: "numeric",
-		month: "long",
-		day: "numeric",
-		weekday: "short",
-	});
+	const y = date.getFullYear();
+	const m = String(date.getMonth() + 1).padStart(2, "0");
+	const d = String(date.getDate()).padStart(2, "0");
+	const w = ["일", "월", "화", "수", "목", "금", "토"][date.getDay()];
+
+	return `------ ${y}.${m}.${d} (${w}) ------`;
 }
 
 /**
@@ -545,9 +545,11 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				}
 
 				.date-divider .divider-label {
-					font-size: 0.82rem;
+					font-size: 0.78rem;
 					font-weight: 600;
 					color: var(--text-muted);
+					letter-spacing: 0.02em;
+					white-space: nowrap;
 				}
 
 				.read-marker .divider-label {
@@ -560,7 +562,9 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					border: 1px solid color-mix(in srgb, var(--warning) 42%, transparent);
 				}
 
-				.date-divider .divider-line,
+				.date-divider .divider-line {
+					display: none;
+				}
 				.read-marker .divider-line {
 					height: 1px;
 					flex: 1;

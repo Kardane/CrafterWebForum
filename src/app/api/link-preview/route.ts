@@ -18,6 +18,17 @@ type LinkPreview = {
 	status?: string;
 	chips: string[];
 	metrics: string[];
+	stats?: {
+		stars?: number;
+		forks?: number;
+		issues?: number;
+		pulls?: number;
+		downloads?: number;
+		updatedAt?: string;
+		version?: string;
+		platforms?: string[];
+		environments?: string[];
+	};
 };
 
 const HTTP_TIMEOUT_MS = 4_500;
@@ -232,14 +243,16 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 	const repositoryTitle = `${owner}/${repo}`;
 	const repositoryDescription = clampText(repoData?.description);
 	const repositoryAvatar = normalizeText(asRecord(repoData?.owner)?.avatar_url);
-	const repositoryMetrics = [
-		formatMetric("★", asNumber(repoData?.stargazers_count) ?? 0, "스타"),
-		formatMetric("⑂", asNumber(repoData?.forks_count) ?? 0, "포크"),
-	];
 	const repositoryChips = [
 		clampText(repoData?.language, 32),
-		formatMetric("💬", asNumber(repoData?.open_issues_count) ?? 0, "이슈"),
 	].filter((item): item is string => Boolean(item));
+	const repositoryStats = {
+		stars: asNumber(repoData?.stargazers_count) ?? 0,
+		forks: asNumber(repoData?.forks_count) ?? 0,
+		issues: asNumber(repoData?.open_issues_count) ?? 0,
+		updatedAt: normalizeText(repoData?.pushed_at || repoData?.updated_at),
+		version: clampText(repoData?.language, 32),
+	};
 
 	if (section === "issues" && sectionId) {
 		const issueResponse = await fetchWithTimeout(`https://api.github.com/repos/${repoPath}/issues/${encodeURIComponent(sectionId)}`);
@@ -258,6 +271,10 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 			status: normalizeText(issue?.state, "unknown").toUpperCase(),
 			chips: repositoryChips,
 			metrics: [formatMetric("💬", asNumber(issue?.comments) ?? 0, "댓글")],
+			stats: {
+				...repositoryStats,
+				issues: asNumber(issue?.comments) ?? 0, // In issue context, this is comments
+			}
 		};
 	}
 
@@ -283,6 +300,11 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 				formatMetric("🧩", asNumber(pull?.commits) ?? 0, "커밋"),
 				formatMetric("💬", asNumber(pull?.comments) ?? 0, "댓글"),
 			],
+			stats: {
+				...repositoryStats,
+				pulls: asNumber(pull?.commits) ?? 0,
+				issues: asNumber(pull?.comments) ?? 0,
+			}
 		};
 	}
 
@@ -319,7 +341,11 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 			imageUrl: repositoryAvatar,
 			iconUrl,
 			chips: repositoryChips,
-			metrics: repositoryMetrics,
+			metrics: [
+				formatMetric("★", repositoryStats.stars, "스타"),
+				formatMetric("⑂", repositoryStats.forks, "포크"),
+			],
+			stats: repositoryStats,
 		};
 	}
 
@@ -333,14 +359,17 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 		imageUrl: repositoryAvatar,
 		iconUrl,
 		chips: repositoryChips,
-		metrics: repositoryMetrics,
+		metrics: [
+			formatMetric("★", repositoryStats.stars, "스타"),
+			formatMetric("⑂", repositoryStats.forks, "포크"),
+		],
+		stats: repositoryStats,
 	};
 }
 
 async function buildModrinthPreview(parsedUrl: URL): Promise<LinkPreview> {
 	const iconUrl = toFavicon("modrinth.com");
 	const segments = parsedUrl.pathname.split("/").filter(Boolean);
-	const routeType = segments[0] ?? "";
 	const projectSlug = segments[1] ?? "";
 
 	if (!projectSlug) {
@@ -357,7 +386,7 @@ async function buildModrinthPreview(parsedUrl: URL): Promise<LinkPreview> {
 			...fallbackPreview(parsedUrl, "modrinth", "other"),
 			badge: "Modrinth",
 			iconUrl,
-			title: `${routeType}/${projectSlug}`,
+			title: projectSlug,
 			subtitle: "Modrinth 프로젝트",
 		};
 	}
@@ -379,18 +408,9 @@ async function buildModrinthPreview(parsedUrl: URL): Promise<LinkPreview> {
 		}
 	}
 
-	const gameVersions = asStringArray(project?.game_versions).slice(0, 2);
-	const loaders = asStringArray(project?.loaders).slice(0, 2);
-	const categories = asStringArray(project?.categories).slice(0, 3);
-	const clientSide = normalizeText(project?.client_side);
-	const serverSide = normalizeText(project?.server_side);
-	const chips = [
-		...gameVersions.map((version) => `버전 ${version}`),
-		...loaders.map((loader) => `로더 ${loader}`),
-		...categories.map((category) => `#${category}`),
-		clientSide ? `클라 ${clientSide}` : "",
-		serverSide ? `서버 ${serverSide}` : "",
-	].filter((chip) => chip.length > 0);
+	const gameVersions = asStringArray(project?.game_versions);
+	const loaders = asStringArray(project?.loaders);
+	const categories = asStringArray(project?.categories);
 
 	return {
 		provider: "modrinth",
@@ -403,11 +423,60 @@ async function buildModrinthPreview(parsedUrl: URL): Promise<LinkPreview> {
 		iconUrl,
 		authorName: authorName || undefined,
 		authorAvatarUrl: authorAvatarUrl || undefined,
-		chips,
+		chips: categories.map(c => `#${c}`),
 		metrics: [
 			formatMetric("⬇", asNumber(project?.downloads) ?? 0, "다운로드"),
 			formatMetric("❤", asNumber(project?.followers) ?? 0, "좋아요"),
 		],
+		stats: {
+			downloads: asNumber(project?.downloads) ?? 0,
+			updatedAt: normalizeText(project?.updated),
+			version: gameVersions[0],
+			platforms: gameVersions,
+			environments: loaders,
+		}
+	};
+}
+
+async function buildCurseForgePreview(parsedUrl: URL): Promise<LinkPreview> {
+	const iconUrl = toFavicon("curseforge.com");
+	const response = await fetchWithTimeout(parsedUrl.toString());
+	if (!response.ok) {
+		return {
+			...fallbackPreview(parsedUrl, "curseforge", "project"),
+			badge: "CurseForge",
+			iconUrl,
+		};
+	}
+
+	const html = await response.text();
+	const title = extractMetaContent(html, "og:title") ?? extractHtmlTitle(html) ?? "CurseForge 프로젝트";
+	const description = extractMetaContent(html, "og:description") ?? extractMetaContent(html, "description", "name");
+	const imageUrl = extractMetaContent(html, "og:image");
+
+	// Scraping specific fields from legacy layout if possible
+	const authorMatch = html.match(/<span class="author">by\s*<a[^>]*>([^<]+)<\/a>/i);
+	const downloadMatch = html.match(/<div class="info-data">([\d,]+)\s*Downloads<\/div>/i);
+	const updatedMatch = html.match(/Updated\s*<abbr[^>]*title="([^"]+)"/i);
+
+	const downloads = downloadMatch ? parseInt(downloadMatch[1].replace(/,/g, ""), 10) : 0;
+
+	return {
+		provider: "curseforge",
+		kind: "project",
+		badge: "CurseForge",
+		title,
+		subtitle: "CurseForge 프로젝트",
+		description,
+		imageUrl,
+		iconUrl,
+		authorName: authorMatch?.[1]?.trim(),
+		chips: ["Minecraft"],
+		metrics: downloads > 0 ? [formatMetric("⬇", downloads, "다운로드")] : [],
+		stats: {
+			downloads,
+			updatedAt: updatedMatch?.[1],
+		}
 	};
 }
 
@@ -503,6 +572,8 @@ export async function GET(request: NextRequest) {
 			preview = await buildGitHubPreview(parsedUrl);
 		} else if (hostname === "modrinth.com") {
 			preview = await buildModrinthPreview(parsedUrl);
+		} else if (hostname === "curseforge.com" || hostname === "legacy.curseforge.com") {
+			preview = await buildCurseForgePreview(parsedUrl);
 		} else if (hostname === "dcinside.com" || hostname === "gall.dcinside.com" || hostname === "m.dcinside.com") {
 			preview = await buildDcinsidePreview(parsedUrl);
 		} else {

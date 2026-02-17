@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { MessageCircle } from "lucide-react";
 import PostContent from "@/components/posts/PostContent";
+import UserAvatar from "@/components/ui/UserAvatar";
 import LikeButton from "@/components/posts/LikeButton";
 import CommentSection from "@/components/comments/CommentSection";
 import PostStickyHeader from "@/components/posts/PostStickyHeader";
@@ -115,19 +116,12 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 						)}
 
 						<div className="flex items-center gap-3 py-3 border-b border-border">
-							{post.author_uuid ? (
-								<Image
-									src={getMinecraftHeadUrl(post.author_uuid, 40) || ""}
-									alt=""
-									width={40}
-									height={40}
-									className="w-10 h-10 rounded-[4px] [image-rendering:pixelated]"
-								/>
-							) : (
-								<div className="w-10 h-10 rounded-[4px] bg-bg-tertiary flex items-center justify-center font-semibold text-text-muted">
-									{post.author_name[0].toUpperCase()}
-								</div>
-							)}
+							<UserAvatar
+								uuid={post.author_uuid}
+								nickname={post.author_name}
+								size={40}
+								className="w-10 h-10 rounded-[4px]"
+							/>
 							<div className="flex-1">
 								<div className="font-semibold text-text-primary text-base">{post.author_name}</div>
 								<div className="text-[0.85rem] text-text-muted mt-0.5">

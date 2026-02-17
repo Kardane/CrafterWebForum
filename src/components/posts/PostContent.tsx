@@ -28,6 +28,17 @@ interface LinkPreviewPayload {
 	status?: string;
 	chips?: string[];
 	metrics?: string[];
+	stats?: {
+		stars?: number;
+		forks?: number;
+		issues?: number;
+		pulls?: number;
+		downloads?: number;
+		updatedAt?: string;
+		version?: string;
+		platforms?: string[];
+		environments?: string[];
+	};
 }
 
 interface PostMetaItemPayload {
@@ -188,7 +199,23 @@ export default function PostContent({ content }: PostContentProps) {
 
 			renderAuthor(card, preview.authorName, preview.authorAvatarUrl);
 			renderStatus(card, preview.status);
-			const chips = [...(preview.metrics ?? []), ...(preview.chips ?? [])];
+
+			const chips = [...(preview.chips ?? [])];
+			if (preview.stats) {
+				const s = preview.stats;
+				if (s.downloads !== undefined) chips.push(`⬇ ${s.downloads.toLocaleString()} 다운로드`);
+				if (s.stars !== undefined) chips.push(`★ ${s.stars.toLocaleString()} 스타`);
+				if (s.forks !== undefined) chips.push(`⑂ ${s.forks.toLocaleString()} 포크`);
+				if (s.issues !== undefined) chips.push(`💬 ${s.issues.toLocaleString()} 이슈`);
+				if (s.pulls !== undefined) chips.push(`🧩 ${s.pulls.toLocaleString()} PR`);
+				if (s.version) chips.push(`버전 ${s.version}`);
+				if (s.updatedAt) {
+					const dateStr = s.updatedAt.split("T")[0];
+					chips.push(`업데이트 ${dateStr}`);
+				}
+			}
+			chips.push(...(preview.metrics ?? []));
+
 			renderMeta(card, chips);
 		};
 

@@ -5,6 +5,7 @@ import "@/styles/globals.css";
 import MainLayout from "@/components/layout/MainLayout";
 import SessionProvider from "@/components/providers/SessionProvider";
 import { ToastProvider } from "@/components/ui/ToastProvider";
+import LoadingCursor from "@/components/ui/LoadingCursor";
 // ^ 별도 파일로 분리 필요
 
 
@@ -32,6 +33,7 @@ export default function RootLayout({
 			<body className="antialiased bg-bg-primary text-text-primary">
 				<SessionProvider>
 					<ToastProvider>
+						<LoadingCursor />
 						<MainLayout>{children}</MainLayout>
 					</ToastProvider>
 				</SessionProvider>
