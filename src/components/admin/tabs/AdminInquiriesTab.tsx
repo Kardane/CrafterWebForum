@@ -7,6 +7,8 @@ import {
 	fetchAdminJson,
 	fetchAdminResponse,
 } from "@/components/admin/utils/fetch-admin";
+import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 function formatDate(date: string) {
 	const parsed = new Date(date);
@@ -65,6 +67,15 @@ export default function AdminInquiriesTab() {
 	useEffect(() => {
 		void loadInquiries();
 	}, [loadInquiries]);
+
+	useRealtimeBroadcast(REALTIME_TOPICS.adminInquiries(), {
+		[REALTIME_EVENTS.ADMIN_INQUIRY_PENDING_COUNT_UPDATED]: () => {
+			void loadInquiries();
+		},
+		[REALTIME_EVENTS.INQUIRY_STATUS_UPDATED]: () => {
+			void loadInquiries();
+		},
+	});
 
 	const archiveInquiry = async (id: number) => {
 		await fetchAdminResponse(`/api/admin/inquiries/${id}`, { method: "DELETE" });

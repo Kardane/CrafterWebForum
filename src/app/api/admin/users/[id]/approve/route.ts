@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
+import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 
 export async function POST(
@@ -27,6 +29,12 @@ export async function POST(
 			data: { isApproved: 1 },
 		});
 
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.adminUsers(),
+			event: REALTIME_EVENTS.ADMIN_USER_APPROVAL_UPDATED,
+			payload: { userId, action: "approved" },
+		});
+
 		console.info(`[Admin] User approved by ${admin.session.user.id}: target=${userId}`);
 		return NextResponse.json({ success: true });
 	} catch (error) {
@@ -34,4 +42,3 @@ export async function POST(
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
-

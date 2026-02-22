@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
+import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 export async function POST(
 	_request: Request,
@@ -48,6 +50,17 @@ export async function POST(
 				tags: parsePostTags(postForTags?.tags ?? null),
 			})
 		);
+
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.post(existing.postId),
+			event: REALTIME_EVENTS.COMMENT_PINNED_CHANGED,
+			payload: {
+				postId: existing.postId,
+				commentId: updated.id,
+				isPinned: Boolean(updated.isPinned),
+				actorUserId: admin.session.user.id,
+			},
+		});
 
 		return NextResponse.json({
 			success: true,

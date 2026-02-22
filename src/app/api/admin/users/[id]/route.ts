@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
+import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 
 function makeIdentitySuffix(mode: "deleted" | "rejected", id: number) {
@@ -78,6 +80,11 @@ export async function PATCH(
 		console.info(
 			`[Admin] User updated by ${admin.session.user.id}: target=${userId}`
 		);
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.adminUsers(),
+			event: REALTIME_EVENTS.ADMIN_USER_APPROVAL_UPDATED,
+			payload: { userId, action: "updated", user: updated },
+		});
 
 		return NextResponse.json({ success: true, user: updated });
 	} catch (error) {
@@ -125,10 +132,14 @@ export async function DELETE(
 		console.warn(
 			`[Admin] User soft deleted by ${admin.session.user.id}: target=${userId}`
 		);
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.adminUsers(),
+			event: REALTIME_EVENTS.ADMIN_USER_APPROVAL_UPDATED,
+			payload: { userId, action: "deleted" },
+		});
 		return NextResponse.json({ success: true });
 	} catch (error) {
 		console.error("[API] DELETE /api/admin/users/[id] error:", error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
-

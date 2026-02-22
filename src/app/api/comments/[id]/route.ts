@@ -3,6 +3,8 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { toSessionUserId } from '@/lib/session-user';
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from '@/lib/cache-tags';
+import { broadcastRealtime } from '@/lib/realtime/server-broadcast';
+import { REALTIME_EVENTS, REALTIME_TOPICS } from '@/lib/realtime/constants';
 
 
 /**
@@ -85,6 +87,16 @@ export async function PATCH(
 			})
 		);
 
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.post(comment.postId),
+			event: REALTIME_EVENTS.COMMENT_UPDATED,
+			payload: {
+				postId: comment.postId,
+				commentId: updated.id,
+				actorUserId: sessionUserId,
+			},
+		});
+
 		return NextResponse.json({
 			success: true,
 			message: 'Comment updated successfully',
@@ -163,6 +175,16 @@ export async function DELETE(
 				tags: parsePostTags(postForTags?.tags ?? null),
 			})
 		);
+
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.post(comment.postId),
+			event: REALTIME_EVENTS.COMMENT_DELETED,
+			payload: {
+				postId: comment.postId,
+				commentId,
+				actorUserId: sessionUserId,
+			},
+		});
 
 		return NextResponse.json({
 			success: true,

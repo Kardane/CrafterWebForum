@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
+import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 
 function parseInquiryId(value: string) {
@@ -49,6 +51,23 @@ export async function PATCH(
 			where: { id: inquiryId },
 			data: { archivedAt: null },
 		});
+		const restored = await prisma.inquiry.findUnique({
+			where: { id: inquiryId },
+			select: { status: true },
+		});
+		const pendingCount = await prisma.inquiry.count({
+			where: { status: "pending", archivedAt: null },
+		});
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.adminInquiries(),
+			event: REALTIME_EVENTS.ADMIN_INQUIRY_PENDING_COUNT_UPDATED,
+			payload: { pendingCount },
+		});
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.inquiry(inquiryId),
+			event: REALTIME_EVENTS.INQUIRY_STATUS_UPDATED,
+			payload: { inquiryId, status: restored?.status ?? "pending" },
+		});
 		console.info(
 			`[Admin] Inquiry restored by ${admin.session.user.id}: target=${inquiryId}`
 		);
@@ -87,6 +106,19 @@ export async function DELETE(
 				where: { id: inquiryId },
 				data: { archivedAt: new Date() },
 			});
+			const pendingCount = await prisma.inquiry.count({
+				where: { status: "pending", archivedAt: null },
+			});
+			void broadcastRealtime({
+				topic: REALTIME_TOPICS.adminInquiries(),
+				event: REALTIME_EVENTS.ADMIN_INQUIRY_PENDING_COUNT_UPDATED,
+				payload: { pendingCount },
+			});
+			void broadcastRealtime({
+				topic: REALTIME_TOPICS.inquiry(inquiryId),
+				event: REALTIME_EVENTS.INQUIRY_STATUS_UPDATED,
+				payload: { inquiryId, status: inquiry.status, archived: true },
+			});
 			console.warn(
 				`[Admin] Inquiry archived by ${admin.session.user.id}: target=${inquiryId}`
 			);
@@ -101,6 +133,19 @@ export async function DELETE(
 		}
 
 		await prisma.inquiry.delete({ where: { id: inquiryId } });
+		const pendingCount = await prisma.inquiry.count({
+			where: { status: "pending", archivedAt: null },
+		});
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.adminInquiries(),
+			event: REALTIME_EVENTS.ADMIN_INQUIRY_PENDING_COUNT_UPDATED,
+			payload: { pendingCount },
+		});
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.inquiry(inquiryId),
+			event: REALTIME_EVENTS.INQUIRY_STATUS_UPDATED,
+			payload: { inquiryId, deleted: true },
+		});
 		console.warn(
 			`[Admin] Inquiry permanently deleted by ${admin.session.user.id}: target=${inquiryId}`
 		);

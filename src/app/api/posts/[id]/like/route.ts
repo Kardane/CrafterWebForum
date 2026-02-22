@@ -3,6 +3,8 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { toSessionUserId } from '@/lib/session-user';
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from '@/lib/cache-tags';
+import { broadcastRealtime } from '@/lib/realtime/server-broadcast';
+import { REALTIME_EVENTS, REALTIME_TOPICS } from '@/lib/realtime/constants';
 
 
 /**
@@ -65,6 +67,16 @@ export async function POST(
 				where: { id: postId },
 				select: { likes: true },
 			});
+			void broadcastRealtime({
+				topic: REALTIME_TOPICS.post(postId),
+				event: REALTIME_EVENTS.POST_LIKE_TOGGLED,
+				payload: {
+					postId,
+					likes: updatedPost?.likes ?? 0,
+					actorUserId: sessionUserId,
+					likedByActor: false,
+				},
+			});
 			safeRevalidateTags(
 				getPostMutationTags({
 					postId,
@@ -96,6 +108,16 @@ export async function POST(
 				where: { id: postId },
 				select: { likes: true },
 			});
+			void broadcastRealtime({
+				topic: REALTIME_TOPICS.post(postId),
+				event: REALTIME_EVENTS.POST_LIKE_TOGGLED,
+				payload: {
+					postId,
+					likes: updatedPost?.likes ?? 0,
+					actorUserId: sessionUserId,
+					likedByActor: true,
+				},
+			});
 			safeRevalidateTags(
 				getPostMutationTags({
 					postId,
@@ -110,6 +132,7 @@ export async function POST(
 				likes: updatedPost?.likes || 0,
 			});
 		}
+
 	} catch (error) {
 		console.error('[API] POST /api/posts/[id]/like error:', error);
 		return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

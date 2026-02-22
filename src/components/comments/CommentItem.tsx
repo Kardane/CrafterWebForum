@@ -11,6 +11,7 @@ import { extractPollData } from "@/lib/poll";
 import { toSessionUserId } from "@/lib/session-user";
 import { useToast } from "@/components/ui/useToast";
 import { buildAvatarCandidates } from "@/lib/avatar";
+import { toReplyPreview } from "@/lib/comment-stream";
 
 interface Comment {
 	id: number;
@@ -34,7 +35,7 @@ interface CommentItemProps {
 	replyToName?: string | null;
 	replyToCommentId?: number | null;
 	replyToPreview?: string | null;
-	onReplyRequest: (commentId: number, nickname: string) => void;
+	onReplyRequest: (commentId: number, nickname: string, preview: string) => void;
 	onNavigateToComment?: (commentId: number) => void;
 	onEdit: (commentId: number, content: string) => void;
 	onDelete: (commentId: number, event?: React.MouseEvent) => void;
@@ -46,6 +47,7 @@ interface CommentItemProps {
 	threadRootId?: number;
 	isCompact?: boolean;
 	isHighlighted?: boolean;
+	isMentionHighlighted?: boolean;
 }
 
 type CopiedType = "text" | "link" | null;
@@ -67,6 +69,7 @@ export default function CommentItem({
 	threadRootId,
 	isCompact = false,
 	isHighlighted = false,
+	isMentionHighlighted = false,
 }: CommentItemProps) {
 	const { data: session } = useSession();
 	const { showToast } = useToast();
@@ -119,6 +122,10 @@ export default function CommentItem({
 	const pollData = extractPollData(comment.content);
 	const contentWithoutPoll = comment.content.replace(/\[POLL_JSON\][\s\S]*?\[\/POLL_JSON\]/, "").trim();
 	const resolvedThreadRootId = threadRootId ?? comment.id;
+	const replyPreviewForComposer = useMemo(() => {
+		const target = contentWithoutPoll || comment.content;
+		return toReplyPreview(target);
+	}, [comment.content, contentWithoutPoll]);
 
 	const dismissToolbarFocus = () => {
 		setIsActionSuppressed(true);
@@ -199,7 +206,7 @@ export default function CommentItem({
 			}}
 		>
 			<div
-				className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""} ${isCompact ? "compact" : ""}`}
+				className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""} ${isMentionHighlighted ? "is-mention-highlighted" : ""} ${isCompact ? "compact" : ""}`}
 			>
 				{replyToName && replyToCommentId && (
 					<div className="reply-context-line">
@@ -285,7 +292,7 @@ export default function CommentItem({
 						<button
 							type="button"
 							className="action-btn"
-							onClick={() => onReplyRequest(resolvedThreadRootId, comment.author.nickname)}
+							onClick={() => onReplyRequest(resolvedThreadRootId, comment.author.nickname, replyPreviewForComposer)}
 							title="답장"
 						>
 							<Reply size={18} />
@@ -361,6 +368,11 @@ export default function CommentItem({
 					background: rgba(255, 215, 64, 0.2);
 					box-shadow: inset 0 0 0 1px rgba(255, 222, 89, 0.8);
 					animation: reply-highlight-pulse 1.2s ease;
+				}
+
+				.comment-item.is-mention-highlighted {
+					background: rgba(255, 215, 64, 0.12);
+					box-shadow: inset 0 0 0 1px rgba(255, 224, 130, 0.65);
 				}
 
 				.comment-item.pinned {

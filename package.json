@@ -24,6 +24,7 @@
 		"check:deploy": "node scripts/check-deploy-readiness.mjs"
 	},
 	"dependencies": {
+		"@supabase/supabase-js": "^2.84.0",
 		"@libsql/client": "^0.17.0",
 		"@prisma/adapter-libsql": "^6.19.2",
 		"@prisma/client": "^6.19.2",

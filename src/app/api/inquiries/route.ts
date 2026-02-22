@@ -3,6 +3,8 @@ import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { toSessionUserId } from '@/lib/session-user';
 import { isPrivilegedNickname } from '@/config/admin-policy';
+import { broadcastRealtime } from '@/lib/realtime/server-broadcast';
+import { REALTIME_EVENTS, REALTIME_TOPICS } from '@/lib/realtime/constants';
 
 
 /**
@@ -94,6 +96,20 @@ export async function POST(request: NextRequest) {
 				content,
 				authorId: sessionUserId,
 			},
+		});
+
+		const pendingCount = await prisma.inquiry.count({
+			where: { status: 'pending', archivedAt: null },
+		});
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.adminInquiries(),
+			event: REALTIME_EVENTS.ADMIN_INQUIRY_PENDING_COUNT_UPDATED,
+			payload: { pendingCount },
+		});
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.inquiry(inquiry.id),
+			event: REALTIME_EVENTS.INQUIRY_STATUS_UPDATED,
+			payload: { inquiryId: inquiry.id, status: inquiry.status },
 		});
 
 		return NextResponse.json({

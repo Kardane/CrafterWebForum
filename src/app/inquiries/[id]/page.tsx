@@ -1,10 +1,12 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import InquiryDetail from "@/components/inquiries/InquiryDetail";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 interface InquiryResponse {
 	inquiry: {
@@ -39,33 +41,47 @@ export default function InquiryDetailPage() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	useEffect(() => {
-		async function fetchInquiry() {
-			try {
-				const res = await fetch(`/api/inquiries/${inquiryId}`);
-				if (res.status === 401) {
-					router.push("/api/auth/signin");
-					return;
-				}
-				if (res.status === 403) {
-					setError("접근 권한이 없습니다.");
-					return;
-				}
-				if (!res.ok) {
-					throw new Error("Failed to load inquiry");
-				}
-				const responseData: InquiryResponse = await res.json();
-				setData(responseData);
-			} catch (err) {
-				console.error(err);
-				setError("문의 내용을 불러오는데 실패했습니다.");
-			} finally {
-				setIsLoading(false);
+	const fetchInquiry = useCallback(async () => {
+		try {
+			const res = await fetch(`/api/inquiries/${inquiryId}`, { cache: "no-store" });
+			if (res.status === 401) {
+				router.push("/api/auth/signin");
+				return;
 			}
+			if (res.status === 403) {
+				setError("접근 권한이 없습니다.");
+				return;
+			}
+			if (!res.ok) {
+				throw new Error("Failed to load inquiry");
+			}
+			const responseData: InquiryResponse = await res.json();
+			setData(responseData);
+		} catch (err) {
+			console.error(err);
+			setError("문의 내용을 불러오는데 실패했습니다.");
+		} finally {
+			setIsLoading(false);
 		}
-
-		if (inquiryId) fetchInquiry();
 	}, [inquiryId, router]);
+
+	useEffect(() => {
+		if (inquiryId) {
+			void fetchInquiry();
+		}
+	}, [inquiryId, fetchInquiry]);
+
+	useRealtimeBroadcast(
+		inquiryId ? REALTIME_TOPICS.inquiry(Number(inquiryId)) : null,
+		{
+			[REALTIME_EVENTS.INQUIRY_REPLY_CREATED]: () => {
+				void fetchInquiry();
+			},
+			[REALTIME_EVENTS.INQUIRY_STATUS_UPDATED]: () => {
+				void fetchInquiry();
+			},
+		}
+	);
 
 	if (isLoading) {
 		return (

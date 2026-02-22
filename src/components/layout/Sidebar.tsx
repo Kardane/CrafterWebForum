@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import classNames from "classnames";
-import { Settings, HelpCircle, Shield } from "lucide-react";
+import { Settings, HelpCircle, Shield, Bell } from "lucide-react";
 import SidebarSettingsModal from "../sidebar/SidebarSettingsModal";
 import SafeImage from "@/components/ui/SafeImage";
 import UserAvatar from "@/components/ui/UserAvatar";
@@ -13,6 +13,7 @@ import { DEFAULT_SETTINGS, getSidebarSettings, normalizeSidebarUrl } from "@/lib
 import { SidebarLink, DEFAULT_LINKS, compareSidebarLinks } from "@/lib/sidebar-links";
 import { isPrivilegedNickname } from "@/config/admin-policy";
 import { usePendingInquiryCount } from "@/components/layout/usePendingInquiryCount";
+import { useNotifications } from "@/components/notifications/useNotifications";
 
 interface SidebarProps {
 	isOpen: boolean;
@@ -72,6 +73,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 		? user.role === "admin" || isPrivilegedNickname(user.nickname)
 		: false;
 	const { inquiryCount } = usePendingInquiryCount(canAccessAdmin);
+	const { unreadCount } = useNotifications();
 
 	useEffect(() => {
 		const refreshLinks = () => {
@@ -197,6 +199,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 						</div>
 
 						<div className="mt-2 flex gap-2">
+							<Link
+								href="/notifications"
+								className="relative flex h-9 w-9 items-center justify-center rounded text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
+								title="알림"
+							>
+								<Bell size={16} />
+								{unreadCount > 0 && (
+									<span className="absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
+										{unreadCount > 99 ? "99+" : unreadCount}
+									</span>
+								)}
+							</Link>
+
 							<Link
 								href="/inquiries"
 								className="flex flex-1 items-center gap-1.5 rounded px-2.5 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"

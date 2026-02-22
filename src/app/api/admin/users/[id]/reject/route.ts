@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
+import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 
 function makeIdentitySuffix(id: number) {
@@ -44,6 +46,12 @@ export async function POST(
 			},
 		});
 
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.adminUsers(),
+			event: REALTIME_EVENTS.ADMIN_USER_APPROVAL_UPDATED,
+			payload: { userId, action: "rejected" },
+		});
+
 		console.warn(`[Admin] User rejected by ${admin.session.user.id}: target=${userId}`);
 		return NextResponse.json({ success: true });
 	} catch (error) {
@@ -51,4 +59,3 @@ export async function POST(
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
-

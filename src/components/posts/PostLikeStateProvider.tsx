@@ -1,6 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
+import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 interface PostLikeStateContextValue {
 	postId: number;
@@ -25,6 +28,7 @@ export function PostLikeStateProvider({
 	initialLiked,
 	children,
 }: PostLikeStateProviderProps) {
+	const { data: session } = useSession();
 	const [likes, setLikes] = useState(initialLikes);
 	const [liked, setLiked] = useState(initialLiked);
 	const [isLoading, setIsLoading] = useState(false);
@@ -35,6 +39,20 @@ export function PostLikeStateProvider({
 		setLiked(initialLiked);
 		setIsLoading(false);
 	}, [postId, initialLikes, initialLiked]);
+
+	useRealtimeBroadcast(REALTIME_TOPICS.post(postId), {
+		[REALTIME_EVENTS.POST_LIKE_TOGGLED]: (payload) => {
+			const nextLikes = Number(payload.likes ?? likes);
+			if (Number.isFinite(nextLikes)) {
+				setLikes(nextLikes);
+			}
+			const actorUserId = Number(payload.actorUserId ?? 0);
+			const sessionUserId = Number(session?.user?.id ?? 0);
+			if (actorUserId > 0 && actorUserId === sessionUserId && typeof payload.likedByActor === "boolean") {
+				setLiked(payload.likedByActor);
+			}
+		},
+	});
 
 	const toggleLike = useCallback(async () => {
 		if (isLoading) return;
@@ -85,4 +103,3 @@ export function PostLikeStateProvider({
 export function useOptionalPostLikeState(): PostLikeStateContextValue | null {
 	return useContext(PostLikeStateContext);
 }
-

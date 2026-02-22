@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { buildCommentTree } from "@/lib/comments";
 import { isSessionUserApproved, toSessionUserId } from "@/lib/session-user";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
+import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
+import { extractMentionNicknames } from "@/lib/mentions";
 
 /**
  * GET /api/posts/[id]/comments
@@ -194,6 +197,70 @@ export async function POST(
 				tags: parsePostTags(post.tags),
 			})
 		);
+
+		const mentionNicknames = extractMentionNicknames(content);
+		if (mentionNicknames.length > 0) {
+			const mentionTargets = await prisma.user.findMany({
+				where: {
+					nickname: { in: mentionNicknames },
+					deletedAt: null,
+				},
+				select: {
+					id: true,
+					nickname: true,
+				},
+			});
+
+			const targets = mentionTargets.filter((target) => target.id !== sessionUserId);
+			if (targets.length > 0) {
+				const actorNickname = session.user.nickname || "누군가";
+				await prisma.notification.createMany({
+					data: targets.map((target) => ({
+						userId: target.id,
+						actorId: sessionUserId,
+						type: "mention_comment",
+						message: `${actorNickname}님이 회원님을 멘션했음`,
+						postId,
+						commentId: comment.id,
+					})),
+				});
+
+				for (const target of targets) {
+					void broadcastRealtime({
+						topic: REALTIME_TOPICS.user(target.id),
+						event: REALTIME_EVENTS.NOTIFICATION_CREATED,
+						payload: {
+							type: "mention_comment",
+							postId,
+							commentId: comment.id,
+							actorNickname,
+							targetNickname: target.nickname,
+						},
+					});
+				}
+			}
+		}
+
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.post(postId),
+			event: REALTIME_EVENTS.COMMENT_CREATED,
+			payload: {
+				postId,
+				commentId: comment.id,
+				parentId: comment.parentId,
+				actorUserId: sessionUserId,
+			},
+		});
+
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.user(sessionUserId),
+			event: REALTIME_EVENTS.POST_READ_MARKER_UPDATED,
+			payload: {
+				postId,
+				lastReadCommentCount: commentCount,
+				totalCommentCount: commentCount,
+			},
+		});
 
 		return NextResponse.json({
 			success: true,

@@ -22,6 +22,7 @@ import {
 	toReplyPreview,
 	type FlattenedStreamComment,
 } from "@/lib/comment-stream";
+import { extractMentionNicknames } from "@/lib/mentions";
 import { toSessionUserId } from "@/lib/session-user";
 import { text } from "@/lib/system-text";
 import {
@@ -32,6 +33,8 @@ import {
 } from "@/lib/comment-tree-ops";
 import { useCommentMutations } from "./useCommentMutations";
 import { useCommentScroll } from "./useCommentScroll";
+import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 interface CommentSectionProps {
 	postId: number;
@@ -45,6 +48,7 @@ interface CommentSectionProps {
 interface ReplyTarget {
 	parentId: number;
 	nickname: string;
+	preview?: string;
 }
 
 type FlattenedComment = FlattenedStreamComment<Comment>;
@@ -131,6 +135,8 @@ function buildInitialCommentViewState(initialComments: Comment[], lastReadCommen
 export default function CommentSection({ postId, initialComments, readMarker }: CommentSectionProps) {
 	const { data: session } = useSession();
 	const { showToast } = useToast();
+	const [readMarkerState, setReadMarkerState] = useState(readMarker);
+	const [typingUsers, setTypingUsers] = useState<string[]>([]);
 	const [initialViewState] = useState<InitialCommentViewState>(() =>
 		buildInitialCommentViewState(initialComments, readMarker?.lastReadCommentCount ?? 0)
 	);
@@ -162,6 +168,21 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		return null;
 	}, [flattenedComments, sessionUserId]);
 
+	const mentionedCommentIds = useMemo(() => {
+		const me = session?.user?.nickname?.trim();
+		if (!me) {
+			return new Set<number>();
+		}
+		const matched = new Set<number>();
+		for (const item of flattenedComments) {
+			const mentions = extractMentionNicknames(item.comment.content);
+			if (mentions.some((nickname) => nickname === me)) {
+				matched.add(item.comment.id);
+			}
+		}
+		return matched;
+	}, [flattenedComments, session?.user?.nickname]);
+
 	const threadReplyCounts = useMemo(() => {
 		const counts = new Map<number, number>();
 		for (const item of flattenedComments) {
@@ -173,9 +194,24 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	}, [flattenedComments]);
 
 	const readMarkerIndex = useMemo(
-		() => getReadMarkerIndex(flattenedComments.length, readMarker?.lastReadCommentCount ?? 0),
-		[flattenedComments.length, readMarker?.lastReadCommentCount]
+		() => getReadMarkerIndex(flattenedComments.length, readMarkerState?.lastReadCommentCount ?? 0),
+		[flattenedComments.length, readMarkerState?.lastReadCommentCount]
 	);
+
+	const reloadComments = useCallback(async () => {
+		try {
+			const response = await fetch(`/api/posts/${postId}/comments`, { cache: "no-store" });
+			if (!response.ok) {
+				return;
+			}
+			const data = (await response.json()) as { comments?: Comment[] };
+			if (Array.isArray(data.comments)) {
+				setComments(data.comments);
+			}
+		} catch {
+			return;
+		}
+	}, [postId]);
 
 	const pinnedComments = useMemo<PinnedCommentItem[]>(
 		() =>
@@ -305,6 +341,57 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		};
 	}, [scrollToBottom]);
 
+	useRealtimeBroadcast(REALTIME_TOPICS.post(postId), {
+		[REALTIME_EVENTS.COMMENT_CREATED]: () => {
+			void reloadComments();
+		},
+		[REALTIME_EVENTS.COMMENT_UPDATED]: () => {
+			void reloadComments();
+		},
+		[REALTIME_EVENTS.COMMENT_DELETED]: () => {
+			void reloadComments();
+		},
+		[REALTIME_EVENTS.COMMENT_PINNED_CHANGED]: () => {
+			void reloadComments();
+		},
+		[REALTIME_EVENTS.COMMENT_TYPING_CHANGED]: (payload) => {
+			const actorUserId = Number(payload.userId ?? 0);
+			const me = Number(session?.user?.id ?? 0);
+			if (actorUserId > 0 && actorUserId === me) {
+				return;
+			}
+			const nickname = String(payload.nickname ?? "누군가");
+			const isTyping = Boolean(payload.typing);
+			setTypingUsers((prev) => {
+				if (isTyping) {
+					if (prev.includes(nickname)) {
+						return prev;
+					}
+					return [...prev, nickname];
+				}
+				return prev.filter((name) => name !== nickname);
+			});
+		},
+	});
+
+	useRealtimeBroadcast(
+		sessionUserId ? REALTIME_TOPICS.user(sessionUserId) : null,
+		{
+			[REALTIME_EVENTS.POST_READ_MARKER_UPDATED]: (payload) => {
+				const nextPostId = Number(payload.postId ?? 0);
+				if (nextPostId !== postId) {
+					return;
+				}
+				const lastReadCommentCount = Number(payload.lastReadCommentCount ?? 0);
+				const totalCommentCount = Number(payload.totalCommentCount ?? 0);
+				setReadMarkerState({
+					lastReadCommentCount: Number.isFinite(lastReadCommentCount) ? lastReadCommentCount : 0,
+					totalCommentCount: Number.isFinite(totalCommentCount) ? totalCommentCount : flattenedComments.length,
+				});
+			},
+		}
+	);
+
 	// 작성기 높이 리저브 관측
 	useEffect(() => {
 		const composer = composerShellRef.current;
@@ -327,8 +414,8 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	}, []);
 
 	// --- 핸들러 ---
-	const handleReplyRequest = (commentId: number, nickname: string) => {
-		setReplyTarget({ parentId: commentId, nickname });
+	const handleReplyRequest = (commentId: number, nickname: string, preview: string) => {
+		setReplyTarget({ parentId: commentId, nickname, preview });
 		requestAnimationFrame(() => {
 			const input = document.getElementById("comment-composer-input");
 			if (input instanceof HTMLTextAreaElement) input.focus();
@@ -365,6 +452,17 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 
 	const handleLoadOlderComments = () => setVisibleStart((prev) => Math.max(0, prev - LATEST_CHUNK_SIZE));
 
+	const handleTypingStateChange = useCallback(
+		(typing: boolean) => {
+			void fetch(`/api/realtime/comment-typing`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ postId, typing }),
+			});
+		},
+		[postId]
+	);
+
 	const handleToggleThread = (rootId: number) => {
 		setExpandedThreadRoots((prev) => {
 			const next = new Set(prev);
@@ -379,6 +477,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		<div className="comment-section">
 			<div className="comment-section-header">
 				<h2 className="text-xl font-bold">댓글 {flattenedComments.length}개</h2>
+				{typingUsers.length > 0 && <span className="text-xs text-text-muted">{typingUsers.join(", ")} 입력 중...</span>}
 				<button
 					type="button"
 					className="btn btn-secondary btn-sm pinned-list-btn"
@@ -431,6 +530,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 									threadRootId={row.item.threadRootId}
 									isCompact={row.item.isCompact}
 									isHighlighted={highlightedCommentId === row.item.comment.id}
+									isMentionHighlighted={mentionedCommentIds.has(row.item.comment.id)}
 									shouldStartEdit={requestedEditCommentId === row.item.comment.id}
 									onEditRequestConsumed={(cId) => setRequestedEditCommentId((prev) => (prev === cId ? null : prev))}
 									onNavigateToComment={handleNavigateToComment}
@@ -454,11 +554,13 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				<div className="composer-shell" id="comment-composer" ref={composerShellRef}>
 					<CommentForm
 						onSubmit={(content) => handleCommentCreate(content, replyTarget?.parentId ?? null)}
+						onTypingStateChange={handleTypingStateChange}
 						onRequestEditLatestOwnComment={handleRequestEditLatestOwnComment}
-						disabled={isLoading}
-						variant="composer"
-						replyTo={replyTarget?.nickname}
-						onCancel={replyTarget ? () => setReplyTarget(null) : undefined}
+							disabled={isLoading}
+							variant="composer"
+							replyTo={replyTarget?.nickname}
+							replyPreview={replyTarget?.preview}
+							onCancel={replyTarget ? () => setReplyTarget(null) : undefined}
 						placeholder={replyTarget ? "답장 작성 중..." : "댓글을 입력해줘"}
 						textareaId="comment-composer-input"
 						postId={postId}

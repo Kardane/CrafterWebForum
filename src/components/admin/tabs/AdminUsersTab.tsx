@@ -10,6 +10,8 @@ import {
 	fetchAdminJson,
 	fetchAdminResponse,
 } from "@/components/admin/utils/fetch-admin";
+import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 type PatchPayload = { role?: "admin" | "user"; isBanned?: 0 | 1 };
 type UserStatus = "정상" | "승인대기" | "차단";
@@ -88,6 +90,12 @@ export default function AdminUsersTab() {
 	useEffect(() => {
 		void loadUsers();
 	}, [loadUsers]);
+
+	useRealtimeBroadcast(REALTIME_TOPICS.adminUsers(), {
+		[REALTIME_EVENTS.ADMIN_USER_APPROVAL_UPDATED]: () => {
+			void loadUsers();
+		},
+	});
 
 	const patchUser = async (id: number, payload: PatchPayload) => {
 		await fetchAdminResponse(`/api/admin/users/${id}`, {

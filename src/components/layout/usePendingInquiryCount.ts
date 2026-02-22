@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 const INQUIRY_COUNT_CACHE_TTL_MS = 30_000;
 
@@ -86,6 +88,15 @@ export function usePendingInquiryCount(canAccessAdmin: boolean) {
 	const refreshInquiryCount = useCallback(async () => {
 		await loadCountRef.current(true);
 	}, []);
+
+	useRealtimeBroadcast(
+		canAccessAdmin ? REALTIME_TOPICS.adminInquiries() : null,
+		{
+			[REALTIME_EVENTS.ADMIN_INQUIRY_PENDING_COUNT_UPDATED]: () => {
+				void loadCountRef.current(true);
+			},
+		}
+	);
 
 	return {
 		inquiryCount,

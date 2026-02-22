@@ -11,12 +11,14 @@ import { text } from "@/lib/system-text";
 
 interface CommentFormProps {
 	onSubmit: (content: string) => Promise<void> | void;
+	onTypingStateChange?: (typing: boolean) => void;
 	onRequestEditLatestOwnComment?: () => void;
 	disabled?: boolean;
 	placeholder?: string;
 	initialValue?: string;
 	onCancel?: () => void;
 	replyTo?: string;
+	replyPreview?: string;
 	variant?: "composer" | "inline";
 	textareaId?: string;
 	mode?: "create" | "edit";
@@ -32,12 +34,14 @@ interface UploadPayload {
 
 export default function CommentForm({
 	onSubmit,
+	onTypingStateChange,
 	onRequestEditLatestOwnComment,
 	disabled = false,
 	placeholder = "댓글을 입력하세요...",
 	initialValue = "",
 	onCancel,
 	replyTo,
+	replyPreview,
 	variant = "inline",
 	textareaId,
 	mode = "create",
@@ -54,10 +58,30 @@ export default function CommentForm({
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const dragDepthRef = useRef(0);
 	const isEditMode = mode === "edit";
+	const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	useEffect(() => {
 		setContent(initialValue);
 	}, [initialValue]);
+
+	useEffect(() => {
+		if (!onTypingStateChange || isEditMode) {
+			return;
+		}
+		onTypingStateChange(content.trim().length > 0);
+		if (typingTimerRef.current) {
+			clearTimeout(typingTimerRef.current);
+		}
+		typingTimerRef.current = setTimeout(() => {
+			onTypingStateChange(false);
+		}, 2000);
+		return () => {
+			if (typingTimerRef.current) {
+				clearTimeout(typingTimerRef.current);
+				typingTimerRef.current = null;
+			}
+		};
+	}, [content, isEditMode, onTypingStateChange]);
 
 	// 임시 저장 불러오기
 	useEffect(() => {
@@ -262,9 +286,12 @@ export default function CommentForm({
 			>
 				{replyTo && (
 					<div className="reply-bar">
-						<span>
-							<span className="reply-name">@{replyTo}</span>님에게 답장
-						</span>
+						<div className="reply-meta">
+							<span>
+								<span className="reply-name">@{replyTo}</span>님에게 답장
+							</span>
+							{replyPreview && <span className="reply-preview-inline">{replyPreview}</span>}
+						</div>
 						{onCancel && (
 							<button type="button" className="reply-cancel" onClick={onCancel}>
 								<X size={14} />
@@ -419,6 +446,22 @@ export default function CommentForm({
 					border-radius: 6px;
 					font-size: 0.85rem;
 					color: var(--text-secondary);
+				}
+
+				.reply-meta {
+					display: flex;
+					flex-direction: column;
+					gap: 2px;
+					min-width: 0;
+				}
+
+				.reply-preview-inline {
+					font-size: 0.78rem;
+					color: var(--text-muted);
+					white-space: nowrap;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					max-width: min(100%, 420px);
 				}
 
 				.reply-name {

@@ -3,6 +3,8 @@ import { unstable_cache } from "next/cache";
 import { buildPostDetailTag } from "@/lib/cache-tags";
 import { buildCommentTree } from "@/lib/comments";
 import type { Comment as TreeComment } from "@/lib/comment-tree-ops";
+import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
+import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 const POST_DETAIL_CACHE_VERSION = "v1";
 const POST_DETAIL_REVALIDATE_SECONDS = 30;
@@ -257,6 +259,15 @@ export async function getPostDetail(
 			},
 		});
 		writeReadMs = performance.now() - writeReadStart;
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.user(input.sessionUserId),
+			event: REALTIME_EVENTS.POST_READ_MARKER_UPDATED,
+			payload: {
+				postId: input.postId,
+				lastReadCommentCount: nextReadCount,
+				totalCommentCount: nextReadCount,
+			},
+		});
 	}
 
 	return {

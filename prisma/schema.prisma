@@ -37,6 +37,8 @@ model User {
   minecraftCodes   MinecraftCode[]
   inquiries        Inquiry[]
   inquiryReplies   InquiryReply[]
+  notificationsReceived Notification[] @relation("NotificationRecipient")
+  notificationsSent     Notification[] @relation("NotificationActor")
 
   @@index([nickname])
 }
@@ -204,4 +206,24 @@ model Upload {
   mimetype     String?
   size         Int?
   createdAt    DateTime @default(now())
+}
+
+// ============================================
+// 알림 모델
+// ============================================
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  actorId   Int?
+  type      String
+  message   String
+  postId    Int?
+  commentId Int?
+  isRead    Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user   User  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor  User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead, createdAt])
 }
