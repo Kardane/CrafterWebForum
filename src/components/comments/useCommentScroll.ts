@@ -169,17 +169,12 @@ export function useCommentScroll({
 		if (latestJumpAppliedRef.current || flattenedCommentsLength === 0) {
 			return;
 		}
-		if (!restoreCheckedRef.current || restoreAppliedRef.current) {
+		if (!restoreCheckedRef.current) {
 			return;
 		}
 		latestJumpAppliedRef.current = true;
-		requestAnimationFrame(() => {
-			document.getElementById("comment-feed-end")?.scrollIntoView({
-				behavior: "auto",
-				block: "end",
-			});
-		});
-	}, [flattenedCommentsLength]);
+		scrollToBottom("auto");
+	}, [flattenedCommentsLength, scrollToBottom]);
 
 	// 스크롤/비저빌리티 이벤트 리스너 등록
 	useEffect(() => {
