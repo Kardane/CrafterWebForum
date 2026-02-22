@@ -8,7 +8,7 @@
 
 ### 최신 검증 커맨드
 - `npm run lint` -> 성공 (`0 warnings, 0 errors`)
-- `npm test` -> 성공 (`35 files, 140 tests passed`)
+- `npm test` -> 성공 (`35 files, 141 tests passed`)
 - `npm run build` -> 성공 (Turbopack production build 완료)
 - `npx next build --webpack` -> 성공 (`@prisma/adapter-libsql` import 체인 외부화 + Turbopack 병행 설정으로 fallback 빌드 복구)
 - `npx tsc --noEmit` -> 성공
@@ -162,6 +162,13 @@ legacy/                   # 레거시 동작 참조
   - `longTaskCount`, `longTaskMaxMs`: 모달 오픈 구간 long task 빈도/최대 구간
   - 샘플은 최근 120건 bounded 유지
 
+### 3.9 링크/폴링/사이드바 최적화 2차
+- `MinecraftReauth`에서 코드 발급/폴링 fetch 각각에 `AbortController`를 연결해 언마운트 및 다음 폴링 주기 시작 시 이전 요청을 즉시 취소
+- `/api/link-preview`에 URL 단위 in-memory TTL 캐시(`Map + expiresAt`)를 추가해 동일 링크 반복 조회 시 외부 upstream 호출을 생략
+- `Sidebar`의 관리자 문의 카운트 조회에 30초 TTL 캐시와 `visibilitychange` 기반 재검증을 추가해 `no-store` 반복 호출 빈도를 완화
+- `PostContent` 외부 링크 카드 메타 렌더 루프를 chunk 단위 incremental 처리(`requestAnimationFrame`)로 분해해 대량 카드 DOM 업데이트 시 단일 프레임 블로킹을 축소
+- `/api/link-preview` TTL 캐시 재사용 경로를 `src/__tests__/api/link-preview.route.test.ts`로 회귀 보호
+
 ## 4. 데이터 레이어 상태
 
 ### 4.1 모델/상태 필드
@@ -245,6 +252,11 @@ legacy/                   # 레거시 동작 참조
 63. `src/components/ui/ImageLightboxProvider.tsx` 도입으로 이미지 확대 모달을 전역 단일 인스턴스로 통합하고 클릭-오픈/이미지 로드/long task 경량 계측(`p95`) 추가
 64. `src/components/posts/PostContent.tsx`에 `useMemo` 기반 마크다운/임베드 캐시 및 이미지 에러 이벤트 위임 처리 적용
 65. `src/lib/perf-metrics.ts` 및 `src/__tests__/lib/perf-metrics.test.ts` 추가로 bounded 샘플/percentile 계산 유틸과 회귀 테스트 보강
+66. `src/components/profile/MinecraftReauth.tsx`에 코드 발급/폴링 요청 취소(`AbortController`)를 추가해 언마운트 후 잔여 요청 누수 방지
+67. `src/app/api/link-preview/route.ts`에 URL 단위 TTL 메모리 캐시(`expiresAt`, 최대 엔트리 제한) 도입으로 중복 외부 호출 감축
+68. `src/components/layout/Sidebar.tsx`의 `/api/inquiries/pending-count` 조회에 30초 TTL 캐시 + `visibilitychange` 재검증 추가
+69. `src/components/posts/PostContent.tsx` 외부 링크 카드 메타 적용을 chunk 단위 incremental 렌더로 분해
+70. `src/__tests__/api/link-preview.route.test.ts`에 동일 URL 재요청 시 TTL 캐시 재사용 회귀 테스트 추가
 
 ### 5.1 레거시 2번 항목 반영 현황 (2026-02-17 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14
