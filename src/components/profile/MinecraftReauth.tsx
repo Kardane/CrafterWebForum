@@ -1,117 +1,55 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useMinecraftAuthPolling } from '@/components/auth/useMinecraftAuthPolling';
 
 interface MinecraftReauthProps {
 	onClose: () => void;
 }
 
 export default function MinecraftReauth({ onClose }: MinecraftReauthProps) {
-	const [code, setCode] = useState<string | null>(null);
-	const [timeLeft, setTimeLeft] = useState(0);
-	const [isLoading, setIsLoading] = useState(true);
-	const [error, setError] = useState<string | null>(null);
-
-	const intervalRef = useRef<NodeJS.Timeout | null>(null);
-	const pollRef = useRef<NodeJS.Timeout | null>(null);
-	const codeRequestControllerRef = useRef<AbortController | null>(null);
-	const pollRequestControllerRef = useRef<AbortController | null>(null);
-
-	// 코드 발급 요청
-	useEffect(() => {
-		async function fetchCode() {
-			const requestController = new AbortController();
-			codeRequestControllerRef.current = requestController;
-			try {
-				const res = await fetch('/api/users/me/minecraft-reauth', {
-					method: 'POST',
-					signal: requestController.signal,
-				});
-				const data = await res.json();
-
-				if (!res.ok) {
-					throw new Error(data.error || 'Failed to generate code');
-				}
-
-				setCode(data.code);
-				setTimeLeft(data.expiresIn); // 300초
-				setIsLoading(false);
-			} catch (err) {
-				if (err instanceof Error && err.name === 'AbortError') {
-					return;
-				}
-				console.error('Code generation error:', err);
-				setError('인증 코드 발급에 실패했습니다.');
-				setIsLoading(false);
-			} finally {
-				if (codeRequestControllerRef.current === requestController) {
-					codeRequestControllerRef.current = null;
-				}
-			}
-		}
-
-		fetchCode();
-
-		return () => {
-			if (intervalRef.current) clearInterval(intervalRef.current);
-			if (pollRef.current) clearInterval(pollRef.current);
-			codeRequestControllerRef.current?.abort();
-			pollRequestControllerRef.current?.abort();
-		};
-	}, []);
-
-	// 타이머 및 폴링 설정
-	useEffect(() => {
-		if (!code) return;
-
-		// 타이머 (1초마다 감소)
-		intervalRef.current = setInterval(() => {
-			setTimeLeft((prev) => {
-				if (prev <= 1) {
-					clearInterval(intervalRef.current!);
-					clearInterval(pollRef.current!);
-					setError('인증 시간이 만료되었습니다. 다시 시도해주세요.');
-					return 0;
-				}
-				return prev - 1;
+	const {
+		code,
+		timeRemaining,
+		isPolling,
+		isLoading,
+		error,
+	} = useMinecraftAuthPolling({
+		autoStart: true,
+		refreshOnExpire: false,
+		codeErrorMessage: '인증 코드 발급에 실패했습니다.',
+		expireErrorMessage: '인증 시간이 만료되었습니다. 다시 시도해주세요.',
+		createCode: async (signal) => {
+			const res = await fetch('/api/users/me/minecraft-reauth', {
+				method: 'POST',
+				signal,
 			});
-		}, 1000);
-
-		// 폴링 (2초마다 상태 확인)
-		pollRef.current = setInterval(async () => {
-			pollRequestControllerRef.current?.abort();
-			const requestController = new AbortController();
-			pollRequestControllerRef.current = requestController;
-			try {
-				const res = await fetch('/api/users/me/minecraft-reauth', {
-					signal: requestController.signal,
-				});
-				const data = await res.json();
-
-				if (data.verified) {
-					clearInterval(intervalRef.current!);
-					clearInterval(pollRef.current!);
-					alert('인증이 완료되었습니다! 정보가 업데이트되었습니다.');
-					window.location.reload(); // 새로고침하여 정보 갱신
-				}
-			} catch (err) {
-				if (err instanceof Error && err.name === 'AbortError') {
-					return;
-				}
-				console.error('Polling error:', err);
-			} finally {
-				if (pollRequestControllerRef.current === requestController) {
-					pollRequestControllerRef.current = null;
-				}
+			const data = (await res.json()) as { code?: string; expiresIn?: number; error?: string };
+			if (!res.ok || !data.code) {
+				throw new Error(data.error || 'Failed to generate code');
 			}
-		}, 2000);
-
-		return () => {
-			if (intervalRef.current) clearInterval(intervalRef.current);
-			if (pollRef.current) clearInterval(pollRef.current);
-			pollRequestControllerRef.current?.abort();
-		};
-	}, [code]);
+			return {
+				code: data.code,
+				expiresIn: Number(data.expiresIn ?? 300),
+			};
+		},
+		pollVerification: async ({ signal }) => {
+			const res = await fetch('/api/users/me/minecraft-reauth', { signal });
+			if (!res.ok) {
+				return { verified: false };
+			}
+			const data = (await res.json()) as { verified?: boolean };
+			return {
+				verified: Boolean(data.verified),
+			};
+		},
+		onVerified: () => {
+			alert('인증이 완료되었습니다! 정보가 업데이트되었습니다.');
+			window.location.reload();
+		},
+		onPollError: (nextError) => {
+			console.error('Polling error:', nextError);
+		},
+	});
 
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
@@ -172,14 +110,16 @@ export default function MinecraftReauth({ onClose }: MinecraftReauthProps) {
 							<div className="text-center">
 								<p className="text-sm text-text-secondary mb-1">남은 시간</p>
 								<p className="text-xl font-bold font-mono text-warning">
-									{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+									{Math.floor(timeRemaining / 60)}:{(timeRemaining % 60).toString().padStart(2, '0')}
 								</p>
 							</div>
 
-							<div className="flex items-center justify-center gap-2 text-xs text-text-muted">
-								<div className="animate-pulse w-2 h-2 rounded-full bg-accent"></div>
-								인증 대기 중...
-							</div>
+							{isPolling && (
+								<div className="flex items-center justify-center gap-2 text-xs text-text-muted">
+									<div className="animate-pulse w-2 h-2 rounded-full bg-accent"></div>
+									인증 대기 중...
+								</div>
+							)}
 						</div>
 					)}
 				</div>
