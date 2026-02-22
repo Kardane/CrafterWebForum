@@ -4,11 +4,11 @@
 - 대상: `CrafterWebForum`
 - 기준: `src/app`, `src/components`, `src/app/api`, `src/lib`, `src/auth*`, `src/proxy.ts`, `prisma/schema.prisma`
 - 레거시 비교 기준: `legacy/` (동작 참고용)
-- 최종 검증일: 2026-02-18
+- 최종 검증일: 2026-02-22
 
 ### 최신 검증 커맨드
 - `npm run lint` -> 성공 (`0 warnings, 0 errors`)
-- `npm test` -> 성공 (`34 files, 136 tests passed`)
+- `npm test` -> 성공 (`35 files, 140 tests passed`)
 - `npm run build` -> 성공 (Turbopack production build 완료)
 - `npx next build --webpack` -> 성공 (`@prisma/adapter-libsql` import 체인 외부화 + Turbopack 병행 설정으로 fallback 빌드 복구)
 - `npx tsc --noEmit` -> 성공
@@ -152,6 +152,16 @@ legacy/                   # 레거시 동작 참조
 - 프로필/사이드바 아바타는 `UserAvatar` 단일 컴포넌트로 통합하고 `mineatar -> mc-heads -> initials` fallback 체인 적용
 - 본문 외부 링크 카드 이미지 로드 실패 시 카드 레이아웃이 깨지지 않도록 안전한 숨김 처리 적용
 
+### 3.8 이미지 모달 계측/최적화
+- 이미지 확대 모달을 `ImageLightboxProvider` 단일 인스턴스로 통합해 본문/댓글 `PostContent` 다중 렌더 시 모달 중복 마운트 비용을 제거
+- `PostContent` 마크다운/임베드 렌더 결과를 `useMemo`로 캐시해 동일 content 재렌더 시 문자열 파이프라인 재실행 비용을 완화
+- 이미지 에러 핸들링을 개별 `img.onerror` 할당에서 이벤트 위임(`error` capture listener)으로 변경해 DOM 노드 수가 많을 때 핸들러 부하를 완화
+- `ImageLightboxProvider`에서 경량 성능 로깅을 추가해 아래 지표를 콘솔로 수집
+  - `modalOpenP95Ms`: 클릭 후 모달 첫 프레임 p95
+  - `imageLoadP95Ms`: 클릭 후 이미지 `onLoad` 완료 p95
+  - `longTaskCount`, `longTaskMaxMs`: 모달 오픈 구간 long task 빈도/최대 구간
+  - 샘플은 최근 120건 bounded 유지
+
 ## 4. 데이터 레이어 상태
 
 ### 4.1 모델/상태 필드
@@ -232,6 +242,9 @@ legacy/                   # 레거시 동작 참조
 60. `src/lib/services/post-detail-service.ts` 상세 캐시 키에서 사용자 축 제거, `user_liked`를 사용자별 보조 쿼리로 분리
 61. `src/proxy.ts`에서 비보호 경로 요청은 `auth()`를 건너뛰게 해 초기 진입 인증 오버헤드 감소
 62. 목록 오버레이 분리 경로 회귀 보호를 위해 `src/__tests__/api/posts.list.route.test.ts` mock 경로(`postRead.findMany`) 보강
+63. `src/components/ui/ImageLightboxProvider.tsx` 도입으로 이미지 확대 모달을 전역 단일 인스턴스로 통합하고 클릭-오픈/이미지 로드/long task 경량 계측(`p95`) 추가
+64. `src/components/posts/PostContent.tsx`에 `useMemo` 기반 마크다운/임베드 캐시 및 이미지 에러 이벤트 위임 처리 적용
+65. `src/lib/perf-metrics.ts` 및 `src/__tests__/lib/perf-metrics.test.ts` 추가로 bounded 샘플/percentile 계산 유틸과 회귀 테스트 보강
 
 ### 5.1 레거시 2번 항목 반영 현황 (2026-02-17 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14
