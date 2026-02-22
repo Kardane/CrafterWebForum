@@ -141,7 +141,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 					</div>
 				</div>
 
-				<div className="mt-8">
+				<div className="mt-8 -mx-2 md:-mx-3 lg:-mx-5">
 					<CommentSection postId={post.id} initialComments={comments} readMarker={readMarker} />
 				</div>
 			</div>
