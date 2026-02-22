@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import classNames from "classnames";
 import AuthShell from "@/components/auth/AuthShell";
 import styles from "@/components/auth/AuthShell.module.css";
 import { text } from "@/lib/system-text";
+import { useMinecraftAuthPolling } from "@/components/auth/useMinecraftAuthPolling";
 
 interface CodeCheckResponse {
 	verified: boolean;
@@ -21,85 +22,65 @@ interface PasswordResetResponse {
 
 export default function ForgotPasswordPage() {
 	const router = useRouter();
-	const timerRef = useRef<NodeJS.Timeout | null>(null);
-	const pollRef = useRef<NodeJS.Timeout | null>(null);
 	const [step, setStep] = useState<"auth" | "reset">("auth");
-	const [authCode, setAuthCode] = useState("");
-	const [timeRemaining, setTimeRemaining] = useState(60);
-	const [isPolling, setIsPolling] = useState(false);
 	const [verifiedNickname, setVerifiedNickname] = useState("");
 	const [newPassword, setNewPassword] = useState("");
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [formError, setFormError] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
-	const stopPolling = () => {
-		if (timerRef.current) {
-			clearInterval(timerRef.current);
-		}
-		if (pollRef.current) {
-			clearInterval(pollRef.current);
-		}
-		setIsPolling(false);
-	};
-
-	const startTimer = () => {
-		if (timerRef.current) {
-			clearInterval(timerRef.current);
-		}
-
-		timerRef.current = setInterval(() => {
-			setTimeRemaining((prev) => {
-				if (prev <= 1) {
-					void generateCode();
-					return 60;
-				}
-				return prev - 1;
+	const {
+		code: authCode,
+		timeRemaining,
+		isPolling,
+		isLoading: isAuthLoading,
+		start: generateCode,
+	} = useMinecraftAuthPolling({
+		createCode: async (signal) => {
+			const response = await fetch("/api/minecraft/code", {
+				method: "POST",
+				signal,
 			});
-		}, 1000);
-	};
-
-	const startPolling = (code: string) => {
-		if (pollRef.current) {
-			clearInterval(pollRef.current);
-		}
-		setIsPolling(true);
-
-		pollRef.current = setInterval(async () => {
-			try {
-				const response = await fetch(`/api/minecraft/check/${code}`);
-				if (!response.ok) {
-					return;
-				}
-				const payload = (await response.json()) as CodeCheckResponse;
-				if (!payload.verified || !payload.nickname) {
-					return;
-				}
-				stopPolling();
-				setVerifiedNickname(payload.nickname);
-				setStep("reset");
-			} catch (error) {
-				console.error("Forgot password polling error:", error);
-			}
-		}, 2000);
-	};
-
-	const generateCode = async () => {
-		setFormError("");
-		try {
-			const response = await fetch("/api/minecraft/code", { method: "POST" });
 			const payload = (await response.json()) as { code?: string; error?: string };
 			if (!response.ok || !payload.code) {
 				throw new Error(payload.error || "code_generation_failed");
 			}
-			setAuthCode(payload.code);
-			setTimeRemaining(60);
-			startTimer();
-			startPolling(payload.code);
-		} catch (error) {
+			return {
+				code: payload.code,
+				expiresIn: 60,
+			};
+		},
+		pollVerification: async ({ code, signal }) => {
+			const response = await fetch(`/api/minecraft/check/${code}`, { signal });
+			if (!response.ok) {
+				return { verified: false };
+			}
+			const payload = (await response.json()) as CodeCheckResponse;
+			return {
+				verified: Boolean(payload.verified),
+				nickname: payload.nickname,
+			};
+		},
+		onVerified: ({ nickname }) => {
+			if (!nickname) {
+				return;
+			}
+			setVerifiedNickname(nickname);
+			setStep("reset");
+		},
+		refreshOnExpire: true,
+		onCodeError: (error) => {
 			console.error("Forgot password code generation error:", error);
 			setFormError(text("passwordReset.errorGenerateCode"));
-		}
+		},
+		onPollError: (error) => {
+			console.error("Forgot password polling error:", error);
+		},
+	});
+
+	const handleGenerateCode = async () => {
+		setFormError("");
+		await generateCode();
 	};
 
 	const handleSubmit = async (event: React.FormEvent) => {
@@ -139,13 +120,6 @@ export default function ForgotPasswordPage() {
 		}
 	};
 
-	useEffect(
-		() => () => {
-			stopPolling();
-		},
-		[]
-	);
-
 	return (
 		<AuthShell
 			title={text("passwordReset.title")}
@@ -163,10 +137,11 @@ export default function ForgotPasswordPage() {
 					{!authCode ? (
 						<button
 							type="button"
-							onClick={() => void generateCode()}
+							onClick={() => void handleGenerateCode()}
 							className={classNames("btn btn-primary", styles.fullWidthButton)}
+							disabled={isAuthLoading}
 						>
-							{text("passwordReset.startAuthButton")}
+							{isAuthLoading ? "코드 발급 중..." : text("passwordReset.startAuthButton")}
 						</button>
 					) : (
 						<>

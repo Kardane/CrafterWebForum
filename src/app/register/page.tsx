@@ -1,18 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import classNames from "classnames";
 import AuthShell from "@/components/auth/AuthShell";
 import styles from "@/components/auth/AuthShell.module.css";
+import { useMinecraftAuthPolling } from "@/components/auth/useMinecraftAuthPolling";
 
 export default function RegisterPage() {
 	const router = useRouter();
 	const [step, setStep] = useState<"auth" | "register">("auth");
-	const [authCode, setAuthCode] = useState("");
-	const [timeRemaining, setTimeRemaining] = useState(60);
-	const [isPolling, setIsPolling] = useState(false);
 	const [verifiedNickname, setVerifiedNickname] = useState("");
 	const [password, setPassword] = useState("");
 	const [passwordConfirm, setPasswordConfirm] = useState("");
@@ -20,80 +18,54 @@ export default function RegisterPage() {
 	const [passwordError, setPasswordError] = useState("");
 	const [confirmError, setConfirmError] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const timerRef = useRef<NodeJS.Timeout | null>(null);
-	const pollRef = useRef<NodeJS.Timeout | null>(null);
 
-	const stopPolling = () => {
-		if (timerRef.current) {
-			clearInterval(timerRef.current);
-		}
-		if (pollRef.current) {
-			clearInterval(pollRef.current);
-		}
-		setIsPolling(false);
-	};
-
-	const startTimer = () => {
-		if (timerRef.current) {
-			clearInterval(timerRef.current);
-		}
-
-		timerRef.current = setInterval(() => {
-			setTimeRemaining((prev) => {
-				if (prev <= 1) {
-					void generateCode();
-					return 60;
-				}
-				return prev - 1;
+	const {
+		code: authCode,
+		timeRemaining,
+		isPolling,
+		isLoading: isAuthLoading,
+		start: generateCode,
+	} = useMinecraftAuthPolling({
+		createCode: async (signal) => {
+			const response = await fetch("/api/minecraft/code", {
+				method: "POST",
+				signal,
 			});
-		}, 1000);
-	};
-
-	const startPolling = (code: string) => {
-		if (pollRef.current) {
-			clearInterval(pollRef.current);
-		}
-		setIsPolling(true);
-
-		pollRef.current = setInterval(async () => {
-			try {
-				const response = await fetch(`/api/minecraft/check/${code}`);
-				const payload = (await response.json()) as {
-					verified?: boolean;
-					nickname?: string;
-				};
-
-				if (!payload.verified || !payload.nickname) {
-					return;
-				}
-
-				stopPolling();
-				setVerifiedNickname(payload.nickname);
-				setStep("register");
-			} catch {
-				// 폴링 오류는 다음 주기에 재시도
-			}
-		}, 2000);
-	};
-
-	const generateCode = async () => {
-		try {
-			const response = await fetch("/api/minecraft/code", { method: "POST" });
 			const payload = (await response.json()) as { code?: string };
-			if (!payload.code) {
+			if (!response.ok || !payload.code) {
 				throw new Error("code_generation_failed");
 			}
-
-			setAuthCode(payload.code);
-			setTimeRemaining(60);
-			startTimer();
-			startPolling(payload.code);
-		} catch {
+			return {
+				code: payload.code,
+				expiresIn: 60,
+			};
+		},
+		pollVerification: async ({ code, signal }) => {
+			const response = await fetch(`/api/minecraft/check/${code}`, { signal });
+			if (!response.ok) {
+				return { verified: false };
+			}
+			const payload = (await response.json()) as {
+				verified?: boolean;
+				nickname?: string;
+			};
+			return {
+				verified: Boolean(payload.verified),
+				nickname: payload.nickname ?? null,
+			};
+		},
+		onVerified: ({ nickname }) => {
+			if (!nickname) {
+				return;
+			}
+			setVerifiedNickname(nickname);
+			setStep("register");
+		},
+		refreshOnExpire: true,
+		onCodeError: () => {
 			alert("코드 발급에 실패했습니다");
-		}
-	};
-
-	useEffect(() => stopPolling, []);
+		},
+	});
 
 	const handleSubmit = async (event: React.FormEvent) => {
 		event.preventDefault();
@@ -159,8 +131,9 @@ export default function RegisterPage() {
 							type="button"
 							onClick={() => void generateCode()}
 							className={classNames("btn btn-primary", styles.fullWidthButton)}
+							disabled={isAuthLoading}
 						>
-							서버 인증 시작
+							{isAuthLoading ? "코드 발급 중..." : "서버 인증 시작"}
 						</button>
 					) : (
 						<>
