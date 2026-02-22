@@ -2,8 +2,8 @@ import Link from "next/link";
 import classNames from "classnames";
 
 export const ADMIN_TABS = [
-	{ id: "dashboard", label: "대시보드" },
 	{ id: "users", label: "유저" },
+	{ id: "dashboard", label: "대시보드" },
 	{ id: "posts", label: "포스트" },
 	{ id: "inquiries", label: "문의" },
 	{ id: "backup", label: "백업" },
