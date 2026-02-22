@@ -12,9 +12,7 @@ import UserAvatar from "@/components/ui/UserAvatar";
 import { DEFAULT_SETTINGS, getSidebarSettings, normalizeSidebarUrl } from "@/lib/sidebar-settings";
 import { SidebarLink, DEFAULT_LINKS, compareSidebarLinks } from "@/lib/sidebar-links";
 import { isPrivilegedNickname } from "@/config/admin-policy";
-
-const INQUIRY_COUNT_CACHE_TTL_MS = 30_000;
-let inquiryCountCache: { value: number; expiresAt: number } | null = null;
+import { usePendingInquiryCount } from "@/components/layout/usePendingInquiryCount";
 
 interface SidebarProps {
 	isOpen: boolean;
@@ -68,87 +66,33 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 	const { data: session } = useSession();
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 	const [links, setLinks] = useState<SidebarLink[]>(() => buildSidebarLinks(DEFAULT_SETTINGS));
-	const [inquiryCount, setInquiryCount] = useState(0);
 
 	const user = session?.user;
 	const canAccessAdmin = user
 		? user.role === "admin" || isPrivilegedNickname(user.nickname)
 		: false;
+	const { inquiryCount } = usePendingInquiryCount(canAccessAdmin);
 
 	useEffect(() => {
 		const refreshLinks = () => {
 			setLinks(buildSidebarLinks(getSidebarSettings()));
 		};
-		const controller = new AbortController();
-
-		const loadInquiryCount = async () => {
-			if (!canAccessAdmin) {
-				setInquiryCount(0);
-				return;
-			}
-
-			if (inquiryCountCache && inquiryCountCache.expiresAt > Date.now()) {
-				setInquiryCount(inquiryCountCache.value);
-				return;
-			}
-
-			try {
-				const res = await fetch("/api/inquiries/pending-count", {
-					cache: "no-store",
-					signal: controller.signal,
-				});
-
-				if (res.status === 401 || res.status === 403) {
-					setInquiryCount(0);
-					return;
-				}
-
-				if (!res.ok) {
-					setInquiryCount(0);
-					return;
-				}
-
-				const data = (await res.json()) as { count?: number };
-				const count = Number(data.count ?? 0);
-				inquiryCountCache = {
-					value: count,
-					expiresAt: Date.now() + INQUIRY_COUNT_CACHE_TTL_MS,
-				};
-				setInquiryCount(count);
-			} catch (error) {
-				const abortError = error as { name?: string };
-				if (abortError.name === "AbortError") {
-					return;
-				}
-				setInquiryCount(0);
-			}
-		};
 
 		refreshLinks();
-		void loadInquiryCount();
 
 		const handleStorage = (event: StorageEvent) => {
 			if (event.key === "sidebarSettings") {
 				refreshLinks();
 			}
 		};
-		const handleVisibility = () => {
-			if (document.visibilityState !== "visible") {
-				return;
-			}
-			void loadInquiryCount();
-		};
 		window.addEventListener("storage", handleStorage);
 		window.addEventListener("sidebarSettingsChanged", refreshLinks);
-		document.addEventListener("visibilitychange", handleVisibility);
 
 		return () => {
-			controller.abort();
 			window.removeEventListener("storage", handleStorage);
 			window.removeEventListener("sidebarSettingsChanged", refreshLinks);
-			document.removeEventListener("visibilitychange", handleVisibility);
 		};
-	}, [canAccessAdmin]);
+	}, []);
 
 	const renderLink = (link: SidebarLink) => {
 		const isExternal = /^https?:\/\//i.test(link.url);
