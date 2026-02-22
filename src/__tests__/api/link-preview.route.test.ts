@@ -45,7 +45,7 @@ describe("GET /api/link-preview", () => {
 		);
 
 		const { GET } = await import("@/app/api/link-preview/route");
-		const targetUrl = encodeURIComponent("https://github.com/vercel/next.js");
+		const targetUrl = encodeURIComponent("https://github.com/vercel/next.js?cache_case=ttl-spec");
 		const req = new NextRequest(`http://localhost/api/link-preview?url=${targetUrl}`);
 		const res = await GET(req);
 		expect(res.status).toBe(200);
@@ -62,5 +62,34 @@ describe("GET /api/link-preview", () => {
 		expect(payload.preview.title).toBe("vercel/next.js");
 		expect(payload.preview.metrics.some((item) => item.includes("스타"))).toBe(true);
 		expect(payload.preview.metrics.some((item) => item.includes("포크"))).toBe(true);
+	});
+
+	it("reuses in-memory ttl cache for repeated url requests", async () => {
+		fetchMock.mockResolvedValueOnce(
+			new Response(
+				JSON.stringify({
+					description: "Next.js framework",
+					owner: { avatar_url: "https://avatars.githubusercontent.com/u/14985020?v=4" },
+					stargazers_count: 120,
+					forks_count: 30,
+					open_issues_count: 8,
+					language: "TypeScript",
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			)
+		);
+
+		const { GET } = await import("@/app/api/link-preview/route");
+		const targetUrl = encodeURIComponent("https://github.com/vercel/next.js");
+
+		const first = new NextRequest(`http://localhost/api/link-preview?url=${targetUrl}`);
+		const firstResponse = await GET(first);
+		expect(firstResponse.status).toBe(200);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		const second = new NextRequest(`http://localhost/api/link-preview?url=${targetUrl}`);
+		const secondResponse = await GET(second);
+		expect(secondResponse.status).toBe(200);
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 });
