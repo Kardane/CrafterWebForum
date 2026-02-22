@@ -14,13 +14,18 @@ export default function MinecraftReauth({ onClose }: MinecraftReauthProps) {
 
 	const intervalRef = useRef<NodeJS.Timeout | null>(null);
 	const pollRef = useRef<NodeJS.Timeout | null>(null);
+	const codeRequestControllerRef = useRef<AbortController | null>(null);
+	const pollRequestControllerRef = useRef<AbortController | null>(null);
 
 	// 코드 발급 요청
 	useEffect(() => {
 		async function fetchCode() {
+			const requestController = new AbortController();
+			codeRequestControllerRef.current = requestController;
 			try {
 				const res = await fetch('/api/users/me/minecraft-reauth', {
 					method: 'POST',
+					signal: requestController.signal,
 				});
 				const data = await res.json();
 
@@ -32,9 +37,16 @@ export default function MinecraftReauth({ onClose }: MinecraftReauthProps) {
 				setTimeLeft(data.expiresIn); // 300초
 				setIsLoading(false);
 			} catch (err) {
+				if (err instanceof Error && err.name === 'AbortError') {
+					return;
+				}
 				console.error('Code generation error:', err);
 				setError('인증 코드 발급에 실패했습니다.');
 				setIsLoading(false);
+			} finally {
+				if (codeRequestControllerRef.current === requestController) {
+					codeRequestControllerRef.current = null;
+				}
 			}
 		}
 
@@ -43,6 +55,8 @@ export default function MinecraftReauth({ onClose }: MinecraftReauthProps) {
 		return () => {
 			if (intervalRef.current) clearInterval(intervalRef.current);
 			if (pollRef.current) clearInterval(pollRef.current);
+			codeRequestControllerRef.current?.abort();
+			pollRequestControllerRef.current?.abort();
 		};
 	}, []);
 
@@ -65,8 +79,13 @@ export default function MinecraftReauth({ onClose }: MinecraftReauthProps) {
 
 		// 폴링 (2초마다 상태 확인)
 		pollRef.current = setInterval(async () => {
+			pollRequestControllerRef.current?.abort();
+			const requestController = new AbortController();
+			pollRequestControllerRef.current = requestController;
 			try {
-				const res = await fetch('/api/users/me/minecraft-reauth');
+				const res = await fetch('/api/users/me/minecraft-reauth', {
+					signal: requestController.signal,
+				});
 				const data = await res.json();
 
 				if (data.verified) {
@@ -76,13 +95,21 @@ export default function MinecraftReauth({ onClose }: MinecraftReauthProps) {
 					window.location.reload(); // 새로고침하여 정보 갱신
 				}
 			} catch (err) {
+				if (err instanceof Error && err.name === 'AbortError') {
+					return;
+				}
 				console.error('Polling error:', err);
+			} finally {
+				if (pollRequestControllerRef.current === requestController) {
+					pollRequestControllerRef.current = null;
+				}
 			}
 		}, 2000);
 
 		return () => {
 			if (intervalRef.current) clearInterval(intervalRef.current);
 			if (pollRef.current) clearInterval(pollRef.current);
+			pollRequestControllerRef.current?.abort();
 		};
 	}, [code]);
 

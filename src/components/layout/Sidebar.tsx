@@ -13,6 +13,9 @@ import { DEFAULT_SETTINGS, getSidebarSettings, normalizeSidebarUrl } from "@/lib
 import { SidebarLink, DEFAULT_LINKS, compareSidebarLinks } from "@/lib/sidebar-links";
 import { isPrivilegedNickname } from "@/config/admin-policy";
 
+const INQUIRY_COUNT_CACHE_TTL_MS = 30_000;
+let inquiryCountCache: { value: number; expiresAt: number } | null = null;
+
 interface SidebarProps {
 	isOpen: boolean;
 	onClose: () => void;
@@ -84,6 +87,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 				return;
 			}
 
+			if (inquiryCountCache && inquiryCountCache.expiresAt > Date.now()) {
+				setInquiryCount(inquiryCountCache.value);
+				return;
+			}
+
 			try {
 				const res = await fetch("/api/inquiries/pending-count", {
 					cache: "no-store",
@@ -101,7 +109,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 				}
 
 				const data = (await res.json()) as { count?: number };
-				setInquiryCount(Number(data.count ?? 0));
+				const count = Number(data.count ?? 0);
+				inquiryCountCache = {
+					value: count,
+					expiresAt: Date.now() + INQUIRY_COUNT_CACHE_TTL_MS,
+				};
+				setInquiryCount(count);
 			} catch (error) {
 				const abortError = error as { name?: string };
 				if (abortError.name === "AbortError") {
@@ -119,13 +132,21 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 				refreshLinks();
 			}
 		};
+		const handleVisibility = () => {
+			if (document.visibilityState !== "visible") {
+				return;
+			}
+			void loadInquiryCount();
+		};
 		window.addEventListener("storage", handleStorage);
 		window.addEventListener("sidebarSettingsChanged", refreshLinks);
+		document.addEventListener("visibilitychange", handleVisibility);
 
 		return () => {
 			controller.abort();
 			window.removeEventListener("storage", handleStorage);
 			window.removeEventListener("sidebarSettingsChanged", refreshLinks);
+			document.removeEventListener("visibilitychange", handleVisibility);
 		};
 	}, [canAccessAdmin]);
 

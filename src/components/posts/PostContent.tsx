@@ -111,6 +111,25 @@ export default function PostContent({ content }: PostContentProps) {
 		}
 		let isDisposed = false;
 		const controller = new AbortController();
+		const waitForNextFrame = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+		const renderCardsIncrementally = async (
+			cards: HTMLAnchorElement[],
+			renderer: (card: HTMLAnchorElement) => void,
+			chunkSize = 8
+		) => {
+			for (let start = 0; start < cards.length; start += chunkSize) {
+				if (isDisposed) {
+					return;
+				}
+				const end = Math.min(cards.length, start + chunkSize);
+				for (let index = start; index < end; index += 1) {
+					renderer(cards[index]);
+				}
+				if (end < cards.length) {
+					await waitForNextFrame();
+				}
+			}
+		};
 
 		const cardsByPostId = new Map<string, HTMLAnchorElement[]>();
 		root.querySelectorAll<HTMLAnchorElement>(".external-link-card[data-post-id]").forEach((card) => {
@@ -337,13 +356,13 @@ export default function PostContent({ content }: PostContentProps) {
 						return;
 					}
 
-					uncachedPostIds.forEach((postId) => {
+					for (const postId of uncachedPostIds) {
 						const cards = cardsByPostId.get(postId) ?? [];
 						const item = itemById.get(postId);
 						const chips = item ? buildPostMetaChips(item) : postMetaFallback;
 						postCardMetaCacheRef.current.set(postId, chips);
-						cards.forEach((card) => renderMeta(card, chips));
-					});
+						await renderCardsIncrementally(cards, (card) => renderMeta(card, chips));
+					}
 				} catch (error) {
 					const fetchError = error as { name?: string };
 					if (fetchError.name === "AbortError") {
@@ -353,11 +372,11 @@ export default function PostContent({ content }: PostContentProps) {
 					if (isDisposed) {
 						return;
 					}
-					uncachedPostIds.forEach((postId) => {
+					for (const postId of uncachedPostIds) {
 						const cards = cardsByPostId.get(postId) ?? [];
 						postCardMetaCacheRef.current.set(postId, postMetaFallback);
-						cards.forEach((card) => renderMeta(card, postMetaFallback));
-					});
+						await renderCardsIncrementally(cards, (card) => renderMeta(card, postMetaFallback));
+					}
 				}
 			})();
 		}
@@ -393,7 +412,10 @@ export default function PostContent({ content }: PostContentProps) {
 									return;
 								}
 								externalCardMetaCacheRef.current.set(previewUrl, data.preview);
-								cards.forEach((card) => renderPreviewCard(card, data.preview as LinkPreviewPayload));
+								await renderCardsIncrementally(
+									cards,
+									(card) => renderPreviewCard(card, data.preview as LinkPreviewPayload)
+								);
 							} catch (error) {
 								const fetchError = error as { name?: string };
 								if (fetchError.name === "AbortError") {
@@ -407,7 +429,7 @@ export default function PostContent({ content }: PostContentProps) {
 									chips: ["메타데이터 조회 실패"],
 								};
 								externalCardMetaCacheRef.current.set(previewUrl, fallback);
-								cards.forEach((card) => renderPreviewCard(card, fallback));
+								await renderCardsIncrementally(cards, (card) => renderPreviewCard(card, fallback));
 							}
 						})
 					);

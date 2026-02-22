@@ -32,6 +32,15 @@ type LinkPreview = {
 };
 
 const HTTP_TIMEOUT_MS = 4_500;
+const LINK_PREVIEW_CACHE_TTL_MS = 60 * 5 * 1_000;
+const LINK_PREVIEW_CACHE_MAX_ENTRIES = 500;
+
+type LinkPreviewCacheItem = {
+	preview: LinkPreview;
+	expiresAt: number;
+};
+
+const linkPreviewCache = new Map<string, LinkPreviewCacheItem>();
 const REQUEST_HEADERS = {
 	"User-Agent": "CrafterForumBot/1.0 (+https://mcbrass.kro.kr)",
 	Accept: "application/json,text/html;q=0.9,*/*;q=0.8",
@@ -192,6 +201,34 @@ function fallbackPreview(parsedUrl: URL, provider = "generic", kind = "website")
 		chips: [],
 		metrics: [],
 	};
+}
+
+function getCachedPreview(url: string): LinkPreview | null {
+	const cached = linkPreviewCache.get(url);
+	if (!cached) {
+		return null;
+	}
+	if (cached.expiresAt <= Date.now()) {
+		linkPreviewCache.delete(url);
+		return null;
+	}
+	return cached.preview;
+}
+
+function setCachedPreview(url: string, preview: LinkPreview) {
+	if (linkPreviewCache.has(url)) {
+		linkPreviewCache.delete(url);
+	}
+	linkPreviewCache.set(url, {
+		preview,
+		expiresAt: Date.now() + LINK_PREVIEW_CACHE_TTL_MS,
+	});
+	if (linkPreviewCache.size > LINK_PREVIEW_CACHE_MAX_ENTRIES) {
+		const oldestKey = linkPreviewCache.keys().next().value;
+		if (oldestKey) {
+			linkPreviewCache.delete(oldestKey);
+		}
+	}
 }
 
 async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
@@ -567,6 +604,20 @@ export async function GET(request: NextRequest) {
 		}
 
 		const hostname = parsedUrl.hostname.replace(/^www\./, "").toLowerCase();
+		const normalizedUrl = parsedUrl.toString();
+		const cachedPreview = getCachedPreview(normalizedUrl);
+		if (cachedPreview) {
+			return NextResponse.json(
+				{ preview: cachedPreview },
+				{
+					status: 200,
+					headers: {
+						"Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+					},
+				}
+			);
+		}
+
 		let preview: LinkPreview;
 		if (hostname === "github.com") {
 			preview = await buildGitHubPreview(parsedUrl);
@@ -579,6 +630,8 @@ export async function GET(request: NextRequest) {
 		} else {
 			preview = await buildGenericPreview(parsedUrl);
 		}
+
+		setCachedPreview(normalizedUrl, preview);
 
 		return NextResponse.json(
 			{ preview },
