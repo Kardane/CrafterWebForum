@@ -2,9 +2,8 @@
 
 import { processMarkdown } from "@/lib/markdown";
 import { processAllEmbeds } from "@/lib/embeds";
-import { MouseEvent, useEffect, useRef, useState } from "react";
-import { Modal } from "@/components/ui/Modal";
-import SafeImage from "@/components/ui/SafeImage";
+import { MouseEvent, useEffect, useMemo, useRef } from "react";
+import { useImageLightbox } from "@/components/ui/ImageLightboxProvider";
 
 interface PostContentProps {
 	content: string;
@@ -88,7 +87,13 @@ export default function PostContent({ content }: PostContentProps) {
 	const contentRef = useRef<HTMLDivElement>(null);
 	const postCardMetaCacheRef = useRef<Map<string, string[]>>(new Map());
 	const externalCardMetaCacheRef = useRef<Map<string, LinkPreviewPayload>>(new Map());
-	const [selectedImage, setSelectedImage] = useState<{ src: string; alt: string } | null>(null);
+	const { openImage } = useImageLightbox();
+
+	const html = useMemo(() => {
+		let rendered = processMarkdown(content);
+		rendered = processAllEmbeds(rendered);
+		return rendered;
+	}, [content]);
 
 	useEffect(() => {
 		const highlightWindow = window as WindowWithHighlightJs;
@@ -97,7 +102,7 @@ export default function PostContent({ content }: PostContentProps) {
 				highlightWindow.hljs?.highlightElement(block);
 			});
 		}
-	}, [content]);
+	}, [html]);
 
 	useEffect(() => {
 		const root = contentRef.current;
@@ -413,31 +418,30 @@ export default function PostContent({ content }: PostContentProps) {
 			})();
 		}
 
-		// 이미지 에러 핸들링
-		root.querySelectorAll("img").forEach((img) => {
-			img.onerror = () => {
-				// 이미지가 링크 카드 내부의 것인지 확인
-				if (img.closest(".external-link-card")) {
-					// 썸네일이나 아이콘이면 숨김 처리
-					if (img.classList.contains("external-link-card__thumb") || img.classList.contains("external-link-card__icon")) {
-						img.style.display = "none";
-					}
-					// 작성자 아바타면 기본 아이콘으로 대체하거나 숨김
-					if (img.classList.contains("external-link-card__author-avatar")) {
-						img.style.display = "none";
-					}
-				}
-			};
-		});
+		const handleImageError = (event: Event) => {
+			const target = event.target;
+			if (!(target instanceof HTMLImageElement)) {
+				return;
+			}
+			if (!target.closest(".external-link-card")) {
+				return;
+			}
+			if (
+				target.classList.contains("external-link-card__thumb") ||
+				target.classList.contains("external-link-card__icon") ||
+				target.classList.contains("external-link-card__author-avatar")
+			) {
+				target.style.display = "none";
+			}
+		};
+		root.addEventListener("error", handleImageError, true);
 
 		return () => {
 			isDisposed = true;
 			controller.abort();
+			root.removeEventListener("error", handleImageError, true);
 		};
-	}, [content]);
-
-	let html = processMarkdown(content);
-	html = processAllEmbeds(html);
+	}, [html]);
 
 	const handleImageClick = (event: MouseEvent<HTMLDivElement>) => {
 		const target = event.target;
@@ -456,7 +460,7 @@ export default function PostContent({ content }: PostContentProps) {
 		}
 
 		event.preventDefault();
-		setSelectedImage({
+		openImage({
 			src: target.currentSrc || target.src,
 			alt: target.alt || "이미지",
 		});
@@ -470,28 +474,6 @@ export default function PostContent({ content }: PostContentProps) {
 				dangerouslySetInnerHTML={{ __html: html }}
 				onClick={handleImageClick}
 			/>
-
-			<Modal
-				isOpen={selectedImage !== null}
-				onClose={() => setSelectedImage(null)}
-				hideCloseButton
-				size="xl"
-				variant="sidebarLike"
-				className="!max-w-[96vw] !border-none !bg-transparent !shadow-none"
-				bodyClassName="!overflow-visible !p-0"
-			>
-				{selectedImage && (
-					<div className="relative h-[82vh] w-[96vw] max-w-[1440px]">
-						<SafeImage
-							src={selectedImage.src}
-							alt={selectedImage.alt}
-							fill
-							sizes="96vw"
-							className="object-contain"
-						/>
-					</div>
-				)}
-			</Modal>
 		</>
 	);
 }
