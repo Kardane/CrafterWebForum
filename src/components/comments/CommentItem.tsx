@@ -525,7 +525,7 @@ export default function CommentItem({
 					color: var(--text-secondary);
 					font-size: 0.9rem;
 					line-height: 1.5;
-					max-width: min(100%, 820px);
+					max-width: min(100%, 1320px);
 					min-width: 0;
 					flex: 1 1 auto;
 				}

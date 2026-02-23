@@ -644,9 +644,11 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				}
 
 				.date-divider {
-					display: flex;
+					display: grid;
+					grid-template-columns: 1fr auto 1fr;
 					align-items: center;
 					justify-content: center;
+					align-self: stretch;
 					width: 100%;
 					gap: 8px;
 					margin: 16px 0 12px;
@@ -657,10 +659,12 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					font-weight: 500;
 					color: var(--text-muted);
 					opacity: 0.5;
+					line-height: 1;
 					background: transparent;
 					padding: 0 4px;
 					white-space: nowrap;
 					flex-shrink: 0;
+					text-align: center;
 				}
 
 				.read-marker .divider-label {
@@ -779,7 +783,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 
 				.composer-shell {
 					width: 100%;
-					max-width: 56rem;
+					max-width: min(1400px, calc(100vw - 32px));
 					pointer-events: auto;
 					border-radius: 8px 8px 0 0;
 					border: none;
@@ -794,6 +798,10 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 						left: var(--spacing-sidebar);
 						padding-left: 32px;
 						padding-right: 32px;
+					}
+
+					.composer-shell {
+						max-width: min(1600px, calc(100vw - var(--spacing-sidebar) - 64px));
 					}
 				}
 

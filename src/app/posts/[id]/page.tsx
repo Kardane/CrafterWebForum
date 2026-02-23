@@ -75,7 +75,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 			initialLikes={post.likes}
 			initialLiked={post.user_liked}
 		>
-			<div className="mx-auto w-full max-w-4xl px-2 pb-6 pt-0 md:max-w-5xl md:px-4 xl:max-w-6xl 2xl:max-w-7xl">
+			<div className="mx-auto w-full px-2 pb-6 pt-0 md:px-4 lg:px-6 xl:px-10 2xl:px-14">
 				<PostStickyHeader
 					postId={post.id}
 					title={post.title}
