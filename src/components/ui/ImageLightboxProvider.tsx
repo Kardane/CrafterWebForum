@@ -147,7 +147,10 @@ export function ImageLightboxProvider({ children }: { children: React.ReactNode 
 				bodyClassName="!overflow-visible !p-0"
 			>
 				{selectedImage && (
-					<div className="relative h-[82vh] w-[96vw] max-w-[1440px]">
+					<div
+						className="relative h-[82vh] w-[96vw] max-w-[1440px]"
+						onClick={closeImage}
+					>
 						<SafeImage
 							src={selectedImage.src}
 							alt={selectedImage.alt}
@@ -155,6 +158,9 @@ export function ImageLightboxProvider({ children }: { children: React.ReactNode 
 							sizes="96vw"
 							loading="eager"
 							onLoad={handleImageLoad}
+							onClick={(event) => {
+								event.stopPropagation();
+							}}
 							className="object-contain"
 						/>
 					</div>
