@@ -4,11 +4,11 @@
 - 대상: `CrafterWebForum`
 - 기준: `src/app`, `src/components`, `src/app/api`, `src/lib`, `src/auth*`, `src/proxy.ts`, `prisma/schema.prisma`
 - 레거시 비교 기준: `legacy/` (동작 참고용)
-- 최종 검증일: 2026-02-22
+- 최종 검증일: 2026-02-23
 
 ### 최신 검증 커맨드
 - `npm run lint` -> 성공 (`0 warnings, 0 errors`)
-- `npm test` -> 성공 (`35 files, 141 tests passed`)
+- `npm test` -> 성공 (`36 files, 143 tests passed`)
 - `npm run build` -> 성공 (Turbopack production build 완료)
 - `npx next build --webpack` -> 성공 (`@prisma/adapter-libsql` import 체인 외부화 + Turbopack 병행 설정으로 fallback 빌드 복구)
 - `npx tsc --noEmit` -> 성공
@@ -169,6 +169,15 @@ legacy/                   # 레거시 동작 참조
 - `PostContent` 외부 링크 카드 메타 렌더 루프를 chunk 단위 incremental 처리(`requestAnimationFrame`)로 분해해 대량 카드 DOM 업데이트 시 단일 프레임 블로킹을 축소
 - `/api/link-preview` TTL 캐시 재사용 경로를 `src/__tests__/api/link-preview.route.test.ts`로 회귀 보호
 
+### 3.10 실시간 멘션 알림/브라우저 알림
+- 댓글 작성 경로에서 `@닉네임` 멘션을 파싱해 대상 사용자 알림(`Notification`)을 저장하고 user 채널로 `notification.created` 이벤트를 브로드캐스트
+- 알림 조회/읽음 처리 API(`GET /api/notifications`, `PATCH /api/notifications/[id]/read`)를 추가해 사이드바 배지/알림 페이지와 연동
+- `useNotifications` 훅에서 `Notification API`를 연동해 탭 비활성/백그라운드 상태에서 멘션 발생 시 브라우저 알림 팝업 제공
+- 실시간 공통 유틸(`realtime/client`, `realtime/server-broadcast`, `realtime/useRealtimeBroadcast`)로 댓글/좋아요/문의/알림 이벤트 구독 경로를 단일화
+
+### 3.11 포스트 상세 레이아웃 가변 확장
+- 포스트 상세 컨테이너를 `max-w-4xl` 고정에서 화면 구간별(`md:5xl`, `xl:6xl`, `2xl:7xl`) 확장으로 조정해 대형 모니터 가로 공간 활용도 개선
+
 ## 4. 데이터 레이어 상태
 
 ### 4.1 모델/상태 필드
@@ -257,6 +266,9 @@ legacy/                   # 레거시 동작 참조
 68. `src/components/layout/Sidebar.tsx`의 `/api/inquiries/pending-count` 조회에 30초 TTL 캐시 + `visibilitychange` 재검증 추가
 69. `src/components/posts/PostContent.tsx` 외부 링크 카드 메타 적용을 chunk 단위 incremental 렌더로 분해
 70. `src/__tests__/api/link-preview.route.test.ts`에 동일 URL 재요청 시 TTL 캐시 재사용 회귀 테스트 추가
+71. `prisma/schema.prisma`에 `Notification` 모델을 추가하고 댓글 멘션(`@닉네임`) 발생 시 알림 저장/실시간 브로드캐스트 경로를 연결
+72. `src/app/api/notifications/*`, `src/app/notifications/page.tsx`, `src/components/notifications/useNotifications.ts`를 추가해 알림 목록/읽음 처리/사이드바 배지/브라우저 알림 팝업을 통합
+73. `src/app/posts/[id]/page.tsx` 상세 컨테이너를 반응형 max-width 단계(`4xl -> 5xl -> 6xl -> 7xl`)로 확장해 대형 화면에서 본문 가독성과 활용 폭을 개선
 
 ### 5.1 레거시 2번 항목 반영 현황 (2026-02-17 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14

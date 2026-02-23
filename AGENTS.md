@@ -1,6 +1,6 @@
 # CrafterWebForum AGENTS
 답변 한국어로 해.
-최종 업데이트: 2026-02-22
+최종 업데이트: 2026-02-23
 
 ## 1) 저장소 기준
 
@@ -110,6 +110,14 @@
   - `src/components/layout/Sidebar.tsx`: 관리자 문의 카운트 30초 TTL 캐시 + visibility 기반 재검증
   - `src/components/posts/PostContent.tsx`: 외부 링크 카드 메타 렌더를 chunk 단위 incremental 처리
   - `src/__tests__/api/link-preview.route.test.ts`: TTL 캐시 재사용 회귀 테스트 추가
+ - 실시간 멘션 알림 + 브라우저 알림 반영
+  - `prisma/schema.prisma`: `Notification` 모델 추가
+  - `src/app/api/notifications/*`: 알림 목록/읽음 처리 API 추가
+  - `src/app/api/posts/[id]/comments/route.ts`: `@닉네임` 멘션 파싱 후 알림 저장/실시간 브로드캐스트
+  - `src/components/notifications/useNotifications.ts`: 실시간 알림 배지 + 브라우저 Notification API 연동
+  - `src/app/notifications/page.tsx`: 알림 페이지 추가
+ - 포스트 상세 레이아웃 확장
+  - `src/app/posts/[id]/page.tsx`: 대형 모니터에서 `md:max-w-5xl`, `xl:max-w-6xl`, `2xl:max-w-7xl` 단계형 확장
 
 ## 10) 다음 최적화 후보
 
