@@ -85,11 +85,13 @@ describe("GET /api/link-preview", () => {
 		const first = new NextRequest(`http://localhost/api/link-preview?url=${targetUrl}`);
 		const firstResponse = await GET(first);
 		expect(firstResponse.status).toBe(200);
+		expect(firstResponse.headers.get("server-timing") ?? "").toContain("cache miss");
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 
 		const second = new NextRequest(`http://localhost/api/link-preview?url=${targetUrl}`);
 		const secondResponse = await GET(second);
 		expect(secondResponse.status).toBe(200);
+		expect(secondResponse.headers.get("server-timing") ?? "").toContain("cache hit");
 		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 });

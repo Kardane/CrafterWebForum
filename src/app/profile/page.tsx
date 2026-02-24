@@ -31,14 +31,21 @@ export default function ProfilePage() {
 	const [stats, setStats] = useState<ProfileStats | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [retryTick, setRetryTick] = useState(0);
 
 	useEffect(() => {
+		const controller = new AbortController();
+		let isDisposed = false;
+
 		async function fetchData() {
+			setIsLoading(true);
+			setError(null);
 			try {
 				const res = await fetch("/api/users/me", {
 					headers: {
 						"Cache-Control": "no-store",
 					},
+					signal: controller.signal,
 				});
 
 				if (res.status === 401) {
@@ -51,18 +58,35 @@ export default function ProfilePage() {
 				}
 
 				const data: ProfileResponse = await res.json();
+				if (isDisposed) {
+					return;
+				}
 				setUserData(data.user);
 				setStats(data.stats);
 			} catch (err) {
+				if (err instanceof Error && err.name === "AbortError") {
+					return;
+				}
+				if (isDisposed) {
+					return;
+				}
 				console.error("Profile fetch error:", err);
+				setUserData(null);
+				setStats(null);
 				setError("프로필 정보를 불러오는데 실패했습니다.");
 			} finally {
-				setIsLoading(false);
+				if (!isDisposed) {
+					setIsLoading(false);
+				}
 			}
 		}
 
-		fetchData();
-	}, [router]);
+		void fetchData();
+		return () => {
+			isDisposed = true;
+			controller.abort();
+		};
+	}, [retryTick, router]);
 
 	if (isLoading) {
 		return (
@@ -76,7 +100,7 @@ export default function ProfilePage() {
 		return (
 			<div className="max-w-2xl mx-auto p-6 text-center py-20">
 				<div className="text-error mb-4">{error || "사용자 정보를 찾을 수 없습니다."}</div>
-				<button onClick={() => window.location.reload()} className="btn btn-secondary">
+				<button type="button" onClick={() => setRetryTick((prev) => prev + 1)} className="btn btn-secondary">
 					다시 시도
 				</button>
 			</div>

@@ -3,11 +3,13 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
 import { buildLinkPreview, isBlockedLinkPreviewHost } from "@/lib/link-preview/providers";
 import { getCachedLinkPreview, setCachedLinkPreview } from "@/lib/link-preview/cache";
+import { createServerTimingHeader } from "@/lib/server-timing";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
 	try {
+		const requestStart = performance.now();
 		const rateLimitedResponse = enforceRateLimit(request, RATE_LIMIT_POLICIES.linkPreview);
 		if (rateLimitedResponse) {
 			return rateLimitedResponse;
@@ -34,7 +36,9 @@ export async function GET(request: NextRequest) {
 		}
 
 		const normalizedUrl = parsedUrl.toString();
+		const cacheLookupStart = performance.now();
 		const cachedPreview = getCachedLinkPreview(normalizedUrl);
+		const cacheLookupDuration = performance.now() - cacheLookupStart;
 		if (cachedPreview) {
 			return NextResponse.json(
 				{ preview: cachedPreview },
@@ -42,12 +46,18 @@ export async function GET(request: NextRequest) {
 					status: 200,
 					headers: {
 						"Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+						"Server-Timing": createServerTimingHeader([
+							{ name: "link_preview_cache", duration: cacheLookupDuration, description: "cache hit" },
+							{ name: "link_preview_total", duration: performance.now() - requestStart },
+						]),
 					},
 				}
 			);
 		}
 
+		const buildPreviewStart = performance.now();
 		const preview = await buildLinkPreview(parsedUrl);
+		const buildPreviewDuration = performance.now() - buildPreviewStart;
 		setCachedLinkPreview(normalizedUrl, preview);
 
 		return NextResponse.json(
@@ -56,6 +66,11 @@ export async function GET(request: NextRequest) {
 				status: 200,
 				headers: {
 					"Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+					"Server-Timing": createServerTimingHeader([
+						{ name: "link_preview_cache", duration: cacheLookupDuration, description: "cache miss" },
+						{ name: "link_preview_build", duration: buildPreviewDuration },
+						{ name: "link_preview_total", duration: performance.now() - requestStart },
+					]),
 				},
 			}
 		);

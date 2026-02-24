@@ -26,10 +26,14 @@ import { extractMentionNicknames } from "@/lib/mentions";
 import { toSessionUserId } from "@/lib/session-user";
 import { text } from "@/lib/system-text";
 import {
+	appendReplyToThread,
 	type Comment,
 	LATEST_CHUNK_SIZE,
 	THREAD_COLLAPSE_THRESHOLD,
 	getReadMarkerIndex,
+	removeCommentFromTree,
+	updateCommentInTree,
+	updateCommentPinnedInTree,
 } from "@/lib/comment-tree-ops";
 import { useCommentMutations } from "./useCommentMutations";
 import { useCommentScroll } from "./useCommentScroll";
@@ -92,6 +96,74 @@ function toDateLabel(value: string): string {
 	return `${y}년 ${m}월 ${d}일 (${w})`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === "object" && value !== null;
+}
+
+function hasCommentId(nodes: Comment[], commentId: number): boolean {
+	for (const node of nodes) {
+		if (node.id === commentId) {
+			return true;
+		}
+		if (node.replies.length > 0 && hasCommentId(node.replies, commentId)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+function parseRealtimeComment(payload: Record<string, unknown>): Comment | null {
+	const rawComment = payload.comment;
+	if (!isRecord(rawComment)) {
+		return null;
+	}
+	const rawAuthor = rawComment.author;
+	if (!isRecord(rawAuthor)) {
+		return null;
+	}
+
+	const id = Number(rawComment.id);
+	const content = typeof rawComment.content === "string" ? rawComment.content : "";
+	const createdAt = typeof rawComment.createdAt === "string" ? rawComment.createdAt : "";
+	const updatedAt = typeof rawComment.updatedAt === "string" ? rawComment.updatedAt : "";
+	const parentIdRaw = rawComment.parentId;
+	const parentId = parentIdRaw === null ? null : Number(parentIdRaw);
+	const authorId = Number(rawAuthor.id);
+	const authorNickname = typeof rawAuthor.nickname === "string" ? rawAuthor.nickname : "";
+	const authorRole = typeof rawAuthor.role === "string" ? rawAuthor.role : "user";
+	const authorUuid = rawAuthor.minecraftUuid;
+
+	if (!Number.isInteger(id) || id <= 0) {
+		return null;
+	}
+	if (!content || !createdAt || !updatedAt) {
+		return null;
+	}
+	if (parentId !== null && (!Number.isInteger(parentId) || parentId <= 0)) {
+		return null;
+	}
+	if (!Number.isInteger(authorId) || authorId <= 0 || !authorNickname) {
+		return null;
+	}
+
+	return {
+		id,
+		content,
+		createdAt,
+		updatedAt,
+		isPinned: Boolean(rawComment.isPinned),
+		parentId,
+		isPostAuthor: Boolean(rawComment.isPostAuthor),
+		author: {
+			id: authorId,
+			nickname: authorNickname,
+			minecraftUuid: typeof authorUuid === "string" ? authorUuid : null,
+			role: authorRole,
+		},
+		replies: [],
+	};
+}
+
 /**
  * 초기 댓글 뷰 상태 계산
  * - 기본 시작 위치: 최신 댓글 청크
@@ -151,8 +223,10 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		() => new Set(initialViewState.expandedThreadRoots)
 	);
 	const [requestedEditCommentId, setRequestedEditCommentId] = useState<number | null>(null);
+	const headerRef = useRef<HTMLDivElement>(null);
 	const streamRef = useRef<HTMLDivElement>(null);
 	const composerShellRef = useRef<HTMLDivElement>(null);
+	const [composerDockInsets, setComposerDockInsets] = useState<{ left: number; right: number } | null>(null);
 
 	// --- 파생 데이터 ---
 	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
@@ -342,17 +416,62 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	}, [scrollToBottom]);
 
 	useRealtimeBroadcast(REALTIME_TOPICS.post(postId), {
-		[REALTIME_EVENTS.COMMENT_CREATED]: () => {
-			void reloadComments();
+		[REALTIME_EVENTS.COMMENT_CREATED]: (payload) => {
+			const actorUserId = Number(payload.actorUserId ?? 0);
+			const me = Number(session?.user?.id ?? 0);
+			if (actorUserId > 0 && actorUserId === me) {
+				return;
+			}
+			const nextComment = parseRealtimeComment(payload);
+			if (!nextComment) {
+				void reloadComments();
+				return;
+			}
+			setComments((prev) => {
+				if (hasCommentId(prev, nextComment.id)) {
+					return prev;
+				}
+				if (nextComment.parentId === null) {
+					return [...prev, nextComment];
+				}
+				if (!hasCommentId(prev, nextComment.parentId)) {
+					void reloadComments();
+					return prev;
+				}
+				return appendReplyToThread(prev, nextComment.parentId, nextComment);
+			});
 		},
-		[REALTIME_EVENTS.COMMENT_UPDATED]: () => {
-			void reloadComments();
+		[REALTIME_EVENTS.COMMENT_UPDATED]: (payload) => {
+			const nextComment = parseRealtimeComment(payload);
+			if (nextComment) {
+				setComments((prev) => updateCommentInTree(prev, nextComment.id, nextComment.content, nextComment.updatedAt));
+				return;
+			}
+			const commentId = Number(payload.commentId ?? 0);
+			const content = typeof payload.content === "string" ? payload.content : "";
+			const updatedAt = typeof payload.updatedAt === "string" ? payload.updatedAt : "";
+			if (!Number.isInteger(commentId) || commentId <= 0 || !content || !updatedAt) {
+				void reloadComments();
+				return;
+			}
+			setComments((prev) => updateCommentInTree(prev, commentId, content, updatedAt));
 		},
-		[REALTIME_EVENTS.COMMENT_DELETED]: () => {
-			void reloadComments();
+		[REALTIME_EVENTS.COMMENT_DELETED]: (payload) => {
+			const commentId = Number(payload.commentId ?? 0);
+			if (!Number.isInteger(commentId) || commentId <= 0) {
+				void reloadComments();
+				return;
+			}
+			setComments((prev) => removeCommentFromTree(prev, commentId));
 		},
-		[REALTIME_EVENTS.COMMENT_PINNED_CHANGED]: () => {
-			void reloadComments();
+		[REALTIME_EVENTS.COMMENT_PINNED_CHANGED]: (payload) => {
+			const commentId = Number(payload.commentId ?? 0);
+			const isPinned = Boolean(payload.isPinned);
+			if (!Number.isInteger(commentId) || commentId <= 0) {
+				void reloadComments();
+				return;
+			}
+			setComments((prev) => updateCommentPinnedInTree(prev, commentId, isPinned));
 		},
 		[REALTIME_EVENTS.COMMENT_TYPING_CHANGED]: (payload) => {
 			const actorUserId = Number(payload.userId ?? 0);
@@ -410,6 +529,44 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		return () => {
 			observer.disconnect();
 			window.removeEventListener("resize", updateReserve);
+		};
+	}, []);
+
+	useEffect(() => {
+		const header = headerRef.current;
+		if (!header) {
+			return;
+		}
+
+		let rafId: number | null = null;
+		const measure = () => {
+			const nextHeader = headerRef.current;
+			if (!nextHeader) {
+				return;
+			}
+			const rect = nextHeader.getBoundingClientRect();
+			const left = Math.max(0, Math.floor(rect.left));
+			const right = Math.max(0, Math.floor(window.innerWidth - rect.right));
+			setComposerDockInsets((prev) => (prev && prev.left === left && prev.right === right ? prev : { left, right }));
+		};
+		const scheduleMeasure = () => {
+			if (rafId) {
+				window.cancelAnimationFrame(rafId);
+			}
+			rafId = window.requestAnimationFrame(measure);
+		};
+
+		scheduleMeasure();
+		window.addEventListener("resize", scheduleMeasure);
+		const observer = new ResizeObserver(scheduleMeasure);
+		observer.observe(header);
+
+		return () => {
+			window.removeEventListener("resize", scheduleMeasure);
+			observer.disconnect();
+			if (rafId) {
+				window.cancelAnimationFrame(rafId);
+			}
 		};
 	}, []);
 
@@ -475,7 +632,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 	// --- JSX ---
 	return (
 		<div className="comment-section">
-			<div className="comment-section-header">
+			<div className="comment-section-header" ref={headerRef}>
 				<h2 className="text-xl font-bold">댓글 {flattenedComments.length}개</h2>
 				{typingUsers.length > 0 && <span className="text-xs text-text-muted">{typingUsers.join(", ")} 입력 중...</span>}
 				<button
@@ -503,46 +660,58 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					) : (
 						renderRows.map((row) => {
 							if (row.type === "date-divider") {
-								return <CommentDateDividerRow key={row.key} label={row.label} />;
+								return (
+									<div className="comment-row" key={row.key}>
+										<CommentDateDividerRow label={row.label} />
+									</div>
+								);
 							}
 							if (row.type === "read-marker") {
-								return <ReadMarkerRow key={row.key} rowKey={row.key} />;
+								return (
+									<div className="comment-row" key={row.key}>
+										<ReadMarkerRow rowKey={row.key} />
+									</div>
+								);
 							}
 							if (row.type === "thread-toggle") {
 								return (
-									<ThreadToggleRow
-										key={row.key}
-										rowKey={row.key}
-										rootId={row.rootId}
-										replyCount={row.replyCount}
-										isCollapsed={row.isCollapsed}
-										onToggle={handleToggleThread}
-									/>
+									<div className="comment-row" key={row.key}>
+										<ThreadToggleRow
+											rowKey={row.key}
+											rootId={row.rootId}
+											replyCount={row.replyCount}
+											isCollapsed={row.isCollapsed}
+											onToggle={handleToggleThread}
+										/>
+									</div>
 								);
 							}
 							return (
-								<CommentItem
-									key={row.key}
-									comment={row.item.comment}
-									replyToName={row.item.replyToName}
-									replyToCommentId={row.item.replyToCommentId}
-									replyToPreview={row.item.replyToPreview}
-									threadRootId={row.item.threadRootId}
-									isCompact={row.item.isCompact}
-									isHighlighted={highlightedCommentId === row.item.comment.id}
-									isMentionHighlighted={mentionedCommentIds.has(row.item.comment.id)}
-									shouldStartEdit={requestedEditCommentId === row.item.comment.id}
-									onEditRequestConsumed={(cId) => setRequestedEditCommentId((prev) => (prev === cId ? null : prev))}
-									onNavigateToComment={handleNavigateToComment}
-									onReplyRequest={handleReplyRequest}
-									onEdit={handleCommentUpdate}
-									onPin={handleCommentPinToggle}
-									onDelete={(cId, event) => {
-										if (event?.shiftKey) void handleCommentDeleteConfirmed(cId, pendingDeleteId);
-										else setPendingDeleteId(cId);
-									}}
-									disabled={isLoading}
-								/>
+								<div className="comment-row" key={row.key}>
+									<CommentItem
+										comment={row.item.comment}
+										replyToName={row.item.replyToName}
+										replyToCommentId={row.item.replyToCommentId}
+										replyToPreview={row.item.replyToPreview}
+										threadRootId={row.item.threadRootId}
+										isCompact={row.item.isCompact}
+										isHighlighted={highlightedCommentId === row.item.comment.id}
+										isMentionHighlighted={mentionedCommentIds.has(row.item.comment.id)}
+										shouldStartEdit={requestedEditCommentId === row.item.comment.id}
+										onEditRequestConsumed={(cId) =>
+											setRequestedEditCommentId((prev) => (prev === cId ? null : prev))
+										}
+										onNavigateToComment={handleNavigateToComment}
+										onReplyRequest={handleReplyRequest}
+										onEdit={handleCommentUpdate}
+										onPin={handleCommentPinToggle}
+										onDelete={(cId, event) => {
+											if (event?.shiftKey) void handleCommentDeleteConfirmed(cId, pendingDeleteId);
+											else setPendingDeleteId(cId);
+										}}
+										disabled={isLoading}
+									/>
+								</div>
 							);
 						})
 					)}
@@ -550,17 +719,29 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 				</div>
 			</div>
 
-			<div className="composer-dock">
+			<div
+				className="composer-dock"
+				style={
+					composerDockInsets
+						? {
+							left: composerDockInsets.left,
+							right: composerDockInsets.right,
+							paddingLeft: 0,
+							paddingRight: 0,
+						}
+						: undefined
+				}
+			>
 				<div className="composer-shell" id="comment-composer" ref={composerShellRef}>
 					<CommentForm
 						onSubmit={(content) => handleCommentCreate(content, replyTarget?.parentId ?? null)}
 						onTypingStateChange={handleTypingStateChange}
 						onRequestEditLatestOwnComment={handleRequestEditLatestOwnComment}
-							disabled={isLoading}
-							variant="composer"
-							replyTo={replyTarget?.nickname}
-							replyPreview={replyTarget?.preview}
-							onCancel={replyTarget ? () => setReplyTarget(null) : undefined}
+						disabled={isLoading}
+						variant="composer"
+						replyTo={replyTarget?.nickname}
+						replyPreview={replyTarget?.preview}
+						onCancel={replyTarget ? () => setReplyTarget(null) : undefined}
 						placeholder={replyTarget ? "답장 작성 중..." : "댓글을 입력해줘"}
 						textareaId="comment-composer-input"
 						postId={postId}
@@ -635,7 +816,14 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					margin: 6px 0 14px;
 				}
 
-				.read-marker {
+				.comment-row {
+					display: block;
+					width: 100%;
+					content-visibility: auto;
+					contain-intrinsic-size: 140px;
+				}
+
+				:global(.read-marker) {
 					display: flex;
 					align-items: center;
 					width: 100%;
@@ -643,7 +831,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					margin: 10px 0;
 				}
 
-				.date-divider {
+				:global(.date-divider) {
 					display: grid;
 					grid-template-columns: 1fr auto 1fr;
 					align-items: center;
@@ -654,7 +842,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					margin: 16px 0 12px;
 				}
 
-				.date-divider .divider-label {
+				:global(.date-divider .divider-label) {
 					font-size: 8px;
 					font-weight: 500;
 					color: var(--text-muted);
@@ -667,7 +855,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					text-align: center;
 				}
 
-				.read-marker .divider-label {
+				:global(.read-marker .divider-label) {
 					font-size: 0.82rem;
 					font-weight: 700;
 					color: var(--warning);
@@ -677,13 +865,13 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 					border: 1px solid color-mix(in srgb, var(--warning) 42%, transparent);
 				}
 
-				.date-divider .divider-line {
+				:global(.date-divider .divider-line) {
 					height: 1px;
 					flex: 1;
 					background: color-mix(in srgb, var(--border) 65%, transparent);
 					opacity: 0.5;
 				}
-				.read-marker .divider-line {
+				:global(.read-marker .divider-line) {
 					height: 1px;
 					flex: 1;
 					background: color-mix(in srgb, var(--warning) 45%, transparent);
@@ -783,7 +971,7 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 
 				.composer-shell {
 					width: 100%;
-					max-width: min(1400px, calc(100vw - 32px));
+					max-width: none;
 					pointer-events: auto;
 					border-radius: 8px 8px 0 0;
 					border: none;
@@ -798,10 +986,6 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 						left: var(--spacing-sidebar);
 						padding-left: 32px;
 						padding-right: 32px;
-					}
-
-					.composer-shell {
-						max-width: min(1600px, calc(100vw - var(--spacing-sidebar) - 64px));
 					}
 				}
 

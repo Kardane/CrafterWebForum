@@ -75,7 +75,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 			initialLikes={post.likes}
 			initialLiked={post.user_liked}
 		>
-			<div className="mx-auto w-full px-2 pb-6 pt-0 md:px-4 lg:px-6 xl:px-10 2xl:px-14">
+			<div className="mx-auto w-full px-3 pb-6 pt-0 md:px-5 lg:px-7 xl:px-12 2xl:px-16">
 				<PostStickyHeader
 					postId={post.id}
 					title={post.title}
@@ -141,7 +141,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 					</div>
 				</div>
 
-				<div className="mt-8 -mx-2 md:-mx-3 lg:-mx-5">
+				<div className="mt-8">
 					<CommentSection postId={post.id} initialComments={comments} readMarker={readMarker} />
 				</div>
 			</div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import classNames from "classnames";
@@ -28,6 +28,7 @@ export default function ForgotPasswordPage() {
 	const [confirmPassword, setConfirmPassword] = useState("");
 	const [formError, setFormError] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const submitControllerRef = useRef<AbortController | null>(null);
 
 	const {
 		code: authCode,
@@ -93,12 +94,16 @@ export default function ForgotPasswordPage() {
 		}
 
 		setIsSubmitting(true);
+		submitControllerRef.current?.abort();
+		const submitController = new AbortController();
+		submitControllerRef.current = submitController;
 		try {
 			const response = await fetch("/api/auth/password/forgot", {
 				method: "POST",
 				headers: {
 					"Content-Type": "application/json",
 				},
+				signal: submitController.signal,
 				body: JSON.stringify({
 					code: authCode,
 					newPassword,
@@ -111,14 +116,26 @@ export default function ForgotPasswordPage() {
 			alert(payload.message || text("passwordReset.successMessage"));
 			router.push("/login");
 		} catch (error) {
+			if (error instanceof Error && error.name === "AbortError") {
+				return;
+			}
 			console.error("Forgot password reset error:", error);
 			setFormError(
 				error instanceof Error ? error.message : text("passwordReset.errorUnexpected")
 			);
 		} finally {
+			if (submitControllerRef.current === submitController) {
+				submitControllerRef.current = null;
+			}
 			setIsSubmitting(false);
 		}
 	};
+
+	useEffect(() => {
+		return () => {
+			submitControllerRef.current?.abort();
+		};
+	}, []);
 
 	return (
 		<AuthShell

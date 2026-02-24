@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import classNames from "classnames";
@@ -18,6 +18,7 @@ export default function RegisterPage() {
 	const [passwordError, setPasswordError] = useState("");
 	const [confirmError, setConfirmError] = useState("");
 	const [isSubmitting, setIsSubmitting] = useState(false);
+	const submitControllerRef = useRef<AbortController | null>(null);
 
 	const {
 		code: authCode,
@@ -84,10 +85,14 @@ export default function RegisterPage() {
 		}
 
 		setIsSubmitting(true);
+		submitControllerRef.current?.abort();
+		const submitController = new AbortController();
+		submitControllerRef.current = submitController;
 		try {
 			const response = await fetch("/api/auth/register", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
+				signal: submitController.signal,
 				body: JSON.stringify({
 					nickname: verifiedNickname,
 					password,
@@ -104,12 +109,24 @@ export default function RegisterPage() {
 
 			alert("회원가입이 완료되었습니다! 로그인 페이지로 이동합니다.");
 			router.push("/login");
-		} catch {
+		} catch (error) {
+			if (error instanceof Error && error.name === "AbortError") {
+				return;
+			}
 			setPasswordError("회원가입 중 오류가 발생했습니다");
 		} finally {
+			if (submitControllerRef.current === submitController) {
+				submitControllerRef.current = null;
+			}
 			setIsSubmitting(false);
 		}
 	};
+
+	useEffect(() => {
+		return () => {
+			submitControllerRef.current?.abort();
+		};
+	}, []);
 
 	return (
 		<AuthShell

@@ -94,6 +94,23 @@ export async function PATCH(
 				postId: comment.postId,
 				commentId: updated.id,
 				actorUserId: sessionUserId,
+				content: updated.content,
+				updatedAt: updated.updatedAt,
+				comment: {
+					id: updated.id,
+					content: updated.content,
+					createdAt: updated.createdAt,
+					updatedAt: updated.updatedAt,
+					isPinned: Boolean(updated.isPinned),
+					parentId: updated.parentId,
+					isPostAuthor: updated.author.id === updated.post.authorId,
+					author: {
+						id: updated.author.id,
+						nickname: updated.author.nickname,
+						minecraftUuid: updated.author.minecraftUuid,
+						role: updated.author.role,
+					},
+				},
 			},
 		});
 

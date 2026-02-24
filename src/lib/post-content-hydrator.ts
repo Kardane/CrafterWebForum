@@ -33,18 +33,16 @@ export interface PostMetaItemPayload {
 
 export function collectExternalLinkCards(root: HTMLElement) {
 	const cardsByPostId = new Map<string, HTMLAnchorElement[]>();
-	root.querySelectorAll<HTMLAnchorElement>(".external-link-card[data-post-id]").forEach((card) => {
-		const postId = card.dataset.postId;
-		if (!postId) {
-			return;
-		}
-		const list = cardsByPostId.get(postId) ?? [];
-		list.push(card);
-		cardsByPostId.set(postId, list);
-	});
-
 	const cardsByPreviewUrl = new Map<string, HTMLAnchorElement[]>();
-	root.querySelectorAll<HTMLAnchorElement>(".external-link-card[data-preview-url]").forEach((card) => {
+
+	root.querySelectorAll<HTMLAnchorElement>(".external-link-card").forEach((card) => {
+		const postId = card.dataset.postId;
+		if (postId) {
+			const list = cardsByPostId.get(postId) ?? [];
+			list.push(card);
+			cardsByPostId.set(postId, list);
+		}
+
 		const previewUrl = card.dataset.previewUrl;
 		if (!previewUrl) {
 			return;

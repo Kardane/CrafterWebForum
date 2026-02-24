@@ -249,6 +249,21 @@ export async function POST(
 				commentId: comment.id,
 				parentId: comment.parentId,
 				actorUserId: sessionUserId,
+				comment: {
+					id: comment.id,
+					content: comment.content,
+					createdAt: comment.createdAt,
+					updatedAt: comment.updatedAt,
+					isPinned: Boolean(comment.isPinned),
+					parentId: comment.parentId,
+					isPostAuthor: comment.author.id === post.authorId,
+					author: {
+						id: comment.author.id,
+						nickname: comment.author.nickname,
+						minecraftUuid: comment.author.minecraftUuid,
+						role: comment.author.role,
+					},
+				},
 			},
 		});
 
