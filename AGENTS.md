@@ -1,6 +1,6 @@
 # CrafterWebForum AGENTS
 답변 한국어로 해.
-최종 업데이트: 2026-02-23
+최종 업데이트: 2026-02-24
 
 ## 1) 저장소 기준
 
@@ -86,7 +86,7 @@
   - `node_modules/`, `.next/`, `coverage/`, `test-results/`, `playwright-report/`
   - SQLite DB 파일, 로컬 로그, 비밀값 파일
 
-## 9) 최근 반영 사항 (2026-02-22)
+## 9) 최근 반영 사항 (2026-02-24)
 
 - Linux/WSL 기본 셋업 경로 정착
   - `scripts/setup-local.mjs` 추가
@@ -116,12 +116,27 @@
   - `src/app/api/posts/[id]/comments/route.ts`: `@닉네임` 멘션 파싱 후 알림 저장/실시간 브로드캐스트
   - `src/components/notifications/useNotifications.ts`: 실시간 알림 배지 + 브라우저 Notification API 연동
   - `src/app/notifications/page.tsx`: 알림 페이지 추가
- - 포스트 상세 레이아웃 확장
-  - `src/app/posts/[id]/page.tsx`: 대형 모니터에서 `md:max-w-5xl`, `xl:max-w-6xl`, `2xl:max-w-7xl` 단계형 확장
+ - 포스트 상세/댓글 레이아웃 폭 동기화
+  - `src/app/posts/[id]/page.tsx`: 상세 페이지 좌우 패딩을 단계별(`px-3`, `md:px-5`, `lg:px-7`, `xl:px-12`, `2xl:px-16`)로 재조정하고 댓글 섹션 음수 마진 제거
+  - `src/components/comments/CommentSection.tsx`: composer-dock 폭을 헤더 실측값과 동기화(`headerRef` + `ResizeObserver`)해 댓글 입력창/헤더/콘텐츠 폭 일치
+  - `src/__tests__/components/CommentSection.composerDock.test.tsx`: 헤더 좌우 inset 기반 dock 정렬 회귀 테스트 추가
+- 날짜 구분선 가시성 보강
+  - `src/components/comments/CommentDateDividerRow.tsx`: 중앙 라벨 양옆 라인을 `borderTop` 기반으로 고정해 테마/배경에 관계없이 노출 안정화
+ - 댓글 실시간/렌더링 최적화 3차 반영
+  - `src/components/comments/CommentSection.tsx`: 실시간 이벤트 처리에서 생성/수정/삭제/고정을 가능한 범위에서 부분 업데이트로 반영하고, 실패/불일치 케이스만 fallback 재조회
+  - `src/components/comments/CommentSection.tsx`: 행 래퍼(`.comment-row`)에 `content-visibility: auto` + `contain-intrinsic-size`를 적용해 대량 댓글 구간 렌더 비용 완화
+  - `src/lib/realtime/useRealtimeBroadcast.ts`: 핸들러 ref 패턴으로 채널 재구독 churn을 줄여 렌더당 재구독 오버헤드 완화
+ - 인증/프로필 네트워크 최적화
+  - `src/app/register/page.tsx`, `src/app/forgot-password/page.tsx`: 제출 fetch에 `AbortController` 연결 및 언마운트/중복 제출 시 요청 취소
+  - `src/app/profile/page.tsx`: `window.location.reload()` 재시도를 상태 기반 재요청(`retryTick`)으로 전환하고 fetch abort cleanup 추가
+ - 포스트 콘텐츠/링크 프리뷰 계측 최적화
+  - `src/lib/post-content-hydrator.ts`: 외부 링크 카드 수집을 단일 DOM 스캔으로 통합
+  - `src/app/api/link-preview/route.ts`: 캐시 hit/miss + build + total `Server-Timing` 헤더 계측 추가
+  - `src/__tests__/api/link-preview.route.test.ts`: `Server-Timing`의 cache hit/miss 노출 회귀 테스트 추가
 
 ## 10) 다음 최적화 후보
 
-- P0: `src/app/register/page.tsx`, `src/app/forgot-password/page.tsx` 폴링 fetch에도 `AbortController` 일괄 적용
-- P1: `src/app/profile/page.tsx`의 `window.location.reload()` 재시도 흐름을 상태 기반 재요청으로 치환
-- P1: `src/components/posts/PostContent.tsx`에서 `querySelectorAll` DOM 스캔을 카드 루트 캐싱 기반으로 축소
-- P2: `src/app/api/link-preview/route.ts` TTL 캐시 hit/miss 계측(서버 타이밍/로그) 추가
+- P0: `src/components/comments/CommentSection.tsx`에서 생성 이벤트 fallback 재조회 비율을 낮추도록 parent 미존재 케이스의 버퍼링/지연 병합 전략 검토
+- P1: `src/components/comments/CommentSection.tsx`의 `content-visibility` 적용 구간에서 브라우저별 스크롤 점프/anchor 복원 실측 확인
+- P1: `src/components/posts/PostContent.tsx`의 highlight/메타 hydrate 구간에 샘플링 계측을 추가해 대형 본문 p95 추적
+- P2: `src/app/api/link-preview/route.ts`의 `Server-Timing` 메트릭을 운영 대시보드(Web Vitals/로그 파이프라인)와 연동

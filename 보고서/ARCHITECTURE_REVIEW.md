@@ -4,13 +4,13 @@
 - 대상: `CrafterWebForum`
 - 기준: `src/app`, `src/components`, `src/app/api`, `src/lib`, `src/auth*`, `src/proxy.ts`, `prisma/schema.prisma`
 - 레거시 비교 기준: `legacy/` (동작 참고용)
-- 최종 검증일: 2026-02-23
+- 최종 검증일: 2026-02-24
 
 ### 최신 검증 커맨드
 - `npm run lint` -> 성공 (`0 warnings, 0 errors`)
-- `npm test` -> 성공 (`36 files, 143 tests passed`)
+- `npm test` -> 성공 (`37 files, 144 tests passed`)
 - `npm run build` -> 성공 (Turbopack production build 완료)
-- `npx next build --webpack` -> 성공 (`@prisma/adapter-libsql` import 체인 외부화 + Turbopack 병행 설정으로 fallback 빌드 복구)
+- `npx next build --webpack` -> 이번 회차 미실행 (직전 성공 이력: 2026-02-23)
 - `npx tsc --noEmit` -> 성공
 - `npm run dev` -> 단독 실행 미검증 (단, `npm run test:e2e`의 `webServer` 구동은 성공)
 - `npm run test:e2e` -> 이번 회차 사용자 요청으로 스킵
@@ -177,6 +177,29 @@ legacy/                   # 레거시 동작 참조
 
 ### 3.11 포스트 상세 레이아웃 가변 확장
 - 포스트 상세 컨테이너를 `max-w-4xl` 고정에서 화면 구간별(`md:5xl`, `xl:6xl`, `2xl:7xl`) 확장으로 조정해 대형 모니터 가로 공간 활용도 개선
+- 상세 루트 패딩을 `px-3`, `md:px-5`, `lg:px-7`, `xl:px-12`, `2xl:px-16`로 재조정해 본문/댓글의 좌우 여백 체감 균형을 보정
+- 댓글 섹션 래퍼의 음수 마진(`-mx-*`)을 제거해 포스트 본문과 댓글 블록의 시각적 폭 기준을 동일화
+
+### 3.12 댓글 composer 폭 정렬/날짜 구분선 가시성 보강
+- `CommentSection`에서 헤더 영역 실측(`headerRef` + `ResizeObserver`)을 기준으로 `composer-dock`의 `left/right` inset을 동기화해 입력창 폭이 헤더 폭과 항상 일치하도록 보정
+- 댓글 입력창 폭 동기화 회귀를 `src/__tests__/components/CommentSection.composerDock.test.tsx`로 추가해 레이아웃 회귀를 테스트로 고정
+- `CommentDateDividerRow`의 좌우 구분선을 `borderTop` 기반으로 고정해 다크 배경/투명도 조합에서도 라인 가시성을 안정화
+
+### 3.13 댓글 실시간/렌더링 경량화 3차
+- `CommentSection`의 Realtime 핸들러에서 생성/수정/삭제/고정 이벤트를 가능한 범위에서 부분 업데이트로 처리해 매 이벤트 전체 `/api/posts/[id]/comments` 재조회 경로를 축소
+- 생성 이벤트는 payload에 포함된 `comment` 스냅샷을 우선 적용하고, parent 미존재/파싱 실패 등 불일치 케이스만 fallback 재조회로 처리
+- 댓글 행 래퍼에 `content-visibility: auto` + `contain-intrinsic-size`를 적용해 대량 댓글 구간에서 offscreen 렌더 비용을 줄이는 경량 virtualization 패턴 적용
+- `useRealtimeBroadcast`를 핸들러 ref 기반으로 조정해 렌더 주기마다 채널 재구독이 반복되던 오버헤드를 완화
+
+### 3.14 인증/프로필 요청 취소 및 상태 재요청 전환
+- `register`/`forgot-password` 제출 요청에 `AbortController`를 연결해 중복 제출/페이지 이탈 시 불필요한 in-flight 요청을 취소
+- `profile` 페이지의 재시도 버튼을 `window.location.reload()`에서 상태 기반 재요청(`retryTick`)으로 전환해 UX 끊김과 전체 리로드 비용을 제거
+- `profile` 데이터 fetch에 abort cleanup을 추가해 언마운트 이후 state update 경합을 방지
+
+### 3.15 PostContent DOM 스캔 축소 + Link Preview 계측
+- `collectExternalLinkCards`를 단일 `.external-link-card` 스캔으로 통합해 postId/previewUrl 수집을 한 번의 DOM 패스로 처리
+- `/api/link-preview` 응답에 `Server-Timing`(`link_preview_cache`, `link_preview_build`, `link_preview_total`) 메트릭을 추가해 cache hit/miss와 빌드 비용을 계측
+- `src/__tests__/api/link-preview.route.test.ts`에서 `Server-Timing`의 cache hit/miss 노출을 회귀 테스트로 검증
 
 ## 4. 데이터 레이어 상태
 
@@ -269,6 +292,16 @@ legacy/                   # 레거시 동작 참조
 71. `prisma/schema.prisma`에 `Notification` 모델을 추가하고 댓글 멘션(`@닉네임`) 발생 시 알림 저장/실시간 브로드캐스트 경로를 연결
 72. `src/app/api/notifications/*`, `src/app/notifications/page.tsx`, `src/components/notifications/useNotifications.ts`를 추가해 알림 목록/읽음 처리/사이드바 배지/브라우저 알림 팝업을 통합
 73. `src/app/posts/[id]/page.tsx` 상세 컨테이너를 반응형 max-width 단계(`4xl -> 5xl -> 6xl -> 7xl`)로 확장해 대형 화면에서 본문 가독성과 활용 폭을 개선
+74. `src/app/posts/[id]/page.tsx` 좌우 패딩을 단계별 상향(`px-3`~`2xl:px-16`)하고 댓글 섹션 음수 마진을 제거해 본문/댓글 폭 기준을 통일
+75. `src/components/comments/CommentSection.tsx`에 헤더 실측 기반 composer-dock 폭 동기화(`ResizeObserver`)를 적용해 댓글 입력창과 헤더 폭 불일치 이슈 해소
+76. `src/__tests__/components/CommentSection.composerDock.test.tsx`를 추가해 헤더 inset 변화 시 composer-dock 좌우 정렬 회귀를 자동 검증
+77. `src/components/comments/CommentSection.tsx` 실시간 이벤트 처리에서 부분 업데이트(생성/수정/삭제/고정) 우선 경로를 도입하고 예외 케이스만 fallback 재조회로 제한
+78. `src/components/comments/CommentSection.tsx` 댓글 행에 `content-visibility` 기반 경량 virtualization 패턴을 적용해 대량 스레드 렌더링 부담을 완화
+79. `src/lib/realtime/useRealtimeBroadcast.ts`를 핸들러 ref 기반 구독 구조로 변경해 렌더당 채널 재구독 churn을 완화
+80. `src/app/register/page.tsx`, `src/app/forgot-password/page.tsx` 제출 요청에 `AbortController`를 적용해 중복 요청/이탈 시 취소 경로를 확보
+81. `src/app/profile/page.tsx` 재시도 흐름을 페이지 리로드에서 상태 기반 재요청으로 전환하고 fetch abort cleanup을 추가
+82. `src/lib/post-content-hydrator.ts` 외부 링크 카드 수집 경로를 단일 DOM 스캔으로 통합해 hydrate 준비 비용을 절감
+83. `src/app/api/link-preview/route.ts`에 `Server-Timing`(cache hit/miss/build/total) 계측을 추가하고 `src/__tests__/api/link-preview.route.test.ts` 회귀를 보강
 
 ### 5.1 레거시 2번 항목 반영 현황 (2026-02-17 재확인)
 - 반영 완료: #3, #7, #10, #12, #13, #14
