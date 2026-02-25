@@ -5,6 +5,7 @@ import { isSessionUserApproved, toSessionUserId } from "@/lib/session-user";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 import { createServerTimingHeader } from "@/lib/server-timing";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
+import { isReservedPostTag, parsePostTagMetadata, toStoredTags } from "@/lib/post-board";
 
 export const preferredRegion = "icn1";
 
@@ -15,7 +16,7 @@ function normalizeTags(value: unknown) {
 	return value
 		.filter((tag): tag is string => typeof tag === "string")
 		.map((tag) => tag.trim())
-		.filter((tag) => tag.length > 0);
+		.filter((tag) => tag.length > 0 && !isReservedPostTag(tag));
 }
 
 export async function GET(
@@ -121,6 +122,10 @@ export async function PATCH(
 			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
 		const previousTags = parsePostTags(post.tags);
+		const metadata = parsePostTagMetadata(post.tags);
+		if (metadata.board === "ombudsman") {
+			return NextResponse.json({ error: "ombudsman_post_edit_disabled" }, { status: 403 });
+		}
 		const nextTags = normalizeTags(tags);
 
 		await prisma.post.update({
@@ -128,7 +133,7 @@ export async function PATCH(
 			data: {
 				title,
 				content,
-				tags: JSON.stringify(nextTags),
+				tags: toStoredTags({ board: metadata.board, tags: nextTags, serverAddress: metadata.serverAddress }),
 				updatedAt: new Date(),
 			},
 		});
