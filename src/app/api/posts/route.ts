@@ -5,6 +5,8 @@ import { toSessionUserId } from "@/lib/session-user";
 import { listPosts } from "@/lib/services/posts-service";
 import { createServerTimingHeader } from "@/lib/server-timing";
 import { getPostMutationTags, safeRevalidateTags } from "@/lib/cache-tags";
+import { normalizeBoardType, toStoredTags } from "@/lib/post-board";
+import { parseServerAddress } from "@/lib/server-address";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -30,6 +32,7 @@ export async function GET(req: NextRequest) {
 			page: parsePositiveInt(searchParams.get("page"), 1),
 			limit: parsePositiveInt(searchParams.get("limit"), 12),
 			tag: searchParams.get("tag"),
+			board: searchParams.get("board") === "ombudsman" ? "ombudsman" : "forum",
 			sort: searchParams.get("sort") ?? "activity",
 			search: searchParams.get("search") ?? "",
 			sessionUserId,
@@ -70,6 +73,8 @@ export async function POST(request: NextRequest) {
 			title?: unknown;
 			content?: unknown;
 			tags?: unknown;
+			board?: unknown;
+			serverAddress?: unknown;
 		};
 
 		const title = typeof body.title === "string" ? body.title.trim() : "";
@@ -83,12 +88,27 @@ export async function POST(request: NextRequest) {
 					(tag): tag is string => typeof tag === "string" && tag.trim().length > 0
 			  )
 			: [];
+		const board = normalizeBoardType(body.board);
+		const rawServerAddress = typeof body.serverAddress === "string" ? body.serverAddress.trim() : "";
+
+		let parsedServerAddress: ReturnType<typeof parseServerAddress> = null;
+		if (board === "ombudsman") {
+			parsedServerAddress = parseServerAddress(rawServerAddress);
+			if (!parsedServerAddress) {
+				return NextResponse.json({ error: "invalid_server_address" }, { status: 400 });
+			}
+		}
+		const storedTags = toStoredTags({
+			board,
+			tags,
+			serverAddress: parsedServerAddress?.normalizedAddress ?? null,
+		});
 
 		const post = await prisma.post.create({
 			data: {
 				title,
 				content,
-				tags: JSON.stringify(tags),
+				tags: storedTags,
 				authorId: sessionUserId,
 			},
 		});
