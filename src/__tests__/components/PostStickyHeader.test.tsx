@@ -59,4 +59,21 @@ describe("PostStickyHeader", () => {
 		expect(eventSpy).toHaveBeenCalledTimes(1);
 		window.removeEventListener(SCROLL_COMMENT_FEED_BOTTOM_EVENT, eventSpy);
 	});
+
+	it("backHref를 넘기면 해당 경로로 목록 버튼이 이동해야 함", () => {
+		render(
+			<PostStickyHeader
+				postId={1}
+				title="테스트"
+				authorName="작성자"
+				createdAt={new Date().toISOString()}
+				commentCount={0}
+				initialLikes={0}
+				initialLiked={false}
+				backHref="/ombudsman"
+			/>
+		);
+
+		expect(screen.getAllByRole("link")[0]).toHaveAttribute("href", "/ombudsman");
+	});
 });

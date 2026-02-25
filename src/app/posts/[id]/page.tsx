@@ -8,6 +8,7 @@ import LikeButton from "@/components/posts/LikeButton";
 import CommentSection from "@/components/comments/CommentSection";
 import PostStickyHeader from "@/components/posts/PostStickyHeader";
 import { PostLikeStateProvider } from "@/components/posts/PostLikeStateProvider";
+import ServerAddressTag from "@/components/posts/ServerAddressTag";
 import { isSessionUserApproved, toSessionUserId } from "@/lib/session-user";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 
@@ -68,6 +69,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 	const { post, comments, readMarker } = data;
 	const totalCommentCount = countCommentsWithReplies(comments);
 	const isOwner = sessionUserId === post.author_id;
+	const backHref = post.board === "ombudsman" ? "/ombudsman" : "/";
 
 	return (
 		<PostLikeStateProvider
@@ -84,6 +86,7 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 					initialLikes={post.likes}
 					initialLiked={post.user_liked}
 					commentCount={totalCommentCount}
+					backHref={backHref}
 				/>
 				<div className="mt-4 mb-6 relative">
 					{isOwner && (
@@ -99,11 +102,17 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 							{post.title}
 						</h1>
 
-						{post.tags && post.tags.length > 0 && (
-							<div className="flex flex-wrap gap-2 mb-4">
-								{post.tags.map((tag: string) => (
-									<span
-										key={tag}
+					{post.board === "ombudsman" && post.serverAddress && (
+						<div className="flex flex-wrap gap-2 mb-4">
+							<ServerAddressTag address={post.serverAddress} className="bg-bg-secondary text-white hover:bg-bg-tertiary" />
+						</div>
+					)}
+
+					{post.tags && post.tags.length > 0 && (
+						<div className="flex flex-wrap gap-2 mb-4">
+							{post.tags.map((tag: string) => (
+								<span
+									key={tag}
 										className="inline-flex items-center rounded px-2 py-[2px] text-[11px] font-semibold bg-bg-secondary text-white"
 									>
 										{tag}

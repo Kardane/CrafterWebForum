@@ -16,6 +16,7 @@ interface PostStickyHeaderProps {
 	triggerId?: string;
 	topOffsetClassName?: string;
 	observerOffsetTop?: number;
+	backHref?: string;
 }
 
 function formatPostDate(dateValue: string | Date): string {
@@ -39,6 +40,7 @@ export default function PostStickyHeader({
 	triggerId = "post-header-trigger",
 	topOffsetClassName = "top-header",
 	observerOffsetTop = 56,
+	backHref = "/",
 }: PostStickyHeaderProps) {
 	void triggerId;
 	void topOffsetClassName;
@@ -48,7 +50,7 @@ export default function PostStickyHeader({
 		<div className="sticky top-0 z-[45] transition-opacity duration-200 opacity-100">
 			<div className="rounded-b-lg border-x border-b border-border bg-bg-secondary/95 px-3 py-2 shadow-sm backdrop-blur">
 				<div className="flex items-center gap-3">
-					<Link href="/" className="btn btn-secondary btn-sm" title="목록" aria-label="목록으로 이동">
+					<Link href={backHref} className="btn btn-secondary btn-sm" title="목록" aria-label="목록으로 이동">
 						<ArrowLeft size={14} />
 					</Link>
 
