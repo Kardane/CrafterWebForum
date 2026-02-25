@@ -5,6 +5,7 @@ import { buildCommentTree } from "@/lib/comments";
 import type { Comment as TreeComment } from "@/lib/comment-tree-ops";
 import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
+import { type PostBoardType, parsePostTagMetadata } from "@/lib/post-board";
 
 const POST_DETAIL_CACHE_VERSION = "v1";
 const POST_DETAIL_REVALIDATE_SECONDS = 30;
@@ -27,6 +28,8 @@ export interface GetPostDetailResult {
 		author_id: number;
 		author_name: string;
 		author_uuid: string | null;
+		board: PostBoardType;
+		serverAddress: string | null;
 		user_liked: boolean;
 	};
 	comments: TreeComment[];
@@ -54,21 +57,6 @@ interface CachedPostDetailCoreResult {
 		queryCommentsMs: number;
 		serializeMs: number;
 	};
-}
-
-function parseTags(rawTags: string | null): string[] {
-	if (!rawTags) {
-		return [];
-	}
-	try {
-		const parsed = JSON.parse(rawTags) as unknown;
-		if (!Array.isArray(parsed)) {
-			return [];
-		}
-		return parsed.filter((tag): tag is string => typeof tag === "string");
-	} catch {
-		return [];
-	}
 }
 
 function serializeCommentTree(nodes: ReturnType<typeof buildCommentTree>): TreeComment[] {
@@ -151,13 +139,14 @@ async function getPostDetailCoreUncached(
 		...comment,
 		isPostAuthor: comment.author.id === post.authorId,
 	}));
+	const postTagMetadata = parsePostTagMetadata(post.tags);
 
 	const serializeStart = performance.now();
 	const responsePost = {
 		id: post.id,
 		title: post.title,
 		content: post.content,
-		tags: parseTags(post.tags),
+		tags: postTagMetadata.tags,
 		likes: post.likes,
 		views: post.views,
 		createdAt: post.createdAt.toISOString(),
@@ -165,6 +154,8 @@ async function getPostDetailCoreUncached(
 		author_id: post.authorId,
 		author_name: post.author.nickname,
 		author_uuid: post.author.minecraftUuid,
+		board: postTagMetadata.board,
+		serverAddress: postTagMetadata.serverAddress,
 	};
 	const responseComments = serializeCommentTree(buildCommentTree(commentsWithPostAuthorFlag));
 	const serializeMs = performance.now() - serializeStart;

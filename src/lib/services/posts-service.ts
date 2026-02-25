@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { getPostListCacheTags } from "@/lib/cache-tags";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
+import { OMBUDSMAN_BOARD_MARKER, type PostBoardType, parsePostTagMetadata } from "@/lib/post-board";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 12;
@@ -14,6 +15,7 @@ export interface ListPostsInput {
 	page?: number;
 	limit?: number;
 	tag?: string | null;
+	board?: PostBoardType | null;
 	sort?: string | null;
 	search?: string | null;
 	sessionUserId?: number | null;
@@ -33,6 +35,8 @@ export interface ListPostsResult {
 		authorName: string;
 		authorUuid: string | null;
 		commentCount: number;
+		board: PostBoardType;
+		serverAddress: string | null;
 		unreadCount: number;
 		userLiked: boolean;
 	}>;
@@ -54,6 +58,7 @@ interface NormalizedListPostsInput {
 	page: number;
 	limit: number;
 	tag: string | null;
+	board: PostBoardType;
 	sort: string;
 	search: string;
 	sessionUserId: number | null;
@@ -63,6 +68,7 @@ interface NormalizedListPostsCoreInput {
 	page: number;
 	limit: number;
 	tag: string | null;
+	board: PostBoardType;
 	sort: string;
 	search: string;
 }
@@ -80,6 +86,8 @@ interface CachedListPostCore {
 	authorName: string;
 	authorUuid: string | null;
 	commentCount: number;
+	board: PostBoardType;
+	serverAddress: string | null;
 }
 
 interface CachedListPostsCoreResult {
@@ -102,21 +110,6 @@ function normalizePositiveInt(value: number | undefined, fallback: number, max?:
 	return value;
 }
 
-function parseTags(rawTags: string | null): string[] {
-	if (!rawTags) {
-		return [];
-	}
-	try {
-		const parsed = JSON.parse(rawTags) as unknown;
-		if (!Array.isArray(parsed)) {
-			return [];
-		}
-		return parsed.filter((tag): tag is string => typeof tag === "string");
-	} catch {
-		return [];
-	}
-}
-
 function resolveOrderBy(sort: string | null | undefined) {
 	switch (sort) {
 		case "oldest":
@@ -135,12 +128,14 @@ function normalizeListPostsInput(input: ListPostsInput): NormalizedListPostsInpu
 	const page = normalizePositiveInt(input.page, DEFAULT_PAGE);
 	const limit = normalizePositiveInt(input.limit, DEFAULT_LIMIT, MAX_LIMIT);
 	const tag = input.tag?.trim() || null;
+	const board = input.board === "ombudsman" ? "ombudsman" : "forum";
 	const search = input.search?.trim() ?? "";
 	const sort = input.sort ?? "activity";
 	return {
 		page,
 		limit,
 		tag,
+		board,
 		sort,
 		search,
 		sessionUserId: input.sessionUserId ?? null,
@@ -152,6 +147,7 @@ function toCoreInput(input: NormalizedListPostsInput): NormalizedListPostsCoreIn
 		page: input.page,
 		limit: input.limit,
 		tag: input.tag,
+		board: input.board,
 		sort: input.sort,
 		search: input.search,
 	};
@@ -163,6 +159,7 @@ function buildListPostsCacheKey(input: NormalizedListPostsCoreInput) {
 		`page:${input.page}`,
 		`limit:${input.limit}`,
 		`tag:${input.tag ?? "all"}`,
+		`board:${input.board}`,
 		`sort:${input.sort}`,
 		`search:${encodeURIComponent(input.search)}`,
 	];
@@ -175,26 +172,43 @@ async function listPostsCoreUncached(
 	const page = input.page;
 	const limit = input.limit;
 	const tag = input.tag;
+	const board = input.board;
 	const search = input.search;
 	const skip = (page - 1) * limit;
-
-	const whereCondition: Prisma.PostWhereInput = {
-		deletedAt: null,
-	};
+	const andConditions: Prisma.PostWhereInput[] = [{ deletedAt: null }];
 
 	if (tag) {
-		whereCondition.tags = {
-			contains: `"${tag}"`,
-		};
+		andConditions.push({
+			tags: {
+				contains: `"${tag}"`,
+			},
+		});
+	}
+
+	if (board === "ombudsman") {
+		andConditions.push({
+			tags: {
+				contains: `"${OMBUDSMAN_BOARD_MARKER}"`,
+			},
+		});
+	} else {
+		andConditions.push({
+			OR: [{ tags: null }, { tags: { not: { contains: `"${OMBUDSMAN_BOARD_MARKER}"` } } }],
+		});
 	}
 
 	if (search.length > 0) {
-		whereCondition.OR = [
-			{ title: { contains: search } },
-			{ content: { contains: search } },
-			{ comments: { some: { content: { contains: search } } } },
-		];
+		andConditions.push({
+			OR: [
+				{ title: { contains: search } },
+				{ content: { contains: search } },
+				{ comments: { some: { content: { contains: search } } } },
+			],
+		});
 	}
+
+	const whereCondition: Prisma.PostWhereInput =
+		andConditions.length === 1 ? andConditions[0] : { AND: andConditions };
 
 	const orderBy = resolveOrderBy(input.sort);
 
@@ -224,20 +238,25 @@ async function listPostsCoreUncached(
 	const queryMainMs = performance.now() - queryMainStart;
 
 	const serializeStart = performance.now();
-	const formattedPosts = posts.map((post) => ({
-		id: post.id,
-		title: post.title,
-		preview: getPreviewText(post.content),
-		thumbnailUrl: extractFirstImage(post.content),
-		tags: parseTags(post.tags),
-		likes: post.likes,
-		views: post.views,
-		createdAt: post.createdAt.toISOString(),
-		updatedAt: post.updatedAt.toISOString(),
-		authorName: post.author.nickname,
-		authorUuid: post.author.minecraftUuid,
-		commentCount: post._count.comments,
-	}));
+	const formattedPosts = posts.map((post) => {
+		const metadata = parsePostTagMetadata(post.tags);
+		return {
+			id: post.id,
+			title: post.title,
+			preview: getPreviewText(post.content),
+			thumbnailUrl: extractFirstImage(post.content),
+			tags: metadata.tags,
+			board: metadata.board,
+			serverAddress: metadata.serverAddress,
+			likes: post.likes,
+			views: post.views,
+			createdAt: post.createdAt.toISOString(),
+			updatedAt: post.updatedAt.toISOString(),
+			authorName: post.author.nickname,
+			authorUuid: post.author.minecraftUuid,
+			commentCount: post._count.comments,
+		};
+	});
 	const serializeMs = performance.now() - serializeStart;
 
 	return {
