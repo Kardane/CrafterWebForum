@@ -40,6 +40,7 @@ export default async function OmbudsmanPage(props: PageProps) {
 			sort: searchParams.sort ?? "activity",
 			search: searchParams.search ?? "",
 			sessionUserId,
+			includeUserOverlay: false,
 		});
 	} catch (error) {
 		console.error("Failed to load ombudsman posts:", error);

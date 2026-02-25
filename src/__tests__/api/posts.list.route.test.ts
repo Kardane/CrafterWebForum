@@ -209,7 +209,6 @@ describe("GET /api/posts", () => {
 		]);
 		postCountMock.mockResolvedValue(1);
 		likeFindManyMock.mockResolvedValue([]);
-		postReadFindManyMock.mockResolvedValue([]);
 
 		const { GET } = await import("@/app/api/posts/route");
 		const req = new Request("http://localhost/api/posts?board=ombudsman");
@@ -236,5 +235,7 @@ describe("GET /api/posts", () => {
 				}),
 			})
 		);
+		expect(likeFindManyMock).not.toHaveBeenCalled();
+		expect(postReadFindManyMock).not.toHaveBeenCalled();
 	});
 });

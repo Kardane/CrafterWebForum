@@ -19,6 +19,7 @@ export interface ListPostsInput {
 	sort?: string | null;
 	search?: string | null;
 	sessionUserId?: number | null;
+	includeUserOverlay?: boolean;
 }
 
 export interface ListPostsResult {
@@ -62,6 +63,7 @@ interface NormalizedListPostsInput {
 	sort: string;
 	search: string;
 	sessionUserId: number | null;
+	includeUserOverlay: boolean;
 }
 
 interface NormalizedListPostsCoreInput {
@@ -139,6 +141,7 @@ function normalizeListPostsInput(input: ListPostsInput): NormalizedListPostsInpu
 		sort,
 		search,
 		sessionUserId: input.sessionUserId ?? null,
+		includeUserOverlay: input.includeUserOverlay ?? true,
 	};
 }
 
@@ -307,41 +310,56 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 	let queryAuxMs = 0;
 	let likedPostIdSet = new Set<number>();
 	let readCountByPostId = new Map<number, number>();
+	const shouldLoadUserOverlay = normalizedInput.includeUserOverlay;
+	const shouldLoadLikeOverlay = shouldLoadUserOverlay && Boolean(sessionUserId) && postIds.length > 0;
+	const shouldLoadReadOverlay = shouldLoadLikeOverlay && normalizedInput.board !== "ombudsman";
 
-	if (sessionUserId && postIds.length > 0) {
+	if (shouldLoadLikeOverlay && sessionUserId) {
 		const queryAuxStart = performance.now();
+		const likesPromise = prisma.like.findMany({
+			where: {
+				userId: sessionUserId,
+				postId: { in: postIds },
+			},
+			select: { postId: true },
+		});
+		const readsPromise = shouldLoadReadOverlay
+			? prisma.postRead.findMany({
+					where: {
+						userId: sessionUserId,
+						postId: { in: postIds },
+					},
+					select: {
+						postId: true,
+						lastReadCommentCount: true,
+					},
+			  })
+			: Promise.resolve([] as Array<{ postId: number; lastReadCommentCount: number }>);
 		const [likes, reads] = await Promise.all([
-			prisma.like.findMany({
-				where: {
-					userId: sessionUserId,
-					postId: { in: postIds },
-				},
-				select: { postId: true },
-			}),
-			prisma.postRead.findMany({
-				where: {
-					userId: sessionUserId,
-					postId: { in: postIds },
-				},
-				select: {
-					postId: true,
-					lastReadCommentCount: true,
-				},
-			}),
+			likesPromise,
+			readsPromise,
 		]);
 		queryAuxMs = performance.now() - queryAuxStart;
 		likedPostIdSet = new Set(likes.map((like) => like.postId));
-		readCountByPostId = new Map(
-			reads.map((read) => [read.postId, read.lastReadCommentCount])
-		);
+		if (shouldLoadReadOverlay) {
+			readCountByPostId = new Map(
+				reads.map((read) => [read.postId, read.lastReadCommentCount])
+			);
+		}
 	}
 
 	const serializeStart = performance.now();
 	const posts = core.posts.map((post) => {
-		const lastReadCommentCount = readCountByPostId.get(post.id) ?? 0;
+		const lastReadCommentCount = shouldLoadReadOverlay ? (readCountByPostId.get(post.id) ?? 0) : 0;
+		let unreadCount = 0;
+		if (shouldLoadReadOverlay) {
+			unreadCount = Math.max(post.commentCount - lastReadCommentCount, 0);
+		} else if (normalizedInput.board === "forum" && normalizedInput.includeUserOverlay) {
+			unreadCount = post.commentCount;
+		}
 		return {
 			...post,
-			unreadCount: Math.max(post.commentCount - lastReadCommentCount, 0),
+			unreadCount,
 			userLiked: likedPostIdSet.has(post.id),
 		};
 	});

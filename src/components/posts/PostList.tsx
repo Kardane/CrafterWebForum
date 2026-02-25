@@ -52,6 +52,39 @@ const postsPageCache = new Map<
 	}
 >();
 
+function normalizePositiveParam(value: string | null, fallback: number): string {
+	const parsed = Number.parseInt(value ?? "", 10);
+	if (!Number.isInteger(parsed) || parsed <= 0) {
+		return String(fallback);
+	}
+	return String(parsed);
+}
+
+function buildNormalizedListParams(params: URLSearchParams, board: "forum" | "ombudsman", initialLimit: number): URLSearchParams {
+	const normalized = new URLSearchParams();
+	normalized.set("board", board);
+	normalized.set("limit", normalizePositiveParam(params.get("limit"), initialLimit));
+
+	const sort = params.get("sort")?.trim();
+	if (sort) {
+		normalized.set("sort", sort);
+	}
+
+	const search = params.get("search")?.trim();
+	if (search) {
+		normalized.set("search", search);
+	}
+
+	if (board === "forum") {
+		const tag = params.get("tag")?.trim();
+		if (tag) {
+			normalized.set("tag", tag);
+		}
+	}
+
+	return normalized;
+}
+
 function buildPostsPageCacheKey(baseParams: URLSearchParams, page: number) {
 	return `${baseParams.toString()}::page=${page}`;
 }
@@ -83,7 +116,10 @@ export default function PostList({
 	board = "forum",
 }: PostListProps) {
 	const searchParams = useSearchParams();
-	const searchQuery = searchParams.toString();
+	const searchQuery = useMemo(
+		() => buildNormalizedListParams(new URLSearchParams(searchParams.toString()), board, initialLimit).toString(),
+		[searchParams, board, initialLimit]
+	);
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	const [posts, setPosts] = useState<Post[]>(initialPosts);
 	const [currentPage, setCurrentPage] = useState(initialPage);
@@ -109,10 +145,6 @@ export default function PostList({
 		setLoadError(null);
 
 		const initialParams = new URLSearchParams(searchQuery);
-		initialParams.delete("page");
-		if (!initialParams.get("limit")) {
-			initialParams.set("limit", String(initialLimit));
-		}
 		postsPageCache.set(buildPostsPageCacheKey(initialParams, initialPage), {
 			payload: {
 				posts: initialPosts,
@@ -128,14 +160,8 @@ export default function PostList({
 	}, [initialPosts, initialPage, initialLimit, searchQuery, totalPages]);
 
 	const baseParams = useMemo(() => {
-		const params = new URLSearchParams(searchParams.toString());
-		params.delete("page");
-		params.set("board", board);
-		if (!params.get("limit")) {
-			params.set("limit", String(initialLimit));
-		}
-		return params;
-	}, [searchParams, initialLimit, board]);
+		return new URLSearchParams(searchQuery);
+	}, [searchQuery]);
 
 	const loadNextPage = useCallback(async () => {
 		if (!hasMore || isLoadingMore) {

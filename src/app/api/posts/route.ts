@@ -28,14 +28,16 @@ export async function GET(req: NextRequest) {
 		const authMs = performance.now() - authStart;
 
 		const { searchParams } = new URL(req.url);
+		const board = searchParams.get("board") === "ombudsman" ? "ombudsman" : "forum";
 		const data = await listPosts({
 			page: parsePositiveInt(searchParams.get("page"), 1),
 			limit: parsePositiveInt(searchParams.get("limit"), 12),
 			tag: searchParams.get("tag"),
-			board: searchParams.get("board") === "ombudsman" ? "ombudsman" : "forum",
+			board,
 			sort: searchParams.get("sort") ?? "activity",
 			search: searchParams.get("search") ?? "",
 			sessionUserId,
+			includeUserOverlay: board !== "ombudsman",
 		});
 
 		const response = NextResponse.json({
