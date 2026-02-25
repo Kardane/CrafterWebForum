@@ -1,6 +1,6 @@
 # CrafterWebForum AGENTS
 답변 한국어로 해.
-최종 업데이트: 2026-02-25
+최종 업데이트: 2026-02-26
 
 ## 1) 저장소 기준
 
@@ -143,6 +143,10 @@
     - 신문고 상태에서 키컬러/배경 보라 톤 자동 전환(`html[data-board="ombudsman"]`)
     - 서버 주소 태그 클릭 시 클립보드 복사(`src/components/posts/ServerAddressTag.tsx`)
     - 상세 페이지에서 신문고 게시글은 목록(back)이 `/ombudsman`로 고정
+  - 신문고 성능 최적화(P1)
+    - `src/lib/services/posts-service.ts`: 신문고 목록에서 사용자 오버레이(`postRead`) 조회를 건너뛰어 `queryAux` 비용 감소
+    - `src/app/ombudsman/page.tsx`, `src/app/api/posts/route.ts`: 신문고 board 요청에 `includeUserOverlay: false` 적용
+    - `src/components/posts/PostList.tsx`: 목록 쿼리 파라미터를 정규화한 캐시 키로 페이지 캐시 적중률 개선
 
 ## 10) 다음 최적화 후보
 
