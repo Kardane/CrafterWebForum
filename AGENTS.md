@@ -1,6 +1,6 @@
 # CrafterWebForum AGENTS
 답변 한국어로 해.
-최종 업데이트: 2026-02-24
+최종 업데이트: 2026-02-25
 
 ## 1) 저장소 기준
 
@@ -129,10 +129,20 @@
  - 인증/프로필 네트워크 최적화
   - `src/app/register/page.tsx`, `src/app/forgot-password/page.tsx`: 제출 fetch에 `AbortController` 연결 및 언마운트/중복 제출 시 요청 취소
   - `src/app/profile/page.tsx`: `window.location.reload()` 재시도를 상태 기반 재요청(`retryTick`)으로 전환하고 fetch abort cleanup 추가
- - 포스트 콘텐츠/링크 프리뷰 계측 최적화
+- 포스트 콘텐츠/링크 프리뷰 계측 최적화
   - `src/lib/post-content-hydrator.ts`: 외부 링크 카드 수집을 단일 DOM 스캔으로 통합
   - `src/app/api/link-preview/route.ts`: 캐시 hit/miss + build + total `Server-Timing` 헤더 계측 추가
   - `src/__tests__/api/link-preview.route.test.ts`: `Server-Timing`의 cache hit/miss 노출 회귀 테스트 추가
+- 서버 신문고 보드 추가
+  - `src/components/layout/Header.tsx`: 헤더 타이틀 드롭다운에 `포럼 메인`/`서버 신문고` 전환 추가
+  - `src/app/ombudsman/page.tsx`, `src/app/ombudsman/new/page.tsx`: 신문고 목록/작성 페이지 추가
+  - `src/app/api/server-address/check/route.ts`: 서버 주소 열림 확인 API 추가
+  - `src/app/api/posts/route.ts`, `src/lib/post-board.ts`: board/serverAddress 메타데이터 저장 및 검증 연동
+  - `src/lib/services/posts-service.ts`, `src/lib/services/post-detail-service.ts`: board/serverAddress 응답 계약 확장
+  - 신문고 UX 보강
+    - 신문고 상태에서 키컬러/배경 보라 톤 자동 전환(`html[data-board="ombudsman"]`)
+    - 서버 주소 태그 클릭 시 클립보드 복사(`src/components/posts/ServerAddressTag.tsx`)
+    - 상세 페이지에서 신문고 게시글은 목록(back)이 `/ombudsman`로 고정
 
 ## 10) 다음 최적화 후보
 

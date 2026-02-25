@@ -90,3 +90,21 @@ Windows PowerShell bootstrap is still available for compatibility
 ```powershell
 npm run setup:win
 ```
+
+## 8) 서버 신문고 기능
+
+- 헤더 타이틀 클릭 시 드롭다운에서 `스티브 갤러리 개발 포럼 Beta v0.2` / `스티브 갤러리 서버 신문고 Beta v0.1` 전환 가능
+- `서버 신문고` 목록 페이지: `/ombudsman`
+- `서버 신문고` 작성 페이지: `/ombudsman/new`
+- 신문고 작성 시 `태그` 대신 `서버 주소(host:port)`를 입력 (형식 검증만 수행)
+- 신문고 목록/상세에서 서버 주소 태그 클릭 시 클립보드 복사
+- 신문고 상태(`/ombudsman`, `/posts/[id]?board=ombudsman`)에서는 키컬러/배경이 보라 톤으로 자동 전환
+
+서버 주소 확인 API
+
+```bash
+GET /api/server-address/check?address=mc.example.com:25565
+```
+
+- 성공 응답 예시: `{ ok: true, open: true|false, latencyMs: number, normalizedAddress: string }`
+- 신문고 포스트는 내부 메타 태그(`__sys:board:ombudsman`, `__sys:server:<address>`)로 저장되며, 일반 태그 목록에서는 숨김 처리됨
