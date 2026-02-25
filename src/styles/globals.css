@@ -41,6 +41,17 @@
 	--font-sans: "Noto Sans KR", "Malgun Gothic", "Apple SD Gothic Neo", ui-sans-serif, system-ui, sans-serif;
 }
 
+@layer theme {
+	html[data-board="ombudsman"] {
+		--color-accent: #7c3aed;
+		--color-accent-hover: #6d28d9;
+		--color-bg-primary: #2a2333;
+		--color-bg-secondary: #241e2c;
+		--color-bg-tertiary: #1e1925;
+		--color-border: #4a3f5a;
+	}
+}
+
 @layer base {
 	html {
 		overflow-y: scroll;

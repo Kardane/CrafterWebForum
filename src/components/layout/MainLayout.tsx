@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
@@ -13,6 +13,19 @@ interface MainLayoutProps {
 export default function MainLayout({ children }: MainLayoutProps) {
 	const pathname = usePathname();
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+	useEffect(() => {
+		if (typeof window === "undefined") {
+			return;
+		}
+		const queryBoardIsOmbudsman = new URLSearchParams(window.location.search).get("board") === "ombudsman";
+		const isOmbudsmanTheme = pathname.startsWith("/ombudsman") || queryBoardIsOmbudsman;
+		if (isOmbudsmanTheme) {
+			document.documentElement.dataset.board = "ombudsman";
+		} else {
+			delete document.documentElement.dataset.board;
+		}
+	}, [pathname]);
 
 	// 인증 플로우 페이지에서는 사이드바/헤더 숨김
 	const isAuthPage =
