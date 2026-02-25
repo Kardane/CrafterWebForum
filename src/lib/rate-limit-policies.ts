@@ -31,4 +31,9 @@ export const RATE_LIMIT_POLICIES: Record<string, RateLimitPolicy> = {
 		limit: 30,
 		windowMs: 60_000,
 	},
+	serverAddressCheck: {
+		namespace: "server:address:check",
+		limit: 30,
+		windowMs: 60_000,
+	},
 };
