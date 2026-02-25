@@ -36,6 +36,7 @@ export default async function Home(props: PageProps) {
 		data = await listPosts({
 			page: 1,
 			limit: toPositiveInt(searchParams.limit, 12),
+			board: "forum",
 			tag: searchParams.tag ?? null,
 			sort: searchParams.sort ?? "activity",
 			search: searchParams.search ?? "",
@@ -48,7 +49,7 @@ export default async function Home(props: PageProps) {
 
 	return (
 		<div className="max-w-4xl mx-auto">
-			<PostFilters totalPosts={Number(data.metadata.total ?? 0)} />
+			<PostFilters totalPosts={Number(data.metadata.total ?? 0)} board="forum" />
 
 			<div className="min-h-[500px]">
 				<PostList
@@ -56,6 +57,7 @@ export default async function Home(props: PageProps) {
 					totalPages={data.metadata.totalPages || 0}
 					initialPage={Number(data.metadata.page || 1)}
 					initialLimit={Number(data.metadata.limit || 12)}
+					board="forum"
 				/>
 			</div>
 		</div>

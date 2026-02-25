@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import classNames from "classnames";
 import { POST_TAGS } from "@/constants/post-tags";
 import Link from "next/link";
@@ -18,10 +18,12 @@ const SORT_OPTIONS = [
 
 interface PostFiltersProps {
 	totalPosts?: number;
+	board?: "forum" | "ombudsman";
 }
 
-export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
+export default function PostFilters({ totalPosts = 0, board = "forum" }: PostFiltersProps) {
 	const router = useRouter();
+	const pathname = usePathname();
 	const searchParams = useSearchParams();
 
 	const currentTag = searchParams.get("tag") || "";
@@ -34,6 +36,7 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 	// URL 파라미터 업데이트 함수
 	const updateParams = (key: string, value: string) => {
 		const params = new URLSearchParams(searchParams.toString());
+		params.set("board", board);
 		if (value) {
 			params.set(key, value);
 		} else {
@@ -43,7 +46,7 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 		if (key !== "page") {
 			params.delete("page");
 		}
-		router.push(`/?${params.toString()}`);
+		router.push(`${pathname}?${params.toString()}`);
 	};
 
 	const handleSearch = (e: React.FormEvent) => {
@@ -56,13 +59,13 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 			<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 				{/* 좌측: 새 포스트 + 검색 */}
 				<div className="flex w-full min-w-0 flex-wrap items-center gap-2 lg:flex-1">
-					<Link
-						href="/posts/new"
-						className="btn btn-primary h-9 gap-2 px-3 whitespace-nowrap"
-					>
-						<Plus size={18} />
-						<span>{text("postFilters.newPost")}</span>
-					</Link>
+						<Link
+							href={board === "ombudsman" ? "/ombudsman/new" : "/posts/new"}
+							className="btn btn-primary h-9 gap-2 px-3 whitespace-nowrap"
+						>
+							<Plus size={18} />
+							<span>{board === "ombudsman" ? "서버 포스트 작성" : text("postFilters.newPost")}</span>
+						</Link>
 
 					<form
 						onSubmit={handleSearch}
@@ -106,18 +109,20 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 							</div>
 						</div>
 
-						<button
-							onClick={() => setIsTagsOpen(!isTagsOpen)}
-							className={classNames(
-								"h-9 rounded-md border px-4 text-sm font-medium transition-colors flex items-center gap-2",
-								isTagsOpen
-									? "bg-bg-secondary border-text-muted text-text-primary"
-									: "bg-bg-tertiary border-border text-text-secondary hover:bg-bg-secondary"
-							)}
-						>
-							{text("postFilters.tagsButton")}
-							<span className="text-[10px]">{isTagsOpen ? "▲" : "▼"}</span>
-						</button>
+						{board === "forum" && (
+							<button
+								onClick={() => setIsTagsOpen(!isTagsOpen)}
+								className={classNames(
+									"h-9 rounded-md border px-4 text-sm font-medium transition-colors flex items-center gap-2",
+									isTagsOpen
+										? "bg-bg-secondary border-text-muted text-text-primary"
+										: "bg-bg-tertiary border-border text-text-secondary hover:bg-bg-secondary"
+								)}
+							>
+								{text("postFilters.tagsButton")}
+								<span className="text-[10px]">{isTagsOpen ? "▲" : "▼"}</span>
+							</button>
+						)}
 					</div>
 					<div className="text-sm font-medium text-text-muted whitespace-nowrap">
 						{text("postFilters.totalPosts", { count: totalPosts.toLocaleString() })}
@@ -126,6 +131,7 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 			</div>
 
 			{/* 태그 목록 */}
+			{board === "forum" && (
 			<div
 				className={classNames(
 					"flex flex-wrap gap-2 overflow-hidden transition-all duration-300",
@@ -158,6 +164,7 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 					</button>
 				))}
 			</div>
+			)}
 		</div>
 	);
 }

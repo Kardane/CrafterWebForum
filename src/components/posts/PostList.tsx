@@ -19,6 +19,8 @@ interface Post {
 	likes: number;
 	commentCount: number;
 	tags: string[];
+	board?: "forum" | "ombudsman";
+	serverAddress?: string | null;
 	unreadCount?: number;
 	userLiked?: boolean;
 }
@@ -28,6 +30,7 @@ interface PostListProps {
 	totalPages: number;
 	initialPage: number;
 	initialLimit: number;
+	board?: "forum" | "ombudsman";
 }
 
 interface PostsResponse {
@@ -77,6 +80,7 @@ export default function PostList({
 	totalPages,
 	initialPage,
 	initialLimit,
+	board = "forum",
 }: PostListProps) {
 	const searchParams = useSearchParams();
 	const searchQuery = searchParams.toString();
@@ -126,11 +130,12 @@ export default function PostList({
 	const baseParams = useMemo(() => {
 		const params = new URLSearchParams(searchParams.toString());
 		params.delete("page");
+		params.set("board", board);
 		if (!params.get("limit")) {
 			params.set("limit", String(initialLimit));
 		}
 		return params;
-	}, [searchParams, initialLimit]);
+	}, [searchParams, initialLimit, board]);
 
 	const loadNextPage = useCallback(async () => {
 		if (!hasMore || isLoadingMore) {
@@ -254,6 +259,8 @@ export default function PostList({
 						likeCount={post.likes}
 							commentCount={post.commentCount}
 							tags={post.tags}
+							board={post.board}
+							serverAddress={post.serverAddress}
 							unreadCount={post.unreadCount}
 							userLiked={post.userLiked}
 							onNavigate={handlePostNavigate}
