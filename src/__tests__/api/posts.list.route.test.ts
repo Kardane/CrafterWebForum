@@ -177,10 +177,61 @@ describe("GET /api/posts", () => {
 		expect(postFindManyMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				where: expect.objectContaining({
-					OR: expect.arrayContaining([
-						{ title: { contains: "레드스톤" } },
-						{ content: { contains: "레드스톤" } },
-						{ comments: { some: { content: { contains: "레드스톤" } } } },
+					AND: expect.arrayContaining([
+						expect.objectContaining({
+							OR: expect.arrayContaining([
+								{ title: { contains: "레드스톤" } },
+								{ content: { contains: "레드스톤" } },
+								{ comments: { some: { content: { contains: "레드스톤" } } } },
+							]),
+						}),
+					]),
+				}),
+			})
+		);
+	});
+
+	it("returns board and serverAddress metadata for ombudsman list", async () => {
+		authMock.mockResolvedValue({ user: { id: "7" } });
+		postFindManyMock.mockResolvedValue([
+			{
+				id: 31,
+				title: "ombudsman",
+				content: "check",
+				tags: '["__sys:board:ombudsman","__sys:server:mc.example.com:25565"]',
+				likes: 2,
+				views: 5,
+				createdAt: new Date("2026-02-12T00:00:00Z"),
+				updatedAt: new Date("2026-02-12T00:05:00Z"),
+				author: { nickname: "reporter", minecraftUuid: null },
+				_count: { comments: 0 },
+			},
+		]);
+		postCountMock.mockResolvedValue(1);
+		likeFindManyMock.mockResolvedValue([]);
+		postReadFindManyMock.mockResolvedValue([]);
+
+		const { GET } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts?board=ombudsman");
+
+		const res = await GET(req as never);
+		expect(res.status).toBe(200);
+		const payload = (await res.json()) as {
+			posts: Array<{ board: string; serverAddress: string | null; tags: string[] }>;
+		};
+
+		expect(payload.posts[0]).toMatchObject({
+			board: "ombudsman",
+			serverAddress: "mc.example.com:25565",
+			tags: [],
+		});
+		expect(postFindManyMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					AND: expect.arrayContaining([
+						expect.objectContaining({
+							tags: { contains: '"__sys:board:ombudsman"' },
+						}),
 					]),
 				}),
 			})
