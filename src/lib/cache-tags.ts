@@ -1,4 +1,5 @@
 import { revalidateTag } from "next/cache";
+import { isReservedPostTag } from "@/lib/post-board";
 
 const POSTS_LIST_BASE_TAG = "posts:list";
 const POSTS_LIST_TAG_PREFIX = "posts:list:tag:";
@@ -33,7 +34,9 @@ export function parsePostTags(rawTags: string | null): string[] {
 		if (!Array.isArray(parsed)) {
 			return [];
 		}
-		return normalizeTags(parsed.filter((tag): tag is string => typeof tag === "string"));
+		return normalizeTags(
+			parsed.filter((tag): tag is string => typeof tag === "string" && !isReservedPostTag(tag))
+		);
 	} catch {
 		return [];
 	}
