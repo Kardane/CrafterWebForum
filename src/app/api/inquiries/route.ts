@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { toSessionUserId } from '@/lib/session-user';
-import { isPrivilegedNickname } from '@/config/admin-policy';
 import { broadcastRealtime } from '@/lib/realtime/server-broadcast';
 import { REALTIME_EVENTS, REALTIME_TOPICS } from '@/lib/realtime/constants';
 
@@ -11,8 +10,7 @@ import { REALTIME_EVENTS, REALTIME_TOPICS } from '@/lib/realtime/constants';
  * GET /api/inquiries
  * 내 문의 목록 조회 (관리자는 전체 목록)
  */
-export async function GET(request: NextRequest) {
-	void request;
+export async function GET() {
 	try {
 		const session = await auth();
 		if (!session?.user) {
@@ -24,8 +22,7 @@ export async function GET(request: NextRequest) {
 			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 		}
 
-		const canAccessAllInquiries =
-			session.user.role === 'admin' || isPrivilegedNickname(session.user.nickname);
+		const canAccessAllInquiries = session.user.role === 'admin';
 
 		const where = canAccessAllInquiries
 			? { archivedAt: null }

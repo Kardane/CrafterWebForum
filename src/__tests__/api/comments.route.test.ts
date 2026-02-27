@@ -119,3 +119,61 @@ describe("POST /api/comments/[id]/pin", () => {
 		expect(body.comment.isPinned).toBe(true);
 	});
 });
+
+describe("DELETE /api/comments/[id]", () => {
+	beforeEach(() => {
+		vi.resetModules();
+		authMock.mockReset();
+		commentFindUniqueMock.mockReset();
+		commentDeleteManyMock.mockReset();
+		postUpdateMock.mockReset();
+	});
+
+	it("returns 401 when unauthenticated", async () => {
+		authMock.mockResolvedValue(null);
+		const { DELETE } = await import("@/app/api/comments/[id]/route");
+		const req = new Request("http://localhost/api/comments/1", { method: "DELETE" });
+		const res = await DELETE(req as never, { params: Promise.resolve({ id: "1" }) });
+		expect(res.status).toBe(401);
+	});
+
+	it("returns 403 for non-author non-admin user", async () => {
+		authMock.mockResolvedValue({ user: { id: "5", role: "user" } });
+		commentFindUniqueMock.mockResolvedValue({ id: 1, authorId: 9, postId: 3 });
+
+		const { DELETE } = await import("@/app/api/comments/[id]/route");
+		const req = new Request("http://localhost/api/comments/1", { method: "DELETE" });
+		const res = await DELETE(req as never, { params: Promise.resolve({ id: "1" }) });
+
+		expect(res.status).toBe(403);
+		expect(commentDeleteManyMock).not.toHaveBeenCalled();
+	});
+
+	it("allows comment author to delete", async () => {
+		authMock.mockResolvedValue({ user: { id: "5", role: "user" } });
+		commentFindUniqueMock.mockResolvedValue({ id: 1, authorId: 5, postId: 3 });
+		commentDeleteManyMock.mockResolvedValue({ count: 1 });
+		postUpdateMock.mockResolvedValue({ id: 3 });
+
+		const { DELETE } = await import("@/app/api/comments/[id]/route");
+		const req = new Request("http://localhost/api/comments/1", { method: "DELETE" });
+		const res = await DELETE(req as never, { params: Promise.resolve({ id: "1" }) });
+
+		expect(res.status).toBe(200);
+		expect(commentDeleteManyMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("allows admin to delete", async () => {
+		authMock.mockResolvedValue({ user: { id: "2", role: "admin" } });
+		commentFindUniqueMock.mockResolvedValue({ id: 1, authorId: 9, postId: 3 });
+		commentDeleteManyMock.mockResolvedValue({ count: 1 });
+		postUpdateMock.mockResolvedValue({ id: 3 });
+
+		const { DELETE } = await import("@/app/api/comments/[id]/route");
+		const req = new Request("http://localhost/api/comments/1", { method: "DELETE" });
+		const res = await DELETE(req as never, { params: Promise.resolve({ id: "1" }) });
+
+		expect(res.status).toBe(200);
+		expect(commentDeleteManyMock).toHaveBeenCalledTimes(1);
+	});
+});

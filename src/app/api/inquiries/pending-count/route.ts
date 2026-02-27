@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { isPrivilegedNickname } from "@/config/admin-policy";
 
 function isArchivedAtColumnMissing(error: unknown) {
 	return error instanceof Error && error.message.includes("archivedAt");
@@ -18,8 +17,7 @@ export async function GET() {
 			return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 		}
 
-		const canAccessAdmin =
-			session.user.role === "admin" || isPrivilegedNickname(session.user.nickname);
+		const canAccessAdmin = session.user.role === "admin";
 
 		if (!canAccessAdmin) {
 			return NextResponse.json({ count: 0 });

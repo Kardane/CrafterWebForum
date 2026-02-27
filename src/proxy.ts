@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { auth } from "@/auth.config";
-import { isPrivilegedNickname } from "@/config/admin-policy";
 
 export async function proxy(request: NextRequest) {
 	const { pathname } = request.nextUrl;
@@ -37,13 +36,10 @@ export async function proxy(request: NextRequest) {
 
 	if (isAdminRoute && session?.user) {
 		const role = (session.user as { role?: string }).role;
-		const nickname = (session.user as { nickname?: string }).nickname;
-		if (!role && !nickname) {
+		if (!role) {
 			return NextResponse.next();
 		}
-		const hasAdminRole = role === "admin";
-		const hasPrivilegedNickname = isPrivilegedNickname(nickname);
-		if (!hasAdminRole && !hasPrivilegedNickname) {
+		if (role !== "admin") {
 			return NextResponse.json(
 				{ error: "Forbidden: Admin access required" },
 				{ status: 403 }

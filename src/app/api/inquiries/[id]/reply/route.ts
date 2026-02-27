@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { toSessionUserId } from '@/lib/session-user';
-import { isPrivilegedNickname } from '@/config/admin-policy';
 import { broadcastRealtime } from '@/lib/realtime/server-broadcast';
 import { REALTIME_EVENTS, REALTIME_TOPICS } from '@/lib/realtime/constants';
 
@@ -48,8 +47,7 @@ export async function POST(
 		}
 
 		// 관리자 또는 원작자만 답변 가능
-		const canAccessAdmin =
-			session.user.role === 'admin' || isPrivilegedNickname(session.user.nickname);
+		const canAccessAdmin = session.user.role === 'admin';
 		if (!canAccessAdmin && inquiry.authorId !== sessionUserId) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}

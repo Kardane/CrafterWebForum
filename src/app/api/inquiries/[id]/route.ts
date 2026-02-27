@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
 import { toSessionUserId } from '@/lib/session-user';
-import { isPrivilegedNickname } from '@/config/admin-policy';
 
 
 /**
@@ -10,7 +9,7 @@ import { isPrivilegedNickname } from '@/config/admin-policy';
  * 문의 상세 조회
  */
 export async function GET(
-	request: NextRequest,
+	_request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
 	try {
@@ -58,8 +57,7 @@ export async function GET(
 		}
 
 		// 권한 검증: 본인 또는 관리자만 조회 가능
-		const canAccessAdmin =
-			session.user.role === 'admin' || isPrivilegedNickname(session.user.nickname);
+		const canAccessAdmin = session.user.role === 'admin';
 		if (inquiry.authorId !== sessionUserId && !canAccessAdmin) {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}

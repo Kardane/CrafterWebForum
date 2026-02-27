@@ -14,25 +14,25 @@ afterEach(() => {
 });
 
 describe("admin policy", () => {
-	it("treats Karned as admin by default", async () => {
+	it("never treats nickname as privileged", async () => {
 		delete process.env.ADMIN_NICKNAMES;
 		vi.resetModules();
 
 		const { isPrivilegedNickname } = await import("@/config/admin-policy");
 
-		expect(isPrivilegedNickname("Karned")).toBe(true);
-		expect(isPrivilegedNickname("karned")).toBe(true);
+		expect(isPrivilegedNickname("Karned")).toBe(false);
+		expect(isPrivilegedNickname("karned")).toBe(false);
 		expect(isPrivilegedNickname("another-user")).toBe(false);
 	});
 
-	it("merges ADMIN_NICKNAMES with defaults", async () => {
+	it("ignores ADMIN_NICKNAMES overrides", async () => {
 		process.env.ADMIN_NICKNAMES = "Alice, Bob";
 		vi.resetModules();
 
 		const { isPrivilegedNickname } = await import("@/config/admin-policy");
 
-		expect(isPrivilegedNickname("alice")).toBe(true);
-		expect(isPrivilegedNickname("BOB")).toBe(true);
-		expect(isPrivilegedNickname("Karned")).toBe(true);
+		expect(isPrivilegedNickname("alice")).toBe(false);
+		expect(isPrivilegedNickname("BOB")).toBe(false);
+		expect(isPrivilegedNickname("Karned")).toBe(false);
 	});
 });

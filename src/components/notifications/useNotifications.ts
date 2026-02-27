@@ -5,10 +5,62 @@ import { useSession } from "next-auth/react";
 import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
+function base64UrlToArrayBuffer(base64Url: string): ArrayBuffer {
+	const padding = "=".repeat((4 - (base64Url.length % 4)) % 4);
+	const base64 = (base64Url + padding).replace(/-/g, "+").replace(/_/g, "/");
+	const raw = atob(base64);
+	const buffer = new ArrayBuffer(raw.length);
+	const output = new Uint8Array(buffer);
+	for (let index = 0; index < raw.length; index += 1) {
+		output[index] = raw.charCodeAt(index);
+	}
+	return buffer;
+}
+
 export function useNotifications() {
 	const { data: session } = useSession();
 	const sessionUserId = Number(session?.user?.id ?? 0);
 	const [unreadCount, setUnreadCount] = useState(0);
+
+	const ensurePushSubscription = useCallback(async () => {
+		if (!sessionUserId || typeof window === "undefined") {
+			return;
+		}
+		if (!navigator.serviceWorker || !window.PushManager || !window.Notification) {
+			return;
+		}
+		const vapidPublicKey = (process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "").trim();
+		if (!vapidPublicKey) {
+			return;
+		}
+
+		try {
+			const registration = await navigator.serviceWorker.register("/sw.js");
+			let permission = Notification.permission;
+			if (permission === "default") {
+				permission = await Notification.requestPermission();
+			}
+			if (permission !== "granted") {
+				return;
+			}
+
+			const existingSubscription = await registration.pushManager.getSubscription();
+			const subscription =
+				existingSubscription ??
+				(await registration.pushManager.subscribe({
+					userVisibleOnly: true,
+					applicationServerKey: base64UrlToArrayBuffer(vapidPublicKey),
+				}));
+
+			await fetch("/api/push/subscribe", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(subscription),
+			});
+		} catch (error) {
+			console.error("Push subscription setup failed:", error);
+		}
+	}, [sessionUserId]);
 
 	const refreshUnreadCount = useCallback(async () => {
 		if (!sessionUserId) {
@@ -83,11 +135,12 @@ export function useNotifications() {
 	useEffect(() => {
 		const timer = window.setTimeout(() => {
 			void refreshUnreadCount();
+			void ensurePushSubscription();
 		}, 0);
 		return () => {
 			window.clearTimeout(timer);
 		};
-	}, [refreshUnreadCount]);
+	}, [ensurePushSubscription, refreshUnreadCount]);
 
 	useRealtimeBroadcast(
 		sessionUserId ? REALTIME_TOPICS.user(sessionUserId) : null,

@@ -2,7 +2,6 @@ import NextAuth, { NextAuthConfig } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { isPrivilegedNickname } from "@/config/admin-policy";
 
 
 export const authConfig: NextAuthConfig = {
@@ -47,19 +46,9 @@ export const authConfig: NextAuthConfig = {
 						return null;
 					}
 
-					// 관리 닉네임 정책과 마지막 접속 시각을 한 번에 반영
-					const shouldBeAdmin = isPrivilegedNickname(foundUser.nickname);
-					const updateData: { lastAuthAt: Date; role?: string; isApproved?: number } = {
+					const updateData: { lastAuthAt: Date } = {
 						lastAuthAt: new Date(),
 					};
-
-					if (shouldBeAdmin && foundUser.role !== "admin") {
-						updateData.role = "admin";
-					}
-
-					if (shouldBeAdmin && foundUser.isApproved !== 1) {
-						updateData.isApproved = 1;
-					}
 
 					const updatedUser = await prisma.user.update({
 						where: { id: foundUser.id },

@@ -29,9 +29,9 @@ describe("admin authorization", () => {
 		if ("response" in result) expect(result.response.status).toBe(403);
 	});
 
-	it("allows privileged nickname even when role is user", async () => {
+	it("allows admin role", async () => {
 		authMock.mockResolvedValue({
-			user: { id: 1, role: "user", nickname: "Karned", isApproved: 1 },
+			user: { id: 1, role: "admin", nickname: "u", isApproved: 1 },
 		});
 		const { requireAdmin } = await import("@/lib/admin-auth");
 		const result = await requireAdmin();

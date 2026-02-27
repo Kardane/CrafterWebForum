@@ -64,12 +64,69 @@ function buildDateKeys(startDate: Date, days: number) {
 	});
 }
 
-function buildDailyBuckets(records: Array<{ createdAt: Date }>) {
-	return records.reduce<Record<string, number>>((acc, record) => {
-		const dateKey = getDateKey(record.createdAt);
-		acc[dateKey] = (acc[dateKey] ?? 0) + 1;
+type DailyBucketRow = {
+	dateKey: string | null;
+	total: unknown;
+};
+
+function normalizeCountValue(value: unknown): number {
+	if (typeof value === "number" && Number.isFinite(value)) {
+		return value;
+	}
+	if (typeof value === "bigint") {
+		return Number(value);
+	}
+	if (typeof value === "string") {
+		const parsed = Number.parseInt(value, 10);
+		return Number.isFinite(parsed) ? parsed : 0;
+	}
+	return 0;
+}
+
+function buildDailyBucketsFromRows(rows: DailyBucketRow[]) {
+	return rows.reduce<Record<string, number>>((acc, row) => {
+		if (!row.dateKey) {
+			return acc;
+		}
+		acc[row.dateKey] = normalizeCountValue(row.total);
 		return acc;
 	}, {});
+}
+
+function sumDailyBuckets(buckets: Record<string, number>) {
+	return Object.values(buckets).reduce((sum, count) => sum + count, 0);
+}
+
+async function findUserDailyBuckets(rangeStart: Date) {
+	const rows = await prisma.$queryRaw<DailyBucketRow[]>`
+		SELECT strftime('%Y-%m-%d', "createdAt") as dateKey, COUNT(*) as total
+		FROM "User"
+		WHERE "deletedAt" IS NULL
+			AND "createdAt" >= ${rangeStart}
+		GROUP BY strftime('%Y-%m-%d', "createdAt")
+	`;
+	return buildDailyBucketsFromRows(rows);
+}
+
+async function findPostDailyBuckets(rangeStart: Date) {
+	const rows = await prisma.$queryRaw<DailyBucketRow[]>`
+		SELECT strftime('%Y-%m-%d', "createdAt") as dateKey, COUNT(*) as total
+		FROM "Post"
+		WHERE "deletedAt" IS NULL
+			AND "createdAt" >= ${rangeStart}
+		GROUP BY strftime('%Y-%m-%d', "createdAt")
+	`;
+	return buildDailyBucketsFromRows(rows);
+}
+
+async function findCommentDailyBuckets(rangeStart: Date) {
+	const rows = await prisma.$queryRaw<DailyBucketRow[]>`
+		SELECT strftime('%Y-%m-%d', "createdAt") as dateKey, COUNT(*) as total
+		FROM "Comment"
+		WHERE "createdAt" >= ${rangeStart}
+		GROUP BY strftime('%Y-%m-%d', "createdAt")
+	`;
+	return buildDailyBucketsFromRows(rows);
 }
 
 function buildCoreTrend(
@@ -126,12 +183,9 @@ export async function GET(request: Request) {
 			inquiries,
 			pendingUsers,
 			pendingInquiries,
-			userCountBeforeRange,
-			postCountBeforeRange,
-			commentCountBeforeRange,
-			recentUsers,
-			recentPosts,
-			recentComments,
+			userDailyBuckets,
+			postDailyBuckets,
+			commentDailyBuckets,
 		] = await Promise.all([
 			prisma.user.count({ where: { deletedAt: null } }),
 			prisma.post.count({ where: { deletedAt: null } }),
@@ -139,37 +193,23 @@ export async function GET(request: Request) {
 			countActiveInquiries(),
 			prisma.user.count({ where: { deletedAt: null, isApproved: 0 } }),
 			countPendingInquiries(),
-			prisma.user.count({
-				where: { deletedAt: null, createdAt: { lt: rangeStart } },
-			}),
-			prisma.post.count({
-				where: { deletedAt: null, createdAt: { lt: rangeStart } },
-			}),
-			prisma.comment.count({
-				where: { createdAt: { lt: rangeStart } },
-			}),
-			prisma.user.findMany({
-				where: { deletedAt: null, createdAt: { gte: rangeStart } },
-				select: { createdAt: true },
-			}),
-			prisma.post.findMany({
-				where: { deletedAt: null, createdAt: { gte: rangeStart } },
-				select: { createdAt: true },
-			}),
-			prisma.comment.findMany({
-				where: { createdAt: { gte: rangeStart } },
-				select: { createdAt: true },
-			}),
+			findUserDailyBuckets(rangeStart),
+			findPostDailyBuckets(rangeStart),
+			findCommentDailyBuckets(rangeStart),
 		]);
+
+		const userCountBeforeRange = Math.max(users - sumDailyBuckets(userDailyBuckets), 0);
+		const postCountBeforeRange = Math.max(posts - sumDailyBuckets(postDailyBuckets), 0);
+		const commentCountBeforeRange = Math.max(comments - sumDailyBuckets(commentDailyBuckets), 0);
 
 		const coreTrend = buildCoreTrend(
 			dateKeys,
 			userCountBeforeRange,
 			postCountBeforeRange,
 			commentCountBeforeRange,
-			buildDailyBuckets(recentUsers),
-			buildDailyBuckets(recentPosts),
-			buildDailyBuckets(recentComments)
+			userDailyBuckets,
+			postDailyBuckets,
+			commentDailyBuckets
 		);
 
 		return NextResponse.json({

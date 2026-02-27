@@ -18,6 +18,24 @@ describe("markdown utils", () => {
 		expect(html).not.toContain("window.open");
 	});
 
+	it("blocks javascript protocol links and renders plain text", () => {
+		const html = processMarkdown("[click](javascript:alert(1))");
+		expect(html).not.toContain("javascript:");
+		expect(html).not.toContain("<a href=");
+		expect(html).toContain("click");
+	});
+
+	it("adds noopener noreferrer to external links", () => {
+		const html = processMarkdown("[site](https://example.com)");
+		expect(html).toContain("rel=\"noopener noreferrer\"");
+	});
+
+	it("drops unsafe markdown image url", () => {
+		const html = processMarkdown("![alt](javascript:alert(1))");
+		expect(html).not.toContain("<img");
+		expect(html).toContain("alt");
+	});
+
 	it("removes redundant br around markdown images", () => {
 		const html = processMarkdown("![alt](https://example.com/a.png)\n다음 줄 텍스트");
 		expect(html).toContain("<img src=\"https://example.com/a.png\"");

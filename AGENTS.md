@@ -1,6 +1,6 @@
 # CrafterWebForum AGENTS
 답변 한국어로 해.
-최종 업데이트: 2026-02-26
+최종 업데이트: 2026-02-27
 
 ## 1) 저장소 기준
 
@@ -147,6 +147,30 @@
     - `src/lib/services/posts-service.ts`: 신문고 목록에서 사용자 오버레이(`postRead`) 조회를 건너뛰어 `queryAux` 비용 감소
     - `src/app/ombudsman/page.tsx`, `src/app/api/posts/route.ts`: 신문고 board 요청에 `includeUserOverlay: false` 적용
     - `src/components/posts/PostList.tsx`: 목록 쿼리 파라미터를 정규화한 캐시 키로 페이지 캐시 적중률 개선
+- 브라우저 종료 알림 전달(Web Push + Vercel Cron)
+  - `prisma/schema.prisma`: `PushSubscription`, `NotificationDelivery` 모델 추가
+  - `src/app/api/push/subscribe/route.ts`, `src/app/api/push/unsubscribe/route.ts`: 구독 등록/해제 API 추가
+  - `src/app/api/push/subscribe/route.ts`: `GET`으로 내 활성 구독 정보 조회 지원
+  - `src/app/api/jobs/push-dispatch/route.ts`: cron 디스패처(Authorization: Bearer CRON_SECRET) 추가
+  - `src/components/notifications/useNotifications.ts`, `public/sw.js`: 서비스워커 등록 및 푸시 구독 연동
+  - `src/app/api/posts/[id]/comments/route.ts`: 멘션 알림 생성 시 web_push outbox 적재
+  - `src/components/profile/PushSubscriptionPanel.tsx`, `src/app/profile/page.tsx`: 내 정보 페이지에서 푸시 구독 버튼/구독 상태 표시
+ - 보안 하드닝
+    - `src/lib/markdown.ts`: markdown 링크/이미지 URL allowlist 강화 및 외부 링크 `noopener noreferrer` 적용
+    - `src/lib/push.ts`: push endpoint/키 길이 검증 강화(https + 비로컬/사설망)
+    - `src/app/api/push/subscribe/route.ts`: endpoint 소유자 충돌 시 `409` 처리 + GET 레이트리밋 적용
+    - `src/app/api/jobs/push-dispatch/route.ts`: cron secret 비교를 digest 기반 timing-safe로 강화
+    - `src/auth.ts`, `src/lib/admin-auth.ts`, `src/proxy.ts`, `src/app/api/inquiries/*`: 닉네임 기반 관리자 우회 제거(관리자 role만 허용)
+    - `src/app/api/auth/[...nextauth]/route.ts`, `src/lib/rate-limit-policies.ts`: credential 로그인 callback에 `authLogin` 레이트리밋 적용
+    - `src/__tests__/lib/markdown.test.ts`, `src/__tests__/lib/push.test.ts`: 보안 회귀 테스트 추가
+ - 백엔드 성능 최적화(P1)
+   - `src/app/api/admin/stats/route.ts`: 일별 추세 계산을 DB 집계 쿼리로 전환해 전량 `findMany` 비용 축소
+   - `src/app/api/posts/[id]/comments/route.ts`: 멘션 푸시 큐 적재를 `notificationDelivery.createMany` 배치 방식으로 전환
+   - `src/app/api/posts/[id]/comments/route.ts`: `limit/cursor` 기반 루트 댓글 커서 페이지네이션 추가(기본 응답 계약 유지)
+   - `src/__tests__/api/post-comments.route.test.ts`: 페이지네이션/멘션 배치 적재 회귀 테스트 추가
+- 댓글 삭제 권한 회귀 강화
+  - `src/app/api/comments/[id]/route.ts`: 삭제 권한을 작성자 또는 관리자만 허용 정책 유지
+  - `src/__tests__/api/comments.route.test.ts`: DELETE 권한 케이스(401/403/author/admin 허용) 보강
 
 ## 10) 다음 최적화 후보
 

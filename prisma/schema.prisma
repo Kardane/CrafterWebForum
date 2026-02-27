@@ -39,6 +39,8 @@ model User {
   inquiryReplies   InquiryReply[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsSent     Notification[] @relation("NotificationActor")
+  pushSubscriptions     PushSubscription[]
+  notificationDeliveries NotificationDelivery[]
 
   @@index([nickname])
 }
@@ -224,6 +226,48 @@ model Notification {
 
   user   User  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
   actor  User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  deliveries NotificationDelivery[]
 
   @@index([userId, isRead, createdAt])
+}
+
+model PushSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  isActive  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries NotificationDelivery[]
+
+  @@index([userId, isActive])
+}
+
+model NotificationDelivery {
+  id               Int      @id @default(autoincrement())
+  notificationId   Int
+  userId           Int
+  subscriptionId   Int?
+  channel          String
+  status           String   @default("queued")
+  attemptCount     Int      @default(0)
+  nextAttemptAt    DateTime @default(now())
+  lastErrorCode    String?
+  lastErrorMessage String?
+  sentAt           DateTime?
+  dedupeKey        String   @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  notification Notification   @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription PushSubscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextAttemptAt])
+  @@index([userId, channel, status])
 }

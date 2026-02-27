@@ -7,6 +7,131 @@ import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/ca
 import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 import { extractMentionNicknames } from "@/lib/mentions";
+import { buildDeliveryDedupeKey } from "@/lib/push";
+
+type MentionTarget = {
+	id: number;
+	nickname: string;
+};
+
+const DEFAULT_COMMENT_ROOT_LIMIT = 20;
+const MAX_COMMENT_ROOT_LIMIT = 50;
+
+const commentAuthorSelect = {
+	id: true,
+	nickname: true,
+	minecraftUuid: true,
+	role: true,
+} as const;
+
+const commentIncludeWithAuthor = {
+	author: {
+		select: commentAuthorSelect,
+	},
+} as const;
+
+async function queueMentionNotificationsAndDeliveries(params: {
+	content: string;
+	actorUserId: number;
+	actorNickname: string;
+	postId: number;
+	commentId: number;
+}): Promise<MentionTarget[]> {
+	const mentionNicknames = extractMentionNicknames(params.content);
+	if (mentionNicknames.length === 0) {
+		return [];
+	}
+
+	const mentionTargets = await prisma.user.findMany({
+		where: {
+			nickname: { in: mentionNicknames },
+			deletedAt: null,
+		},
+		select: {
+			id: true,
+			nickname: true,
+		},
+	});
+
+	const targets = mentionTargets.filter((target) => target.id !== params.actorUserId);
+	if (targets.length === 0) {
+		return [];
+	}
+
+	await prisma.notification.createMany({
+		data: targets.map((target) => ({
+			userId: target.id,
+			actorId: params.actorUserId,
+			type: "mention_comment",
+			message: `${params.actorNickname}님이 회원님을 멘션했음`,
+			postId: params.postId,
+			commentId: params.commentId,
+		})),
+	});
+
+	const createdNotifications = await prisma.notification.findMany({
+		where: {
+			userId: { in: targets.map((target) => target.id) },
+			actorId: params.actorUserId,
+			type: "mention_comment",
+			postId: params.postId,
+			commentId: params.commentId,
+		},
+		select: {
+			id: true,
+			userId: true,
+		},
+	});
+	if (createdNotifications.length === 0) {
+		return targets;
+	}
+
+	const subscriptions = await prisma.pushSubscription.findMany({
+		where: {
+			userId: { in: createdNotifications.map((item) => item.userId) },
+			isActive: 1,
+		},
+		select: {
+			id: true,
+			userId: true,
+		},
+	});
+	if (subscriptions.length === 0) {
+		return targets;
+	}
+
+	const notificationMap = new Map<number, number>();
+	for (const created of createdNotifications) {
+		notificationMap.set(created.userId, created.id);
+	}
+
+	const queuedAt = new Date();
+	const deliveries = subscriptions.flatMap((subscription) => {
+		const notificationId = notificationMap.get(subscription.userId);
+		if (!notificationId) {
+			return [];
+		}
+		return [
+			{
+				notificationId,
+				userId: subscription.userId,
+				subscriptionId: subscription.id,
+				channel: "web_push",
+				status: "queued",
+				nextAttemptAt: queuedAt,
+				dedupeKey: buildDeliveryDedupeKey(notificationId, "web_push", subscription.id),
+			},
+		];
+	});
+
+	if (deliveries.length > 0) {
+		await prisma.notificationDelivery.createMany({
+			data: deliveries,
+		});
+	}
+
+	return targets;
+}
 
 /**
  * GET /api/posts/[id]/comments
@@ -16,7 +141,6 @@ export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
-	void request;
 	try {
 		const { id } = await params;
 		const session = await auth();
@@ -47,28 +171,100 @@ export async function GET(
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
+		const searchParams = new URL(request.url).searchParams;
+		const rawLimit = searchParams.get("limit");
+		const rawCursor = searchParams.get("cursor");
+		const usePagination = rawLimit !== null || rawCursor !== null;
+
+		if (!usePagination) {
 			const comments = await prisma.comment.findMany({
 				where: {
 					postId,
 				},
-				include: {
-					author: {
-						select: {
-							id: true,
-							nickname: true,
-							minecraftUuid: true,
-							role: true,
-						},
-					},
-				},
+				include: commentIncludeWithAuthor,
 				orderBy: [{ createdAt: "asc" }],
 			});
-		const commentsWithPostAuthorFlag = comments.map((comment) => ({
+			const commentsWithPostAuthorFlag = comments.map((comment) => ({
+				...comment,
+				isPostAuthor: comment.author.id === post.authorId,
+			}));
+
+			return NextResponse.json({ comments: buildCommentTree(commentsWithPostAuthorFlag) });
+		}
+
+		const parsedLimit = rawLimit === null ? DEFAULT_COMMENT_ROOT_LIMIT : Number.parseInt(rawLimit, 10);
+		if (!Number.isInteger(parsedLimit) || parsedLimit <= 0) {
+			return NextResponse.json({ error: "Invalid limit" }, { status: 400 });
+		}
+		const limit = Math.min(parsedLimit, MAX_COMMENT_ROOT_LIMIT);
+
+		let cursor: number | null = null;
+		if (rawCursor !== null) {
+			const parsedCursor = Number.parseInt(rawCursor, 10);
+			if (!Number.isInteger(parsedCursor) || parsedCursor <= 0) {
+				return NextResponse.json({ error: "Invalid cursor" }, { status: 400 });
+			}
+			cursor = parsedCursor;
+		}
+
+		const rootComments = await prisma.comment.findMany({
+			where: {
+				postId,
+				parentId: null,
+				...(cursor ? { id: { lt: cursor } } : {}),
+			},
+			include: commentIncludeWithAuthor,
+			orderBy: [{ id: "desc" }],
+			take: limit + 1,
+		});
+
+		const hasMore = rootComments.length > limit;
+		const selectedRoots = hasMore ? rootComments.slice(0, limit) : rootComments;
+		const nextCursor =
+			hasMore && selectedRoots.length > 0
+				? selectedRoots[selectedRoots.length - 1].id
+				: null;
+
+		const commentsById = new Map<number, (typeof selectedRoots)[number]>();
+		for (const root of selectedRoots) {
+			commentsById.set(root.id, root);
+		}
+
+		let frontierIds = selectedRoots.map((comment) => comment.id);
+		while (frontierIds.length > 0) {
+			const children = await prisma.comment.findMany({
+				where: {
+					postId,
+					parentId: { in: frontierIds },
+				},
+				include: commentIncludeWithAuthor,
+				orderBy: [{ id: "asc" }],
+			});
+			const nextFrontier: number[] = [];
+			for (const child of children) {
+				if (commentsById.has(child.id)) {
+					continue;
+				}
+				commentsById.set(child.id, child);
+				nextFrontier.push(child.id);
+			}
+			frontierIds = nextFrontier;
+		}
+
+		const pagedComments = Array.from(commentsById.values()).sort((a, b) => a.id - b.id);
+		const commentsWithPostAuthorFlag = pagedComments.map((comment) => ({
 			...comment,
 			isPostAuthor: comment.author.id === post.authorId,
 		}));
 
-		return NextResponse.json({ comments: buildCommentTree(commentsWithPostAuthorFlag) });
+		return NextResponse.json({
+			comments: buildCommentTree(commentsWithPostAuthorFlag),
+			page: {
+				limit,
+				nextCursor,
+				hasMore,
+			},
+		});
 	} catch (error) {
 		console.error("[API] GET /api/posts/[id]/comments error:", error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -153,44 +349,36 @@ export async function POST(
 				authorId: sessionUserId,
 				parentId: normalizedParentId,
 			},
-			include: {
-				author: {
-					select: {
-						id: true,
-						nickname: true,
-						minecraftUuid: true,
-						role: true,
-					},
-				},
-			},
+			include: commentIncludeWithAuthor,
 		});
 
 		const commentCount = await prisma.comment.count({
 			where: { postId },
 		});
 
-		await prisma.postRead.upsert({
-			where: {
-				userId_postId: {
+		await prisma.$transaction([
+			prisma.postRead.upsert({
+				where: {
+					userId_postId: {
+						userId: sessionUserId,
+						postId,
+					},
+				},
+				update: {
+					lastReadCommentCount: commentCount,
+					updatedAt: new Date(),
+				},
+				create: {
 					userId: sessionUserId,
 					postId,
+					lastReadCommentCount: commentCount,
 				},
-			},
-			update: {
-				lastReadCommentCount: commentCount,
-				updatedAt: new Date(),
-			},
-			create: {
-				userId: sessionUserId,
-				postId,
-				lastReadCommentCount: commentCount,
-			},
-		});
-
-		await prisma.post.update({
-			where: { id: postId },
-			data: { updatedAt: new Date() },
-		});
+			}),
+			prisma.post.update({
+				where: { id: postId },
+				data: { updatedAt: new Date() },
+			}),
+		]);
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId,
@@ -198,47 +386,27 @@ export async function POST(
 			})
 		);
 
-		const mentionNicknames = extractMentionNicknames(content);
-		if (mentionNicknames.length > 0) {
-			const mentionTargets = await prisma.user.findMany({
-				where: {
-					nickname: { in: mentionNicknames },
-					deletedAt: null,
-				},
-				select: {
-					id: true,
-					nickname: true,
+		const actorNickname = session.user.nickname || "누군가";
+		const mentionTargets = await queueMentionNotificationsAndDeliveries({
+			content,
+			actorUserId: sessionUserId,
+			actorNickname,
+			postId,
+			commentId: comment.id,
+		});
+
+		for (const target of mentionTargets) {
+			void broadcastRealtime({
+				topic: REALTIME_TOPICS.user(target.id),
+				event: REALTIME_EVENTS.NOTIFICATION_CREATED,
+				payload: {
+					type: "mention_comment",
+					postId,
+					commentId: comment.id,
+					actorNickname,
+					targetNickname: target.nickname,
 				},
 			});
-
-			const targets = mentionTargets.filter((target) => target.id !== sessionUserId);
-			if (targets.length > 0) {
-				const actorNickname = session.user.nickname || "누군가";
-				await prisma.notification.createMany({
-					data: targets.map((target) => ({
-						userId: target.id,
-						actorId: sessionUserId,
-						type: "mention_comment",
-						message: `${actorNickname}님이 회원님을 멘션했음`,
-						postId,
-						commentId: comment.id,
-					})),
-				});
-
-				for (const target of targets) {
-					void broadcastRealtime({
-						topic: REALTIME_TOPICS.user(target.id),
-						event: REALTIME_EVENTS.NOTIFICATION_CREATED,
-						payload: {
-							type: "mention_comment",
-							postId,
-							commentId: comment.id,
-							actorNickname,
-							targetNickname: target.nickname,
-						},
-					});
-				}
-			}
 		}
 
 		void broadcastRealtime({

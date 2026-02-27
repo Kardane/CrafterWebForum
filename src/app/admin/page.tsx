@@ -30,7 +30,7 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
 	const tabParam = Array.isArray(resolvedSearchParams.tab)
 		? resolvedSearchParams.tab[0]
 		: resolvedSearchParams.tab;
-	const activeTab: AdminTabId = isAdminTabId(tabParam) ? tabParam : "dashboard";
+	const activeTab: AdminTabId = isAdminTabId(tabParam) ? tabParam : "users";
 
 	return (
 		<div>

@@ -17,6 +17,25 @@ export function escapeHtml(text: string): string {
 	return text.replace(/[&<>"']/g, (m) => map[m]);
 }
 
+function isSafeMarkdownUrl(rawUrl: string): boolean {
+	const trimmed = rawUrl.trim();
+	if (!trimmed) {
+		return false;
+	}
+	if (trimmed.startsWith("/")) {
+		return true;
+	}
+	if (trimmed.startsWith("#")) {
+		return true;
+	}
+	try {
+		const parsed = new URL(trimmed);
+		return parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "mailto:";
+	} catch {
+		return false;
+	}
+}
+
 function normalizeMarkdownLineBreaks(html: string): string {
 	// 블록 요소 경계에 남는 불필요한 <br> 제거
 	let normalized = html
@@ -117,18 +136,30 @@ export function processMarkdown(text: string): string {
 	// 3. 마크다운 이미지/링크 추출
 	const mdLinks: string[] = [];
 	html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (match, alt, url) => {
-		const imgTag = `<img src="${url}" alt="${alt}" class="md-image" loading="lazy" data-lightbox="image">`;
+		if (!isSafeMarkdownUrl(url)) {
+			mdLinks.push(alt);
+			return `__MD_LINK_${mdLinks.length - 1}__`;
+		}
+		const safeUrl = url.trim();
+		const safeAlt = alt;
+		const imgTag = `<img src="${safeUrl}" alt="${safeAlt}" class="md-image" loading="lazy" data-lightbox="image">`;
 		mdLinks.push(imgTag);
 		return `__MD_LINK_${mdLinks.length - 1}__`;
 	});
 
 	html = html.replace(/(?<!!)\[([^\]]+)\]\(([^)]+)\)/g, (match, text, url) => {
+		if (!isSafeMarkdownUrl(url)) {
+			mdLinks.push(text);
+			return `__MD_LINK_${mdLinks.length - 1}__`;
+		}
+		const safeText = text;
+		const safeUrl = url.trim();
 		let replacement: string;
 		if (url.includes('/uploads/')) {
 			const icon = text.includes('📦') ? '' : '📦 ';
-			replacement = `<a href="${url}" download class="file-download">${icon}${text}</a>`;
+			replacement = `<a href="${safeUrl}" download class="file-download">${icon}${safeText}</a>`;
 		} else {
-			replacement = `<a href="${url}" target="_blank" class="link-text">${text}</a>`;
+			replacement = `<a href="${safeUrl}" target="_blank" rel="noopener noreferrer" class="link-text">${safeText}</a>`;
 		}
 		mdLinks.push(replacement);
 		return `__MD_LINK_${mdLinks.length - 1}__`;

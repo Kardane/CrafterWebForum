@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import ProfileCard from "@/components/profile/ProfileCard";
 import UserStats from "@/components/profile/UserStats";
 import PasswordChangeForm from "@/components/profile/PasswordChangeForm";
+import PushSubscriptionPanel from "@/components/profile/PushSubscriptionPanel";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -18,6 +19,7 @@ interface ProfileUser {
 interface ProfileStats {
 	posts: number;
 	comments: number;
+	likesReceived: number;
 }
 
 interface ProfileResponse {
@@ -122,6 +124,7 @@ export default function ProfilePage() {
 
 			<ProfileCard user={userData} />
 			<UserStats stats={stats} />
+			<PushSubscriptionPanel />
 			<PasswordChangeForm />
 		</div>
 	);

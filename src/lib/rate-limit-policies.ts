@@ -26,6 +26,11 @@ export const RATE_LIMIT_POLICIES: Record<string, RateLimitPolicy> = {
 		limit: 5,
 		windowMs: 10 * 60_000,
 	},
+	authLogin: {
+		namespace: "auth:login",
+		limit: 10,
+		windowMs: 10 * 60_000,
+	},
 	linkPreview: {
 		namespace: "link:preview",
 		limit: 30,
@@ -34,6 +39,16 @@ export const RATE_LIMIT_POLICIES: Record<string, RateLimitPolicy> = {
 	serverAddressCheck: {
 		namespace: "server:address:check",
 		limit: 30,
+		windowMs: 60_000,
+	},
+	pushSubscribe: {
+		namespace: "push:subscribe",
+		limit: 20,
+		windowMs: 60_000,
+	},
+	pushUnsubscribe: {
+		namespace: "push:unsubscribe",
+		limit: 20,
 		windowMs: 60_000,
 	},
 };

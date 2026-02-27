@@ -2,11 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const authMock = vi.fn();
 const postFindFirstMock = vi.fn();
+const commentFindManyMock = vi.fn();
 const commentFindFirstMock = vi.fn();
 const commentCreateMock = vi.fn();
 const commentCountMock = vi.fn();
 const postReadUpsertMock = vi.fn();
 const postUpdateMock = vi.fn();
+const userFindManyMock = vi.fn();
+const notificationCreateManyMock = vi.fn();
+const notificationFindManyMock = vi.fn();
+const pushSubscriptionFindManyMock = vi.fn();
+const notificationDeliveryCreateManyMock = vi.fn();
+const transactionMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -19,26 +26,121 @@ vi.mock("@/lib/prisma", () => ({
 			update: postUpdateMock,
 		},
 		comment: {
+			findMany: commentFindManyMock,
 			findFirst: commentFindFirstMock,
 			create: commentCreateMock,
 			count: commentCountMock,
 		},
+		user: {
+			findMany: userFindManyMock,
+		},
+		notification: {
+			createMany: notificationCreateManyMock,
+			findMany: notificationFindManyMock,
+		},
+		pushSubscription: {
+			findMany: pushSubscriptionFindManyMock,
+		},
+		notificationDelivery: {
+			createMany: notificationDeliveryCreateManyMock,
+		},
 		postRead: {
 			upsert: postReadUpsertMock,
 		},
+		$transaction: transactionMock,
 	},
 }));
+
+function buildCommentRow(input: {
+	id: number;
+	postId: number;
+	authorId: number;
+	parentId: number | null;
+	nickname: string;
+	content?: string;
+}) {
+	return {
+		id: input.id,
+		postId: input.postId,
+		authorId: input.authorId,
+		content: input.content ?? "comment",
+		isPinned: 0,
+		parentId: input.parentId,
+		createdAt: new Date("2026-02-27T00:00:00.000Z"),
+		updatedAt: new Date("2026-02-27T00:00:00.000Z"),
+		author: {
+			id: input.authorId,
+			nickname: input.nickname,
+			minecraftUuid: null,
+			role: "user",
+		},
+	};
+}
 
 describe("POST /api/posts/[id]/comments", () => {
 	beforeEach(() => {
 		vi.resetModules();
 		authMock.mockReset();
 		postFindFirstMock.mockReset();
+		commentFindManyMock.mockReset();
 		commentFindFirstMock.mockReset();
 		commentCreateMock.mockReset();
 		commentCountMock.mockReset();
 		postReadUpsertMock.mockReset();
 		postUpdateMock.mockReset();
+		userFindManyMock.mockReset();
+		notificationCreateManyMock.mockReset();
+		notificationFindManyMock.mockReset();
+		pushSubscriptionFindManyMock.mockReset();
+		notificationDeliveryCreateManyMock.mockReset();
+		transactionMock.mockReset();
+
+		transactionMock.mockImplementation(async (operations: unknown[]) => Promise.all(operations as Promise<unknown>[]));
+		notificationCreateManyMock.mockResolvedValue({ count: 0 });
+		notificationFindManyMock.mockResolvedValue([]);
+		pushSubscriptionFindManyMock.mockResolvedValue([]);
+		notificationDeliveryCreateManyMock.mockResolvedValue({ count: 0 });
+	});
+
+	it("returns paginated comment tree when cursor pagination is requested", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1 } });
+		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null });
+		commentFindManyMock
+			.mockResolvedValueOnce([
+				buildCommentRow({ id: 30, postId: 12, authorId: 1, parentId: null, nickname: "root-a" }),
+				buildCommentRow({ id: 20, postId: 12, authorId: 2, parentId: null, nickname: "root-b" }),
+			])
+			.mockResolvedValueOnce([
+				buildCommentRow({ id: 31, postId: 12, authorId: 3, parentId: 30, nickname: "reply-a" }),
+			])
+			.mockResolvedValueOnce([]);
+
+		const { GET } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments?limit=1");
+		const res = await GET(req as never, { params: Promise.resolve({ id: "12" }) });
+		const body = (await res.json()) as {
+			comments: Array<{ id: number; replies: Array<{ id: number }> }>;
+			page: { limit: number; nextCursor: number | null; hasMore: boolean };
+		};
+
+		expect(res.status).toBe(200);
+		expect(body.page).toEqual({ limit: 1, nextCursor: 30, hasMore: true });
+		expect(body.comments).toHaveLength(1);
+		expect(body.comments[0]?.id).toBe(30);
+		expect(body.comments[0]?.replies).toHaveLength(1);
+		expect(commentFindManyMock).toHaveBeenCalledTimes(3);
+	});
+
+	it("returns 400 when pagination cursor is invalid", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1 } });
+		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null });
+
+		const { GET } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments?cursor=abc");
+		const res = await GET(req as never, { params: Promise.resolve({ id: "12" }) });
+
+		expect(res.status).toBe(400);
+		await expect(res.json()).resolves.toEqual({ error: "Invalid cursor" });
 	});
 
 	it("returns 403 when user is pending approval", async () => {
@@ -57,5 +159,47 @@ describe("POST /api/posts/[id]/comments", () => {
 		await expect(res.json()).resolves.toEqual({ error: "pending_approval" });
 		expect(postFindFirstMock).not.toHaveBeenCalled();
 		expect(commentCreateMock).not.toHaveBeenCalled();
+	});
+
+	it("batches mention notification delivery queue writes", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1, nickname: "actor" } });
+		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null, tags: null });
+		commentCreateMock.mockResolvedValue(
+			buildCommentRow({ id: 101, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "@alice hi" })
+		);
+		commentCountMock.mockResolvedValue(5);
+		userFindManyMock.mockResolvedValue([
+			{ id: 20, nickname: "alice" },
+			{ id: 10, nickname: "actor" },
+		]);
+		notificationCreateManyMock.mockResolvedValue({ count: 1 });
+		notificationFindManyMock.mockResolvedValue([{ id: 501, userId: 20 }]);
+		pushSubscriptionFindManyMock.mockResolvedValue([{ id: 33, userId: 20 }]);
+
+		const { POST } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "@alice hi" }),
+		});
+
+		const res = await POST(req as never, { params: Promise.resolve({ id: "12" }) });
+
+		expect(res.status).toBe(200);
+		expect(transactionMock).toHaveBeenCalledTimes(1);
+		expect(notificationDeliveryCreateManyMock).toHaveBeenCalledTimes(1);
+		expect(notificationDeliveryCreateManyMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.arrayContaining([
+					expect.objectContaining({
+						notificationId: 501,
+						userId: 20,
+						subscriptionId: 33,
+						channel: "web_push",
+						status: "queued",
+					}),
+				]),
+			})
+		);
 	});
 });

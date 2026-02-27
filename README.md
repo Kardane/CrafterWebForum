@@ -102,6 +102,54 @@ npm run setup:win
 - 신문고 목록은 사용자 오버레이(읽음 카운트) 조회를 생략해 목록 응답 비용을 축소
 - 신문고 무한 스크롤 페이지 캐시 키를 정규화해 동일 조건 재조회 시 캐시 적중률을 개선
 
+## 9) Web Push + Vercel Cron 알림 전달
+
+- 브라우저 종료 상태 알림 전달을 위해 Web Push + Service Worker + Outbox 디스패치 경로를 사용
+- 구독 API
+  - `GET /api/push/subscribe` (내 활성 구독 목록 조회)
+  - `POST /api/push/subscribe`
+  - `POST /api/push/unsubscribe`
+- 디스패치 API (Vercel Cron 호출)
+  - `GET /api/jobs/push-dispatch`
+  - `POST /api/jobs/push-dispatch`
+- `vercel.json`에 1분 주기 cron 설정 포함
+
+필수 환경 변수
+
+```bash
+VAPID_PUBLIC_KEY=...
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:admin@example.com
+CRON_SECRET=...
+```
+
+- `CRON_SECRET`은 `Authorization: Bearer <CRON_SECRET>` 헤더 검증에 사용
+- 푸시 payload에는 민감정보를 넣지 않고 `notificationId`/`targetUrl` 중심으로 처리
+- 내 정보(`/profile`)에서 푸시 구독 버튼/구독 정보(권한, 현재 브라우저 구독, 활성 구독 목록) 확인 가능
+
+보안 하드닝
+
+- Markdown 링크/이미지는 `http/https/mailto`(링크), `http/https`(이미지/링크 공통) 허용 정책으로 스킴 필터링
+- 외부 링크는 `rel="noopener noreferrer"` 적용
+- Push 구독 endpoint는 `https` + 비로컬/사설망 endpoint만 허용
+- `POST /api/push/subscribe`는 이미 등록된 endpoint의 소유자 불일치 시 `409` 반환
+- `GET /api/push/subscribe`에도 레이트리밋 적용
+- Cron 인증 비교는 SHA-256 digest 기반 timing-safe 비교 사용
+- 닉네임 기반 관리자 자동 승격 정책 제거 (`isPrivilegedNickname`는 항상 false 반환)
+- `POST /api/auth/callback/credentials` 로그인 시도에 레이트리밋(`authLogin`) 적용
+
+성능 최적화 (P1)
+
+- `GET /api/admin/stats`는 일별 추세 계산 시 전량 `findMany` 대신 DB 집계(`strftime + COUNT`)를 사용
+- `POST /api/posts/[id]/comments`의 멘션 후처리는 `notificationDelivery`를 행별 upsert 대신 `createMany` 배치 적재
+- `GET /api/posts/[id]/comments`는 `limit/cursor` 쿼리 파라미터로 루트 댓글 커서 페이지네이션 지원
+
+## 10) 댓글 삭제 권한
+
+- 댓글 삭제 API(`DELETE /api/comments/[id]`)는 작성자 또는 관리자만 허용
+- 비인증: `401`, 비권한: `403`, 대상 없음: `404`
+
 서버 주소 확인 API
 
 ```bash

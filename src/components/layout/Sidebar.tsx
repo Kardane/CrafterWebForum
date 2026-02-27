@@ -11,7 +11,6 @@ import SafeImage from "@/components/ui/SafeImage";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { DEFAULT_SETTINGS, getSidebarSettings, normalizeSidebarUrl } from "@/lib/sidebar-settings";
 import { SidebarLink, DEFAULT_LINKS, compareSidebarLinks } from "@/lib/sidebar-links";
-import { isPrivilegedNickname } from "@/config/admin-policy";
 import { usePendingInquiryCount } from "@/components/layout/usePendingInquiryCount";
 import { useNotifications } from "@/components/notifications/useNotifications";
 
@@ -69,9 +68,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 	const [links, setLinks] = useState<SidebarLink[]>(() => buildSidebarLinks(DEFAULT_SETTINGS));
 
 	const user = session?.user;
-	const canAccessAdmin = user
-		? user.role === "admin" || isPrivilegedNickname(user.nickname)
-		: false;
+	const canAccessAdmin = user ? user.role === "admin" : false;
 	const { inquiryCount } = usePendingInquiryCount(canAccessAdmin);
 	const { unreadCount } = useNotifications();
 

@@ -14,6 +14,7 @@ export interface UserProfileResult {
 	stats: {
 		posts: number;
 		comments: number;
+		likesReceived: number;
 	};
 	last_auth_at: Date | null;
 }
@@ -35,9 +36,13 @@ export async function getUserProfile(userId: number): Promise<UserProfileResult 
 		return null;
 	}
 
-	const [postCount, commentCount] = await Promise.all([
+	const [postCount, commentCount, likesAggregate] = await Promise.all([
 		prisma.post.count({ where: { authorId: user.id, deletedAt: null } }),
 		prisma.comment.count({ where: { authorId: user.id } }),
+		prisma.post.aggregate({
+			where: { authorId: user.id, deletedAt: null },
+			_sum: { likes: true },
+		}),
 	]);
 
 	return {
@@ -45,6 +50,7 @@ export async function getUserProfile(userId: number): Promise<UserProfileResult 
 		stats: {
 			posts: postCount,
 			comments: commentCount,
+			likesReceived: likesAggregate._sum.likes ?? 0,
 		},
 		last_auth_at: user.lastAuthAt,
 	};
