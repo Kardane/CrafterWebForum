@@ -102,17 +102,19 @@ npm run setup:win
 - 신문고 목록은 사용자 오버레이(읽음 카운트) 조회를 생략해 목록 응답 비용을 축소
 - 신문고 무한 스크롤 페이지 캐시 키를 정규화해 동일 조건 재조회 시 캐시 적중률을 개선
 
-## 9) Web Push + Vercel Cron 알림 전달
+## 9) Web Push + GitHub Actions Scheduler 알림 전달
 
 - 브라우저 종료 상태 알림 전달을 위해 Web Push + Service Worker + Outbox 디스패치 경로를 사용
 - 구독 API
   - `GET /api/push/subscribe` (내 활성 구독 목록 조회)
   - `POST /api/push/subscribe`
   - `POST /api/push/unsubscribe`
-- 디스패치 API (Vercel Cron 호출)
+- 디스패치 API (GitHub Actions scheduler 호출)
   - `GET /api/jobs/push-dispatch`
   - `POST /api/jobs/push-dispatch`
-- `vercel.json`에 1분 주기 cron 설정 포함
+- 워크플로우: `.github/workflows/push-dispatch.yml`
+- 스케줄: 5분 주기 (`*/5 * * * *`) + 수동 실행(`workflow_dispatch`)
+- 실패 시 최대 2회 재시도(총 3회 시도)
 
 필수 환경 변수
 
@@ -125,6 +127,7 @@ CRON_SECRET=...
 ```
 
 - `CRON_SECRET`은 `Authorization: Bearer <CRON_SECRET>` 헤더 검증에 사용
+- `PUSH_DISPATCH_URL` GitHub Actions secret에 프로덕션 엔드포인트 URL 설정 필요
 - 푸시 payload에는 민감정보를 넣지 않고 `notificationId`/`targetUrl` 중심으로 처리
 - 내 정보(`/profile`)에서 푸시 구독 버튼/구독 정보(권한, 현재 브라우저 구독, 활성 구독 목록) 확인 가능
 

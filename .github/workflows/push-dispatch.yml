@@ -1,0 +1,65 @@
+name: Push Dispatch Scheduler
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: push-dispatch-scheduler
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch push queue (retry x2)
+        env:
+          PUSH_DISPATCH_URL: ${{ secrets.PUSH_DISPATCH_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -eu
+
+          if [ -z "${PUSH_DISPATCH_URL:-}" ]; then
+            echo "Missing required secret: PUSH_DISPATCH_URL"
+            exit 1
+          fi
+
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "Missing required secret: CRON_SECRET"
+            exit 1
+          fi
+
+          ATTEMPT=1
+          MAX_ATTEMPT=3
+
+          while [ "$ATTEMPT" -le "$MAX_ATTEMPT" ]; do
+            echo "[push-dispatch] attempt ${ATTEMPT}/${MAX_ATTEMPT}"
+
+            HTTP_CODE="$(curl -sS -o /tmp/push-dispatch-response.json -w "%{http_code}" \
+              -X POST "${PUSH_DISPATCH_URL}?batch=100" \
+              -H "Authorization: Bearer ${CRON_SECRET}" \
+              -H "Content-Type: application/json" \
+              --max-time 60)"
+
+            cat /tmp/push-dispatch-response.json || true
+
+            if [ "$HTTP_CODE" -ge 200 ] && [ "$HTTP_CODE" -lt 300 ]; then
+              echo "[push-dispatch] success status=${HTTP_CODE}"
+              exit 0
+            fi
+
+            if [ "$ATTEMPT" -eq "$MAX_ATTEMPT" ]; then
+              echo "[push-dispatch] failed status=${HTTP_CODE}"
+              exit 1
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+            SLEEP_SECONDS=$((ATTEMPT * 5))
+            echo "[push-dispatch] retrying in ${SLEEP_SECONDS}s"
+            sleep "$SLEEP_SECONDS"
+          done

@@ -147,11 +147,12 @@
     - `src/lib/services/posts-service.ts`: 신문고 목록에서 사용자 오버레이(`postRead`) 조회를 건너뛰어 `queryAux` 비용 감소
     - `src/app/ombudsman/page.tsx`, `src/app/api/posts/route.ts`: 신문고 board 요청에 `includeUserOverlay: false` 적용
     - `src/components/posts/PostList.tsx`: 목록 쿼리 파라미터를 정규화한 캐시 키로 페이지 캐시 적중률 개선
-- 브라우저 종료 알림 전달(Web Push + Vercel Cron)
+- 브라우저 종료 알림 전달(Web Push + GitHub Actions Scheduler)
   - `prisma/schema.prisma`: `PushSubscription`, `NotificationDelivery` 모델 추가
   - `src/app/api/push/subscribe/route.ts`, `src/app/api/push/unsubscribe/route.ts`: 구독 등록/해제 API 추가
   - `src/app/api/push/subscribe/route.ts`: `GET`으로 내 활성 구독 정보 조회 지원
   - `src/app/api/jobs/push-dispatch/route.ts`: cron 디스패처(Authorization: Bearer CRON_SECRET) 추가
+  - `.github/workflows/push-dispatch.yml`: 5분 주기 스케줄 + 실패 시 2회 재시도(총 3회 시도)
   - `src/components/notifications/useNotifications.ts`, `public/sw.js`: 서비스워커 등록 및 푸시 구독 연동
   - `src/app/api/posts/[id]/comments/route.ts`: 멘션 알림 생성 시 web_push outbox 적재
   - `src/components/profile/PushSubscriptionPanel.tsx`, `src/app/profile/page.tsx`: 내 정보 페이지에서 푸시 구독 버튼/구독 상태 표시
