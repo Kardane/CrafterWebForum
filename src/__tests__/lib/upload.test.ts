@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB } from "@/lib/upload-constants";
-import { UploadValidationError, validateUploadFile } from "@/lib/upload";
+import { UploadValidationError, validateUploadFile, validateUploadMetadata } from "@/lib/upload";
 
 describe("upload validation", () => {
 	it("accepts mp4 uploads as video kind", () => {
@@ -39,5 +39,16 @@ describe("upload validation", () => {
 		expect(() => validateUploadFile(file)).toThrowError(
 			`File exceeds ${MAX_UPLOAD_MB}MB limit`
 		);
+	});
+
+	it("accepts metadata validation for client video uploads", () => {
+		const validated = validateUploadMetadata({
+			originalName: "clip.mp4",
+			mimeType: "video/mp4",
+			size: 8 * 1024 * 1024,
+		});
+
+		expect(validated.kind).toBe("video");
+		expect(validated.extension).toBe("mp4");
 	});
 });

@@ -7,6 +7,7 @@ import MarkdownHelpModal from "@/components/comments/MarkdownHelpModal";
 import { serializePollData, PollData } from "@/lib/poll";
 import { useToast } from "@/components/ui/useToast";
 import { parseUploadJsonResponse } from "@/lib/upload-response";
+import { uploadVideoFromBrowser } from "@/lib/client-video-upload";
 import { text } from "@/lib/system-text";
 
 interface CommentFormProps {
@@ -140,6 +141,14 @@ export default function CommentForm({
 		setIsUploading(true);
 		try {
 			for (const file of files) {
+				if (file.type.startsWith("video/")) {
+					const uploadedVideo = await uploadVideoFromBrowser(file);
+					const snippet = uploadedVideo.url;
+					currentContent = currentContent + (currentContent ? "\n" : "") + snippet;
+					setContent(currentContent);
+					continue;
+				}
+
 				const formData = new FormData();
 				formData.append("file", file);
 

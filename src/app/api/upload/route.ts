@@ -1,15 +1,20 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { toSessionUserId } from "@/lib/session-user";
 import { createThumbnail, optimizeImage } from "@/lib/image-optimizer";
 import {
+	VIDEO_UPLOAD_MIME_TYPES,
 	createStoredFileName,
 	getUploadRelativeDir,
 	toBlobObjectPath,
 	UploadValidationError,
 	validateUploadFile,
+	validateUploadMetadata,
 } from "@/lib/upload";
+import { MAX_UPLOAD_BYTES } from "@/lib/upload-constants";
 
 
 export const runtime = "nodejs";
@@ -37,6 +42,92 @@ interface UploadSuccessResponse {
 }
 
 export async function POST(request: Request) {
+	const contentType = request.headers.get("content-type") ?? "";
+	if (contentType.includes("application/json")) {
+		try {
+			const body = (await request.json()) as HandleUploadBody;
+			const response = await handleUpload({
+				request,
+				body,
+				token: getBlobToken(),
+				onBeforeGenerateToken: async (_pathname, clientPayload) => {
+					const session = await auth();
+					const userId = toSessionUserId(session?.user?.id);
+					if (!session?.user || !userId) {
+						throw new Error("Unauthorized");
+					}
+
+					const parsedPayload = (() => {
+						if (!clientPayload) {
+							throw new Error("Missing upload payload");
+						}
+						try {
+							return JSON.parse(clientPayload) as {
+								originalName?: string;
+								mimeType?: string;
+								size?: number;
+							};
+						} catch {
+							throw new Error("Invalid upload payload");
+						}
+					})();
+
+					const validated = validateUploadMetadata({
+						originalName: parsedPayload.originalName ?? "video",
+						mimeType: parsedPayload.mimeType ?? "",
+						size: typeof parsedPayload.size === "number" ? parsedPayload.size : -1,
+					});
+
+					if (validated.kind !== "video") {
+						throw new Error("Only video client uploads are supported");
+					}
+
+					return {
+						allowedContentTypes: [...VIDEO_UPLOAD_MIME_TYPES],
+						maximumSizeInBytes: MAX_UPLOAD_BYTES,
+						addRandomSuffix: false,
+						tokenPayload: JSON.stringify({
+							userId,
+							originalName: validated.originalName,
+							mimeType: validated.mimeType,
+							size: validated.size,
+						}),
+					};
+				},
+				onUploadCompleted: async ({ blob, tokenPayload }) => {
+					if (!tokenPayload) {
+						return;
+					}
+					const parsed = JSON.parse(tokenPayload) as {
+						userId?: number;
+						originalName?: string;
+						mimeType?: string;
+						size?: number;
+					};
+					if (!parsed.userId || !parsed.originalName || !parsed.mimeType || typeof parsed.size !== "number") {
+						return;
+					}
+					await prisma.upload.create({
+						data: {
+							filename: blob.url,
+							originalName: parsed.originalName,
+							mimetype: parsed.mimeType,
+							size: parsed.size,
+						},
+					});
+				},
+			});
+			return NextResponse.json(response);
+		} catch (error) {
+			if (error instanceof UploadValidationError) {
+				return NextResponse.json({ error: error.message }, { status: error.status });
+			}
+			const message = error instanceof Error ? error.message : "Upload failed";
+			const status = message === "Unauthorized" ? 401 : 400;
+			return NextResponse.json({ error: message }, { status });
+		}
+	}
+
 	try {
 		const session = await auth();
 		if (!session?.user) {

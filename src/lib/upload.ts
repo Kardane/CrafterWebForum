@@ -43,6 +43,8 @@ const MIME_BY_EXTENSION: Record<string, readonly string[]> = {
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov"]);
 
+export const VIDEO_UPLOAD_MIME_TYPES = ["video/mp4", "video/webm", "video/quicktime"] as const;
+
 export type UploadKind = "image" | "video" | "file";
 
 export interface UploadValidationResult {
@@ -83,16 +85,28 @@ function getExtension(name: string): string {
 }
 
 export function validateUploadFile(file: File): UploadValidationResult {
-	if (file.size <= 0) {
+	return validateUploadMetadata({
+		originalName: file.name,
+		mimeType: file.type,
+		size: file.size,
+	});
+}
+
+export function validateUploadMetadata(input: {
+	originalName: string;
+	mimeType: string;
+	size: number;
+}): UploadValidationResult {
+	if (input.size <= 0) {
 		throw new UploadValidationError("Empty file");
 	}
-	if (file.size > MAX_UPLOAD_BYTES) {
+	if (input.size > MAX_UPLOAD_BYTES) {
 		throw new UploadValidationError(`File exceeds ${MAX_UPLOAD_MB}MB limit`, 413);
 	}
 
-	const originalName = sanitizeOriginalName(file.name);
+	const originalName = sanitizeOriginalName(input.originalName);
 	const extension = getExtension(originalName);
-	const mimeType = (file.type || "").toLowerCase();
+	const mimeType = (input.mimeType || "").toLowerCase();
 
 	if (BLOCKED_EXTENSIONS.has(extension)) {
 		throw new UploadValidationError("Blocked file extension");
@@ -115,7 +129,7 @@ export function validateUploadFile(file: File): UploadValidationResult {
 		extension,
 		mimeType,
 		originalName,
-		size: file.size,
+		size: input.size,
 	};
 }
 
