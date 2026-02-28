@@ -131,6 +131,15 @@ CRON_SECRET=...
 - 푸시 payload에는 민감정보를 넣지 않고 `notificationId`/`targetUrl` 중심으로 처리
 - 내 정보(`/profile`)에서 푸시 구독 버튼/구독 정보(권한, 현재 브라우저 구독, 활성 구독 목록) 확인 가능
 
+Turso 운영 점검
+
+- 배포 전 점검: `npm run check:deploy -- --with-db` (Turso 연결 + 필수 push 테이블 존재 여부 확인)
+- `db_schema_not_ready` 오류가 나오면 Turso에 스키마를 적용
+
+```bash
+DATABASE_URL="$TURSO_DATABASE_URL" TURSO_AUTH_TOKEN="$TURSO_AUTH_TOKEN" npx prisma db push
+```
+
 보안 하드닝
 
 - Markdown 링크/이미지는 `http/https/mailto`(링크), `http/https`(이미지/링크 공통) 허용 정책으로 스킴 필터링

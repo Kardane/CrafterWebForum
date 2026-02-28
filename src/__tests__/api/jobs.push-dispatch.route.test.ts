@@ -96,4 +96,19 @@ describe("POST /api/jobs/push-dispatch", () => {
 		expect(sendWebPushMock).toHaveBeenCalledTimes(1);
 		expect(updateMock).toHaveBeenCalled();
 	});
+
+	it("returns 503 when NotificationDelivery table is missing", async () => {
+		ensureWebPushConfiguredMock.mockReturnValue({});
+		findManyMock.mockRejectedValue(new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.NotificationDelivery"));
+
+		const { POST } = await import("@/app/api/jobs/push-dispatch/route");
+		const req = new NextRequest("http://localhost/api/jobs/push-dispatch", {
+			method: "POST",
+			headers: { authorization: "Bearer secret" },
+		});
+		const res = await POST(req);
+
+		expect(res.status).toBe(503);
+		await expect(res.json()).resolves.toEqual({ error: "db_schema_not_ready" });
+	});
 });

@@ -96,6 +96,37 @@ async function checkTursoConnectivity(databaseUrl, tursoAuthToken) {
 	}
 }
 
+async function checkRequiredTables(databaseUrl, tursoAuthToken, tableNames) {
+	let client;
+	try {
+		client = createClient({
+			url: databaseUrl,
+			authToken: tursoAuthToken,
+		});
+		const placeholders = tableNames.map(() => "?").join(", ");
+		const result = await client.execute({
+			sql: `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (${placeholders})`,
+			args: tableNames,
+		});
+		const existingNames = new Set((result.rows ?? []).map((row) => String(row.name ?? "")));
+		const missingNames = tableNames.filter((name) => !existingNames.has(name));
+		return {
+			ok: missingNames.length === 0,
+			detail:
+				missingNames.length === 0
+					? "all required tables exist"
+					: `missing: ${missingNames.join(", ")}`,
+		};
+	} catch (error) {
+		return {
+			ok: false,
+			detail: error instanceof Error ? error.message.split("\n")[0] : String(error),
+		};
+	} finally {
+		await client?.close();
+	}
+}
+
 async function main() {
 	const summary = runChecks();
 	const checks = [...summary.checks];
@@ -118,6 +149,20 @@ async function main() {
 			});
 			if (!dbResult.ok) {
 				hasFailure = true;
+			} else {
+				const requiredTableResult = await checkRequiredTables(
+					summary.databaseUrl,
+					summary.tursoAuthToken,
+					["NotificationDelivery", "PushSubscription", "Notification"]
+				);
+				checks.push({
+					check: "Required push tables exist",
+					status: requiredTableResult.ok ? "PASS" : "FAIL",
+					detail: requiredTableResult.detail,
+				});
+				if (!requiredTableResult.ok) {
+					hasFailure = true;
+				}
 			}
 		}
 	}

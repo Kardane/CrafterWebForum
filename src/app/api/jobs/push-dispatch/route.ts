@@ -14,6 +14,25 @@ export const dynamic = "force-dynamic";
 
 const MAX_ATTEMPT_COUNT = 5;
 
+function toErrorMessage(error: unknown): string {
+	if (error instanceof Error) {
+		return error.message;
+	}
+	if (typeof error === "string") {
+		return error;
+	}
+	return "";
+}
+
+function isMissingDeliveryTableError(error: unknown): boolean {
+	const message = toErrorMessage(error).toLowerCase();
+	return (
+		message.includes("no such table: main.notificationdelivery") ||
+		message.includes("table `main.notificationdelivery` does not exist") ||
+		message.includes("notificationdelivery") && message.includes("no such table")
+	);
+}
+
 function toBatchSize(value: string | null): number {
 	const parsed = Number.parseInt(value ?? "", 10);
 	if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -212,6 +231,9 @@ async function handleDispatch(request: NextRequest) {
 		});
 	} catch (error) {
 		console.error("[API] POST /api/jobs/push-dispatch error:", error);
+		if (isMissingDeliveryTableError(error)) {
+			return NextResponse.json({ error: "db_schema_not_ready" }, { status: 503 });
+		}
 		return NextResponse.json({ error: "internal_server_error" }, { status: 500 });
 	}
 }

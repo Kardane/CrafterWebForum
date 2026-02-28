@@ -152,7 +152,9 @@
   - `src/app/api/push/subscribe/route.ts`, `src/app/api/push/unsubscribe/route.ts`: 구독 등록/해제 API 추가
   - `src/app/api/push/subscribe/route.ts`: `GET`으로 내 활성 구독 정보 조회 지원
   - `src/app/api/jobs/push-dispatch/route.ts`: cron 디스패처(Authorization: Bearer CRON_SECRET) 추가
-  - `.github/workflows/push-dispatch.yml`: 5분 주기 스케줄 + 실패 시 2회 재시도(총 3회 시도)
+ - `.github/workflows/push-dispatch.yml`: 5분 주기 스케줄 + 실패 시 2회 재시도(총 3회 시도)
+  - `scripts/check-deploy-readiness.mjs`: Turso 연결성 점검 시 `NotificationDelivery`/`PushSubscription`/`Notification` 테이블 존재 여부 검증 추가
+  - `src/app/api/jobs/push-dispatch/route.ts`: `NotificationDelivery` 테이블 누락 시 `db_schema_not_ready`(503) 반환으로 원인 식별 가능하게 개선
   - `src/components/notifications/useNotifications.ts`, `public/sw.js`: 서비스워커 등록 및 푸시 구독 연동
   - `src/app/api/posts/[id]/comments/route.ts`: 멘션 알림 생성 시 web_push outbox 적재
   - `src/components/profile/PushSubscriptionPanel.tsx`, `src/app/profile/page.tsx`: 내 정보 페이지에서 푸시 구독 버튼/구독 상태 표시
