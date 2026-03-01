@@ -342,43 +342,49 @@ export async function POST(
 			}
 		}
 
-		const comment = await prisma.comment.create({
-			data: {
-				content,
-				postId,
-				authorId: sessionUserId,
-				parentId: normalizedParentId,
-			},
-			include: commentIncludeWithAuthor,
-		});
-
-		const commentCount = await prisma.comment.count({
-			where: { postId },
-		});
-
-		await prisma.$transaction([
-			prisma.postRead.upsert({
-				where: {
-					userId_postId: {
-						userId: sessionUserId,
-						postId,
-					},
-				},
-				update: {
-					lastReadCommentCount: commentCount,
-					updatedAt: new Date(),
-				},
-				create: {
-					userId: sessionUserId,
+		const [comment, updatedPost] = await prisma.$transaction([
+			prisma.comment.create({
+				data: {
+					content,
 					postId,
-					lastReadCommentCount: commentCount,
+					authorId: sessionUserId,
+					parentId: normalizedParentId,
 				},
+				include: commentIncludeWithAuthor,
 			}),
 			prisma.post.update({
 				where: { id: postId },
-				data: { updatedAt: new Date() },
+				data: {
+					updatedAt: new Date(),
+					commentCount: {
+						increment: 1,
+					},
+				},
+				select: {
+					commentCount: true,
+				},
 			}),
 		]);
+
+		const commentCount = updatedPost.commentCount;
+
+		await prisma.postRead.upsert({
+			where: {
+				userId_postId: {
+					userId: sessionUserId,
+					postId,
+				},
+			},
+			update: {
+				lastReadCommentCount: commentCount,
+				updatedAt: new Date(),
+			},
+			create: {
+				userId: sessionUserId,
+				postId,
+				lastReadCommentCount: commentCount,
+			},
+		});
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId,

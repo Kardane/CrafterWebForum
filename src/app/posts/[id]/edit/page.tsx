@@ -10,7 +10,7 @@ import { useToast } from "@/components/ui/useToast";
 import { POST_TAGS } from "@/constants/post-tags";
 import { toSessionUserId } from "@/lib/session-user";
 import { parseUploadJsonResponse } from "@/lib/upload-response";
-import { uploadVideoFromBrowser } from "@/lib/client-video-upload";
+import { uploadImageFromBrowser, uploadVideoFromBrowser } from "@/lib/client-video-upload";
 
 interface EditPostPageProps {
 	params: Promise<{ id: string }>;
@@ -150,6 +150,16 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 		setIsUploading(true);
 		try {
 			for (const file of files) {
+				if (file.type.startsWith("image/")) {
+					const uploadedImage = await uploadImageFromBrowser(file);
+					appendUploadedContent({
+						success: true,
+						type: "image",
+						url: uploadedImage.url,
+						originalName: uploadedImage.originalName,
+					});
+					continue;
+				}
 				if (file.type.startsWith("video/")) {
 					const uploadedVideo = await uploadVideoFromBrowser(file);
 					appendUploadedContent({

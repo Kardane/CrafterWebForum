@@ -127,6 +127,71 @@ async function checkRequiredTables(databaseUrl, tursoAuthToken, tableNames) {
 	}
 }
 
+function toSafeNumber(value) {
+	if (typeof value === "number") {
+		return Number.isFinite(value) ? value : 0;
+	}
+	if (typeof value === "bigint") {
+		return Number(value);
+	}
+	if (typeof value === "string") {
+		const parsed = Number.parseInt(value, 10);
+		return Number.isFinite(parsed) ? parsed : 0;
+	}
+	return 0;
+}
+
+async function checkRequiredColumns(databaseUrl, tursoAuthToken, tableName, columnNames) {
+	let client;
+	try {
+		client = createClient({
+			url: databaseUrl,
+			authToken: tursoAuthToken,
+		});
+		const result = await client.execute(`PRAGMA table_info('${tableName}')`);
+		const existingColumns = new Set((result.rows ?? []).map((row) => String(row.name ?? "")));
+		const missingColumns = columnNames.filter((column) => !existingColumns.has(column));
+		return {
+			ok: missingColumns.length === 0,
+			detail:
+				missingColumns.length === 0
+					? `${tableName} columns ready`
+					: `missing columns on ${tableName}: ${missingColumns.join(", ")}`,
+		};
+	} catch (error) {
+		return {
+			ok: false,
+			detail: error instanceof Error ? error.message.split("\n")[0] : String(error),
+		};
+	} finally {
+		await client?.close();
+	}
+}
+
+async function checkPostDataIntegrity(databaseUrl, tursoAuthToken) {
+	let client;
+	try {
+		client = createClient({
+			url: databaseUrl,
+			authToken: tursoAuthToken,
+		});
+		const nullTagsResult = await client.execute(
+			"SELECT COUNT(*) AS count FROM Post WHERE deletedAt IS NULL AND tags IS NULL"
+		);
+		const mismatchResult = await client.execute(
+			"SELECT COUNT(*) AS count FROM Post p WHERE p.deletedAt IS NULL AND p.commentCount != (SELECT COUNT(*) FROM Comment c WHERE c.postId = p.id)"
+		);
+		const nullTags = toSafeNumber(nullTagsResult.rows?.[0]?.count);
+		const mismatchedCommentCounts = toSafeNumber(mismatchResult.rows?.[0]?.count);
+		return {
+			nullTags,
+			mismatchedCommentCounts,
+		};
+	} finally {
+		await client?.close();
+	}
+}
+
 async function main() {
 	const summary = runChecks();
 	const checks = [...summary.checks];
@@ -162,6 +227,39 @@ async function main() {
 				});
 				if (!requiredTableResult.ok) {
 					hasFailure = true;
+				}
+				const requiredColumnsResult = await checkRequiredColumns(
+					summary.databaseUrl,
+					summary.tursoAuthToken,
+					"Post",
+					["commentCount"]
+				);
+				checks.push({
+					check: "Post required columns exist",
+					status: requiredColumnsResult.ok ? "PASS" : "FAIL",
+					detail: requiredColumnsResult.detail,
+				});
+				if (!requiredColumnsResult.ok) {
+					hasFailure = true;
+				}
+				if (requiredColumnsResult.ok) {
+					const integrityResult = await checkPostDataIntegrity(
+						summary.databaseUrl,
+						summary.tursoAuthToken
+					);
+					checks.push({
+						check: "Post tags are normalized(non-null)",
+						status: integrityResult.nullTags === 0 ? "PASS" : "FAIL",
+						detail: `null_tags=${integrityResult.nullTags}`,
+					});
+					checks.push({
+						check: "Post.commentCount is synchronized",
+						status: integrityResult.mismatchedCommentCounts === 0 ? "PASS" : "FAIL",
+						detail: `mismatched_posts=${integrityResult.mismatchedCommentCounts}`,
+					});
+					if (integrityResult.nullTags > 0 || integrityResult.mismatchedCommentCounts > 0) {
+						hasFailure = true;
+					}
 				}
 			}
 		}

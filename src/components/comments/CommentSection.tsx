@@ -43,6 +43,11 @@ import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 interface CommentSectionProps {
 	postId: number;
 	initialComments: Comment[];
+	initialCommentsPage?: {
+		limit: number;
+		nextCursor: number | null;
+		hasMore: boolean;
+	};
 	readMarker?: {
 		lastReadCommentCount: number;
 		totalCommentCount: number;
@@ -204,7 +209,12 @@ function buildInitialCommentViewState(initialComments: Comment[], lastReadCommen
 	return { visibleStart, expandedThreadRoots };
 }
 
-export default function CommentSection({ postId, initialComments, readMarker }: CommentSectionProps) {
+export default function CommentSection({
+	postId,
+	initialComments,
+	initialCommentsPage,
+	readMarker,
+}: CommentSectionProps) {
 	const { data: session } = useSession();
 	const { showToast } = useToast();
 	const [readMarkerState, setReadMarkerState] = useState(readMarker);
@@ -213,6 +223,15 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		buildInitialCommentViewState(initialComments, readMarker?.lastReadCommentCount ?? 0)
 	);
 	const [comments, setComments] = useState<Comment[]>(initialComments);
+	const [commentsPage, setCommentsPage] = useState<{
+		limit: number;
+		nextCursor: number | null;
+		hasMore: boolean;
+	}>(() => ({
+		limit: initialCommentsPage?.limit ?? 20,
+		nextCursor: initialCommentsPage?.nextCursor ?? null,
+		hasMore: initialCommentsPage?.hasMore ?? false,
+	}));
 	const [replyTarget, setReplyTarget] = useState<ReplyTarget | null>(null);
 	const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 	const [highlightedCommentId, setHighlightedCommentId] = useState<number | null>(null);
@@ -309,8 +328,11 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		return Math.min(Math.max(0, visibleStart), maxStart);
 	}, [flattenedComments.length, visibleStart]);
 
-	const hasOlderComments = effectiveVisibleStart > 0;
-	const olderLoadCount = Math.min(LATEST_CHUNK_SIZE, effectiveVisibleStart);
+	const hasBufferedOlderComments = effectiveVisibleStart > 0;
+	const hasOlderComments = hasBufferedOlderComments || commentsPage.hasMore;
+	const olderLoadCount = hasBufferedOlderComments
+		? Math.min(LATEST_CHUNK_SIZE, effectiveVisibleStart)
+		: commentsPage.limit;
 
 	// --- 스레드 접기/펼치기 ---
 	const isThreadCollapsible = useCallback(
@@ -366,7 +388,6 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		setReplyTarget,
 		setExpandedThreadRoots,
 		setPendingDeleteId,
-		scrollToBottom,
 	});
 
 	// --- 렌더 행 구성 ---
@@ -607,7 +628,53 @@ export default function CommentSection({ postId, initialComments, readMarker }: 
 		requestAnimationFrame(() => scrollToCommentElement(latestOwnCommentId, true, setHighlightedCommentId));
 	};
 
-	const handleLoadOlderComments = () => setVisibleStart((prev) => Math.max(0, prev - LATEST_CHUNK_SIZE));
+	const handleLoadOlderComments = useCallback(async () => {
+		if (hasBufferedOlderComments) {
+			setVisibleStart((prev) => Math.max(0, prev - LATEST_CHUNK_SIZE));
+			return;
+		}
+		if (!commentsPage.hasMore || commentsPage.nextCursor === null) {
+			return;
+		}
+
+		try {
+			const params = new URLSearchParams();
+			params.set("limit", String(commentsPage.limit));
+			params.set("cursor", String(commentsPage.nextCursor));
+			const response = await fetch(`/api/posts/${postId}/comments?${params.toString()}`, {
+				cache: "no-store",
+			});
+			if (!response.ok) {
+				return;
+			}
+			const data = (await response.json()) as {
+				comments?: Comment[];
+				page?: {
+					limit: number;
+					nextCursor: number | null;
+					hasMore: boolean;
+				};
+			};
+			if (!Array.isArray(data.comments)) {
+				return;
+			}
+			const olderComments = data.comments;
+			setComments((prev) => {
+				const existingRootIds = new Set(prev.map((comment) => comment.id));
+				const olderRoots = olderComments.filter((comment) => !existingRootIds.has(comment.id));
+				return [...olderRoots, ...prev];
+			});
+			if (data.page) {
+				setCommentsPage({
+					limit: data.page.limit,
+					nextCursor: data.page.nextCursor,
+					hasMore: data.page.hasMore,
+				});
+			}
+		} catch {
+			return;
+		}
+	}, [commentsPage.hasMore, commentsPage.limit, commentsPage.nextCursor, hasBufferedOlderComments, postId]);
 
 	const handleTypingStateChange = useCallback(
 		(typing: boolean) => {

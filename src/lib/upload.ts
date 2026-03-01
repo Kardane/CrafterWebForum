@@ -44,6 +44,7 @@ const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "webp"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov"]);
 
 export const VIDEO_UPLOAD_MIME_TYPES = ["video/mp4", "video/webm", "video/quicktime"] as const;
+export const IMAGE_UPLOAD_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 
 export type UploadKind = "image" | "video" | "file";
 

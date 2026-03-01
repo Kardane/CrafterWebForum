@@ -40,6 +40,7 @@ export default async function Home(props: PageProps) {
 			tag: searchParams.tag ?? null,
 			sort: searchParams.sort ?? "activity",
 			search: searchParams.search ?? "",
+			searchInComments: false,
 			sessionUserId,
 		});
 	} catch (error) {

@@ -13,6 +13,16 @@ export interface ClientVideoUploadResult {
 	filename: string;
 }
 
+export interface ClientImageUploadResult {
+	success: true;
+	type: "image";
+	url: string;
+	originalName: string;
+	mimeType: string;
+	size: number;
+	filename: string;
+}
+
 function toMonthPath(date: Date): string {
 	const year = String(date.getFullYear());
 	const month = String(date.getMonth() + 1).padStart(2, "0");
@@ -52,6 +62,39 @@ export async function uploadVideoFromBrowser(file: File): Promise<ClientVideoUpl
 	return {
 		success: true,
 		type: "video",
+		url: blob.url,
+		originalName,
+		mimeType: file.type,
+		size: file.size,
+		filename: objectPath,
+	};
+}
+
+export async function uploadImageFromBrowser(file: File): Promise<ClientImageUploadResult> {
+	if (file.size <= 0) {
+		throw new Error("Empty file");
+	}
+	if (file.size > MAX_UPLOAD_BYTES) {
+		throw new Error(`파일이 너무 큼. ${MAX_UPLOAD_MB}MB 이하 파일만 업로드 가능`);
+	}
+
+	const originalName = file.name.trim() || "image";
+	const extension = getExtension(originalName);
+	const objectPath = `uploads/${toMonthPath(new Date())}/${crypto.randomUUID()}.${extension}`;
+
+	const blob = await upload(objectPath, file, {
+		access: "public",
+		handleUploadUrl: "/api/upload",
+		clientPayload: JSON.stringify({
+			originalName,
+			mimeType: file.type,
+			size: file.size,
+		}),
+	});
+
+	return {
+		success: true,
+		type: "image",
 		url: blob.url,
 		originalName,
 		mimeType: file.type,

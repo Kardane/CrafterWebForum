@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Image from "next/image";
 import { MAX_UPLOAD_MB } from "@/lib/upload-constants";
 import { parseUploadXhrError } from "@/lib/upload-response";
-import { uploadVideoFromBrowser } from "@/lib/client-video-upload";
+import { uploadImageFromBrowser, uploadVideoFromBrowser } from "@/lib/client-video-upload";
 
 export interface UploadedFileResult {
 	success: true;
@@ -87,6 +87,13 @@ export default function FileUploader({
 			for (const file of files) {
 				if (file.size > maxBytes) {
 					throw new Error(`"${file.name}" exceeds ${maxSizeMB}MB limit.`);
+				}
+				if (file.type.startsWith("image/")) {
+					const result = await uploadImageFromBrowser(file);
+					setProgress(100);
+					setItems((prev) => [result, ...prev]);
+					onUploaded?.(result);
+					continue;
 				}
 				if (file.type.startsWith("video/")) {
 					const result = await uploadVideoFromBrowser(file);

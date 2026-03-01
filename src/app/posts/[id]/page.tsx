@@ -18,17 +18,6 @@ interface PostDetailPageProps {
 	params: Promise<{ id: string }>;
 }
 
-function countCommentsWithReplies(
-	nodes: Array<{ replies?: Array<{ replies?: unknown[] }> }>
-): number {
-	return nodes.reduce((sum, node) => {
-		const replies = Array.isArray(node.replies)
-			? (node.replies as Array<{ replies?: Array<{ replies?: unknown[] }> }>)
-			: [];
-		return sum + 1 + countCommentsWithReplies(replies);
-	}, 0);
-}
-
 function renderNotFound() {
 	return (
 		<div className="flex flex-col items-center justify-center min-h-[400px] text-center">
@@ -66,8 +55,8 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 		return renderNotFound();
 	}
 
-	const { post, comments, readMarker } = data;
-	const totalCommentCount = countCommentsWithReplies(comments);
+	const { post, comments, commentsPage, readMarker } = data;
+	const totalCommentCount = readMarker.totalCommentCount;
 	const isOwner = sessionUserId === post.author_id;
 	const backHref = post.board === "ombudsman" ? "/ombudsman" : "/";
 
@@ -151,7 +140,12 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 				</div>
 
 				<div className="mt-8">
-					<CommentSection postId={post.id} initialComments={comments} readMarker={readMarker} />
+					<CommentSection
+						postId={post.id}
+						initialComments={comments}
+						initialCommentsPage={commentsPage}
+						readMarker={readMarker}
+					/>
 				</div>
 			</div>
 		</PostLikeStateProvider>

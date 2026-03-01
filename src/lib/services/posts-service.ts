@@ -18,8 +18,10 @@ export interface ListPostsInput {
 	board?: PostBoardType | null;
 	sort?: string | null;
 	search?: string | null;
+	searchInComments?: boolean;
 	sessionUserId?: number | null;
 	includeUserOverlay?: boolean;
+	skipExactTotal?: boolean;
 }
 
 export interface ListPostsResult {
@@ -62,8 +64,10 @@ interface NormalizedListPostsInput {
 	board: PostBoardType;
 	sort: string;
 	search: string;
+	searchInComments: boolean;
 	sessionUserId: number | null;
 	includeUserOverlay: boolean;
+	skipExactTotal: boolean;
 }
 
 interface NormalizedListPostsCoreInput {
@@ -71,8 +75,10 @@ interface NormalizedListPostsCoreInput {
 	limit: number;
 	tag: string | null;
 	board: PostBoardType;
-	sort: string;
-	search: string;
+		sort: string;
+		search: string;
+		searchInComments: boolean;
+		skipExactTotal: boolean;
 }
 
 interface CachedListPostCore {
@@ -119,7 +125,7 @@ function resolveOrderBy(sort: string | null | undefined) {
 		case "likes":
 			return [{ likes: "desc" }, { createdAt: "desc" }] satisfies Prisma.PostOrderByWithRelationInput[];
 		case "comments":
-			return { comments: { _count: "desc" } } satisfies Prisma.PostOrderByWithRelationInput;
+			return { commentCount: "desc" } satisfies Prisma.PostOrderByWithRelationInput;
 		case "activity":
 		default:
 			return { updatedAt: "desc" } satisfies Prisma.PostOrderByWithRelationInput;
@@ -140,8 +146,10 @@ function normalizeListPostsInput(input: ListPostsInput): NormalizedListPostsInpu
 		board,
 		sort,
 		search,
+		searchInComments: input.searchInComments ?? false,
 		sessionUserId: input.sessionUserId ?? null,
 		includeUserOverlay: input.includeUserOverlay ?? true,
+		skipExactTotal: input.skipExactTotal ?? false,
 	};
 }
 
@@ -153,6 +161,8 @@ function toCoreInput(input: NormalizedListPostsInput): NormalizedListPostsCoreIn
 		board: input.board,
 		sort: input.sort,
 		search: input.search,
+		searchInComments: input.searchInComments,
+		skipExactTotal: input.skipExactTotal,
 	};
 }
 
@@ -165,6 +175,7 @@ function buildListPostsCacheKey(input: NormalizedListPostsCoreInput) {
 		`board:${input.board}`,
 		`sort:${input.sort}`,
 		`search:${encodeURIComponent(input.search)}`,
+		`searchInComments:${input.searchInComments ? "1" : "0"}`,
 	];
 }
 
@@ -196,17 +207,20 @@ async function listPostsCoreUncached(
 		});
 	} else {
 		andConditions.push({
-			OR: [{ tags: null }, { tags: { not: { contains: `"${OMBUDSMAN_BOARD_MARKER}"` } } }],
+			tags: { not: { contains: `"${OMBUDSMAN_BOARD_MARKER}"` } },
 		});
 	}
 
 	if (search.length > 0) {
+		const searchConditions: Prisma.PostWhereInput[] = [
+			{ title: { contains: search } },
+			{ content: { contains: search } },
+		];
+		if (input.searchInComments) {
+			searchConditions.push({ comments: { some: { content: { contains: search } } } });
+		}
 		andConditions.push({
-			OR: [
-				{ title: { contains: search } },
-				{ content: { contains: search } },
-				{ comments: { some: { content: { contains: search } } } },
-			],
+			OR: searchConditions,
 		});
 	}
 
@@ -216,28 +230,49 @@ async function listPostsCoreUncached(
 	const orderBy = resolveOrderBy(input.sort);
 
 	const queryMainStart = performance.now();
-	const [posts, total] = await prisma.$transaction([
-		prisma.post.findMany({
-			where: whereCondition,
-			take: limit,
-			skip,
-			orderBy,
-			include: {
-				author: {
-					select: {
-						nickname: true,
-						minecraftUuid: true,
-					},
-				},
-				_count: {
-					select: {
-						comments: true,
-					},
+	const posts = await prisma.post.findMany({
+		where: whereCondition,
+		take: limit,
+		skip,
+		orderBy,
+		include: {
+			author: {
+				select: {
+					nickname: true,
+					minecraftUuid: true,
 				},
 			},
-		}),
-		prisma.post.count({ where: whereCondition }),
-	]);
+		},
+	});
+	const zeroCommentCountPostIds = posts
+		.filter((post) => post.commentCount === 0)
+		.map((post) => post.id);
+	const commentCountByPostId = new Map<number, number>(
+		posts.map((post) => [post.id, post.commentCount])
+	);
+	if (zeroCommentCountPostIds.length > 0) {
+		const groupedCommentCounts = await prisma.comment.groupBy({
+			by: ["postId"],
+			where: {
+				postId: {
+					in: zeroCommentCountPostIds,
+				},
+			},
+			_count: {
+				_all: true,
+			},
+		});
+		for (const row of groupedCommentCounts) {
+			commentCountByPostId.set(row.postId, row._count._all);
+		}
+	}
+	let total: number;
+	if (input.skipExactTotal) {
+		const hasMore = posts.length === limit;
+		total = hasMore ? page * limit + 1 : skip + posts.length;
+	} else {
+		total = await prisma.post.count({ where: whereCondition });
+	}
 	const queryMainMs = performance.now() - queryMainStart;
 
 	const serializeStart = performance.now();
@@ -257,7 +292,7 @@ async function listPostsCoreUncached(
 			updatedAt: post.updatedAt.toISOString(),
 			authorName: post.author.nickname,
 			authorUuid: post.author.minecraftUuid,
-			commentCount: post._count.comments,
+			commentCount: commentCountByPostId.get(post.id) ?? 0,
 		};
 	});
 	const serializeMs = performance.now() - serializeStart;

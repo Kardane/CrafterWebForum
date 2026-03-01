@@ -4,6 +4,7 @@ const authMock = vi.fn();
 const postFindFirstMock = vi.fn();
 const likeFindFirstMock = vi.fn();
 const commentFindManyMock = vi.fn();
+const commentCountMock = vi.fn();
 const postReadFindUniqueMock = vi.fn();
 const postReadUpsertMock = vi.fn();
 
@@ -20,6 +21,7 @@ vi.mock("@/lib/prisma", () => ({
 			findFirst: likeFindFirstMock,
 		},
 		comment: {
+			count: commentCountMock,
 			findMany: commentFindManyMock,
 		},
 			postRead: {
@@ -35,6 +37,7 @@ describe("GET /api/posts/[id]", () => {
 		postFindFirstMock.mockReset();
 		likeFindFirstMock.mockReset();
 		commentFindManyMock.mockReset();
+		commentCountMock.mockReset();
 		postReadFindUniqueMock.mockReset();
 		postReadUpsertMock.mockReset();
 	});
@@ -67,6 +70,7 @@ describe("GET /api/posts/[id]", () => {
 			title: "title",
 			content: "content",
 			tags: "[]",
+			commentCount: 2,
 			likes: 2,
 			views: 7,
 			createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -79,7 +83,9 @@ describe("GET /api/posts/[id]", () => {
 			},
 		});
 		likeFindFirstMock.mockResolvedValue(null);
-			commentFindManyMock.mockResolvedValue([
+		commentCountMock.mockResolvedValue(2);
+		commentFindManyMock
+			.mockResolvedValueOnce([
 			{
 				id: 100,
 				content: "parent",
@@ -94,6 +100,8 @@ describe("GET /api/posts/[id]", () => {
 					role: "user",
 				},
 			},
+		])
+			.mockResolvedValueOnce([
 				{
 					id: 101,
 					content: "child",
@@ -108,7 +116,8 @@ describe("GET /api/posts/[id]", () => {
 						role: "user",
 					},
 				},
-				]);
+			])
+			.mockResolvedValueOnce([]);
 			postReadFindUniqueMock.mockResolvedValue({
 				lastReadCommentCount: 1,
 			});
@@ -122,6 +131,7 @@ describe("GET /api/posts/[id]", () => {
 		expect(res.status).toBe(200);
 		expect(likeFindFirstMock).toHaveBeenCalledWith({
 			where: { postId: 10, userId: 1 },
+			select: { id: true },
 		});
 		expect(body.comments).toHaveLength(1);
 			expect(body.comments[0].author).toEqual({
@@ -154,6 +164,7 @@ describe("GET /api/posts/[id]", () => {
 			title: "title",
 			content: "content",
 			tags: "[]",
+			commentCount: 1,
 			likes: 2,
 			views: 7,
 			createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -166,7 +177,9 @@ describe("GET /api/posts/[id]", () => {
 			},
 		});
 		likeFindFirstMock.mockResolvedValue(null);
-		commentFindManyMock.mockResolvedValue([
+		commentCountMock.mockResolvedValue(1);
+		commentFindManyMock
+			.mockResolvedValueOnce([
 			{
 				id: 100,
 				content: "parent",
@@ -181,7 +194,8 @@ describe("GET /api/posts/[id]", () => {
 					role: "user",
 				},
 			},
-		]);
+			])
+			.mockResolvedValueOnce([]);
 		postReadFindUniqueMock.mockResolvedValue({
 			lastReadCommentCount: 1,
 		});

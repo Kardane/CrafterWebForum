@@ -99,6 +99,16 @@
   - `src/lib/services/posts-service.ts`: 목록 캐시를 공용 core + 사용자 overlay(좋아요/읽음)로 분리
   - `src/lib/services/post-detail-service.ts`: 상세 캐시 키에서 사용자 축 제거, `user_liked`를 사용자 overlay 쿼리로 분리
   - `src/proxy.ts`: 보호 경로가 아닌 요청은 `auth()`를 건너뛰도록 조정
+- 메인/상세 진입 성능 최적화 2차 적용
+  - `src/lib/services/posts-service.ts`, `src/app/api/posts/route.ts`: 무한 스크롤의 2페이지 이후 요청에서 정확한 total count 쿼리를 건너뛰고 hasMore 판별에 필요한 최소 메타데이터만 계산하도록 조정
+  - `src/app/api/posts/route.ts`: 응답 헤더 `X-Posts-Total-Mode`(`exact`/`estimated`)를 추가해 운영에서 count 생략 구간을 즉시 식별 가능하게 계측
+  - `src/lib/services/post-detail-service.ts`: `like`/`postRead` 사용자 오버레이 쿼리를 core 상세 로딩과 병렬화하고 `like.findFirst` + 최소 `select`로 조회 비용 축소
+  - `src/app/posts/[id]/page.tsx`: 댓글 총 개수를 트리 재귀 순회로 다시 계산하지 않고 `readMarker.totalCommentCount` 재사용
+- 메인/상세 진입 성능 최적화 3차 적용(P1)
+  - `src/lib/services/post-detail-service.ts`: 상세 진입 시 댓글 전체 로드 대신 최신 루트 스레드 청크(+자식 트리)만 로딩하도록 변경하고, `commentsPage`(limit/nextCursor/hasMore) 메타데이터를 함께 반환
+  - `src/lib/services/post-detail-service.ts`: read marker 동기화(`postRead.upsert`)를 비동기 fire-and-forget로 전환해 상세 응답 경로 write 대기시간 축소
+  - `src/app/api/posts/[id]/route.ts`, `src/app/posts/[id]/page.tsx`, `src/components/comments/CommentSection.tsx`: `commentsPage` 계약을 연결하고, 댓글 섹션의 "이전 댓글" 버튼이 서버 cursor 페이지네이션으로 추가 로딩을 수행하도록 확장
+  - `src/lib/services/posts-service.ts`, `src/app/api/posts/route.ts`, `src/app/page.tsx`: 목록 검색에서 댓글 본문 검색을 `searchInComments=1` opt-in으로 분리해 기본 검색 경로의 OR 비용 완화
 - 이미지 모달 최적화 1차 반영
   - `src/components/ui/ImageLightboxProvider.tsx`: 전역 단일 인스턴스 라이트박스 + 경량 계측(`modalOpenP95Ms`, `imageLoadP95Ms`, long task)
   - `src/components/posts/PostContent.tsx`: `useMemo` 기반 마크다운/임베드 캐시 + 이미지 에러 이벤트 위임

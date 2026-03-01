@@ -7,6 +7,7 @@ import { toSessionUserId } from "@/lib/session-user";
 import { createThumbnail, optimizeImage } from "@/lib/image-optimizer";
 import {
 	VIDEO_UPLOAD_MIME_TYPES,
+	IMAGE_UPLOAD_MIME_TYPES,
 	createStoredFileName,
 	getUploadRelativeDir,
 	toBlobObjectPath,
@@ -78,12 +79,17 @@ export async function POST(request: Request) {
 						size: typeof parsedPayload.size === "number" ? parsedPayload.size : -1,
 					});
 
-					if (validated.kind !== "video") {
-						throw new Error("Only video client uploads are supported");
+					if (validated.kind !== "video" && validated.kind !== "image") {
+						throw new Error("Only image/video client uploads are supported");
 					}
 
+					const allowedContentTypes =
+						validated.kind === "video"
+							? [...VIDEO_UPLOAD_MIME_TYPES]
+							: [...IMAGE_UPLOAD_MIME_TYPES];
+
 					return {
-						allowedContentTypes: [...VIDEO_UPLOAD_MIME_TYPES],
+						allowedContentTypes,
 						maximumSizeInBytes: MAX_UPLOAD_BYTES,
 						addRandomSuffix: false,
 						tokenPayload: JSON.stringify({

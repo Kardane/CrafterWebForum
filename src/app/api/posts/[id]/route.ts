@@ -56,6 +56,7 @@ export async function GET(
 		const response = NextResponse.json({
 			post: detail.post,
 			comments: detail.comments,
+			commentsPage: detail.commentsPage,
 			readMarker: detail.readMarker,
 		});
 		response.headers.set(

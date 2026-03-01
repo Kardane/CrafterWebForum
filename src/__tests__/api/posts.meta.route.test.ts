@@ -48,14 +48,14 @@ describe("GET /api/posts/meta", () => {
 				tags: '["질문"]',
 				views: 22,
 				likes: 7,
-				_count: { comments: 5 },
+				commentCount: 5,
 			},
 			{
 				id: 12,
 				tags: null,
 				views: 3,
 				likes: 0,
-				_count: { comments: 1 },
+				commentCount: 1,
 			},
 		]);
 
@@ -95,7 +95,7 @@ describe("GET /api/posts/meta", () => {
 				tags: '["notice"]',
 				views: 8,
 				likes: 2,
-				_count: { comments: 1 },
+				commentCount: 1,
 			},
 		]);
 

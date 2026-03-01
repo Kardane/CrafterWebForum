@@ -51,4 +51,15 @@ describe("upload validation", () => {
 		expect(validated.kind).toBe("video");
 		expect(validated.extension).toBe("mp4");
 	});
+
+	it("accepts metadata validation for client webp image uploads", () => {
+		const validated = validateUploadMetadata({
+			originalName: "banner.webp",
+			mimeType: "image/webp",
+			size: 8 * 1024 * 1024,
+		});
+
+		expect(validated.kind).toBe("image");
+		expect(validated.extension).toBe("webp");
+	});
 });

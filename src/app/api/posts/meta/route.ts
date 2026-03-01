@@ -92,11 +92,7 @@ export async function GET(request: NextRequest) {
 				tags: true,
 				views: true,
 				likes: true,
-				_count: {
-					select: {
-						comments: true,
-					},
-				},
+				commentCount: true,
 			},
 		});
 		const dbMs = performance.now() - dbStart;
@@ -114,7 +110,7 @@ export async function GET(request: NextRequest) {
 					category: tags[0] ?? "일반",
 					views: row.views,
 					likes: row.likes,
-					comments: row._count.comments,
+					comments: row.commentCount,
 				};
 			})
 			.filter((item): item is PostMetaItemPayload => item !== null);

@@ -5,7 +5,6 @@ const postFindFirstMock = vi.fn();
 const commentFindManyMock = vi.fn();
 const commentFindFirstMock = vi.fn();
 const commentCreateMock = vi.fn();
-const commentCountMock = vi.fn();
 const postReadUpsertMock = vi.fn();
 const postUpdateMock = vi.fn();
 const userFindManyMock = vi.fn();
@@ -29,7 +28,6 @@ vi.mock("@/lib/prisma", () => ({
 			findMany: commentFindManyMock,
 			findFirst: commentFindFirstMock,
 			create: commentCreateMock,
-			count: commentCountMock,
 		},
 		user: {
 			findMany: userFindManyMock,
@@ -85,7 +83,6 @@ describe("POST /api/posts/[id]/comments", () => {
 		commentFindManyMock.mockReset();
 		commentFindFirstMock.mockReset();
 		commentCreateMock.mockReset();
-		commentCountMock.mockReset();
 		postReadUpsertMock.mockReset();
 		postUpdateMock.mockReset();
 		userFindManyMock.mockReset();
@@ -96,6 +93,7 @@ describe("POST /api/posts/[id]/comments", () => {
 		transactionMock.mockReset();
 
 		transactionMock.mockImplementation(async (operations: unknown[]) => Promise.all(operations as Promise<unknown>[]));
+		postUpdateMock.mockResolvedValue({ commentCount: 1 });
 		notificationCreateManyMock.mockResolvedValue({ count: 0 });
 		notificationFindManyMock.mockResolvedValue([]);
 		pushSubscriptionFindManyMock.mockResolvedValue([]);
@@ -167,7 +165,7 @@ describe("POST /api/posts/[id]/comments", () => {
 		commentCreateMock.mockResolvedValue(
 			buildCommentRow({ id: 101, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "@alice hi" })
 		);
-		commentCountMock.mockResolvedValue(5);
+		postUpdateMock.mockResolvedValue({ commentCount: 5 });
 		userFindManyMock.mockResolvedValue([
 			{ id: 20, nickname: "alice" },
 			{ id: 10, nickname: "actor" },

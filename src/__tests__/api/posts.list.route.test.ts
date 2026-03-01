@@ -6,6 +6,7 @@ const postCountMock = vi.fn();
 const transactionMock = vi.fn();
 const likeFindManyMock = vi.fn();
 const postReadFindManyMock = vi.fn();
+const commentGroupByMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -24,6 +25,9 @@ vi.mock("@/lib/prisma", () => ({
 		postRead: {
 			findMany: postReadFindManyMock,
 		},
+		comment: {
+			groupBy: commentGroupByMock,
+		},
 	},
 }));
 
@@ -35,6 +39,8 @@ describe("GET /api/posts", () => {
 		transactionMock.mockReset();
 		likeFindManyMock.mockReset();
 		postReadFindManyMock.mockReset();
+		commentGroupByMock.mockReset();
+		commentGroupByMock.mockResolvedValue([]);
 		transactionMock.mockImplementation(async (operations: Promise<unknown>[]) =>
 			Promise.all(operations)
 		);
@@ -53,7 +59,7 @@ describe("GET /api/posts", () => {
 				createdAt: new Date("2026-02-11T00:00:00Z"),
 				updatedAt: new Date("2026-02-11T01:00:00Z"),
 				author: { nickname: "tester", minecraftUuid: null },
-				_count: { comments: 5 },
+				commentCount: 5,
 			},
 			{
 				id: 12,
@@ -65,7 +71,7 @@ describe("GET /api/posts", () => {
 				createdAt: new Date("2026-02-10T00:00:00Z"),
 				updatedAt: new Date("2026-02-10T01:00:00Z"),
 				author: { nickname: "tester2", minecraftUuid: "uuid-2" },
-				_count: { comments: 1 },
+				commentCount: 1,
 			},
 		]);
 		postCountMock.mockResolvedValue(2);
@@ -136,7 +142,7 @@ describe("GET /api/posts", () => {
 				createdAt: new Date("2026-02-09T00:00:00Z"),
 				updatedAt: new Date("2026-02-09T00:00:00Z"),
 				author: { nickname: "guest", minecraftUuid: null },
-				_count: { comments: 4 },
+				commentCount: 4,
 			},
 		]);
 		postCountMock.mockResolvedValue(1);
@@ -164,13 +170,13 @@ describe("GET /api/posts", () => {
 		);
 	});
 
-	it("search query includes comment content condition", async () => {
+	it("search query includes comment content condition when searchInComments=1", async () => {
 		authMock.mockResolvedValue(null);
 		postFindManyMock.mockResolvedValue([]);
 		postCountMock.mockResolvedValue(0);
 
 		const { GET } = await import("@/app/api/posts/route");
-		const req = new Request("http://localhost/api/posts?search=레드스톤");
+		const req = new Request("http://localhost/api/posts?search=레드스톤&searchInComments=1");
 
 		const res = await GET(req as never);
 		expect(res.status).toBe(200);
@@ -204,7 +210,7 @@ describe("GET /api/posts", () => {
 				createdAt: new Date("2026-02-12T00:00:00Z"),
 				updatedAt: new Date("2026-02-12T00:05:00Z"),
 				author: { nickname: "reporter", minecraftUuid: null },
-				_count: { comments: 0 },
+				commentCount: 0,
 			},
 		]);
 		postCountMock.mockResolvedValue(1);

@@ -28,22 +28,26 @@ export async function GET(req: NextRequest) {
 		const authMs = performance.now() - authStart;
 
 		const { searchParams } = new URL(req.url);
+		const page = parsePositiveInt(searchParams.get("page"), 1);
 		const board = searchParams.get("board") === "ombudsman" ? "ombudsman" : "forum";
 		const data = await listPosts({
-			page: parsePositiveInt(searchParams.get("page"), 1),
+			page,
 			limit: parsePositiveInt(searchParams.get("limit"), 12),
 			tag: searchParams.get("tag"),
 			board,
 			sort: searchParams.get("sort") ?? "activity",
 			search: searchParams.get("search") ?? "",
+			searchInComments: searchParams.get("searchInComments") === "1",
 			sessionUserId,
 			includeUserOverlay: board !== "ombudsman",
+			skipExactTotal: page > 1,
 		});
 
 		const response = NextResponse.json({
 			posts: data.posts,
 			metadata: data.metadata,
 		});
+		response.headers.set("X-Posts-Total-Mode", page > 1 ? "estimated" : "exact");
 		response.headers.set("Cache-Control", "private, max-age=15, stale-while-revalidate=45");
 		response.headers.set(
 			"Server-Timing",
@@ -111,6 +115,7 @@ export async function POST(request: NextRequest) {
 				title,
 				content,
 				tags: storedTags,
+				commentCount: 0,
 				authorId: sessionUserId,
 			},
 		});

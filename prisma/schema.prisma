@@ -54,6 +54,7 @@ model Post {
   content   String
   authorId  Int
   tags      String? // JSON 문자열로 저장
+  commentCount Int    @default(0)
   likes     Int       @default(0)
   views     Int       @default(0)
   createdAt DateTime  @default(now())

@@ -39,7 +39,6 @@ interface UseCommentMutationsOptions {
 	setReplyTarget: Dispatch<SetStateAction<{ parentId: number; nickname: string } | null>>;
 	setExpandedThreadRoots: Dispatch<SetStateAction<Set<number>>>;
 	setPendingDeleteId: Dispatch<SetStateAction<number | null>>;
-	scrollToBottom: (behavior?: ScrollBehavior) => void;
 }
 
 export function useCommentMutations({
@@ -49,7 +48,6 @@ export function useCommentMutations({
 	setReplyTarget,
 	setExpandedThreadRoots,
 	setPendingDeleteId,
-	scrollToBottom,
 }: UseCommentMutationsOptions) {
 	const { showToast } = useToast();
 	const [isLoading, setIsLoading] = useState(false);
@@ -83,7 +81,6 @@ export function useCommentMutations({
 						return next;
 					});
 				}
-				scrollToBottom("smooth");
 			} catch (error) {
 				showToast({ type: "error", message: "댓글 작성 실패" });
 				throw error;
@@ -91,7 +88,7 @@ export function useCommentMutations({
 				setIsLoading(false);
 			}
 		},
-		[postId, session, setComments, setReplyTarget, setExpandedThreadRoots, scrollToBottom, showToast]
+		[postId, session, setComments, setReplyTarget, setExpandedThreadRoots, showToast]
 	);
 
 	// 댓글 수정

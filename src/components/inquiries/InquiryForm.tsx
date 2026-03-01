@@ -6,7 +6,7 @@ import { FileImage, HelpCircle } from 'lucide-react';
 import MarkdownHelpModal from '@/components/comments/MarkdownHelpModal';
 import { useToast } from '@/components/ui/useToast';
 import { parseUploadJsonResponse } from '@/lib/upload-response';
-import { uploadVideoFromBrowser } from '@/lib/client-video-upload';
+import { uploadImageFromBrowser, uploadVideoFromBrowser } from '@/lib/client-video-upload';
 
 interface UploadPayload {
 	success: boolean;
@@ -53,6 +53,16 @@ export default function InquiryForm() {
 		setIsUploading(true);
 		try {
 			for (const file of files) {
+				if (file.type.startsWith('image/')) {
+					const uploadedImage = await uploadImageFromBrowser(file);
+					appendUploadedContent({
+						success: true,
+						type: 'image',
+						url: uploadedImage.url,
+						originalName: uploadedImage.originalName,
+					});
+					continue;
+				}
 				if (file.type.startsWith('video/')) {
 					const uploadedVideo = await uploadVideoFromBrowser(file);
 					appendUploadedContent({

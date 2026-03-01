@@ -176,15 +176,24 @@ export async function DELETE(
 		});
 
 		// 댓글 삭제 (대댓글도 함께 삭제)
-		await prisma.comment.deleteMany({
+		const deletedResult = await prisma.comment.deleteMany({
 			where: {
 				OR: [{ id: commentId }, { parentId: commentId }],
 			},
 		});
+		const deletedCommentCount = deletedResult.count;
+		const postSummary = await prisma.post.findUnique?.({
+			where: { id: comment.postId },
+			select: { commentCount: true },
+		});
+		const nextCommentCount = Math.max((postSummary?.commentCount ?? 0) - deletedCommentCount, 0);
 
 		await prisma.post.update({
 			where: { id: comment.postId },
-			data: { updatedAt: new Date() },
+			data: {
+				updatedAt: new Date(),
+				commentCount: nextCommentCount,
+			},
 		});
 		safeRevalidateTags(
 			getPostMutationTags({
