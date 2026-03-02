@@ -9,7 +9,7 @@ import { type PostBoardType, parsePostTagMetadata } from "@/lib/post-board";
 
 const POST_DETAIL_CACHE_VERSION = "v1";
 const POST_DETAIL_REVALIDATE_SECONDS = 30;
-const INITIAL_DETAIL_ROOT_LIMIT = 20;
+const INITIAL_DETAIL_ROOT_LIMIT = 12;
 
 const commentAuthorSelect = {
 	id: true,

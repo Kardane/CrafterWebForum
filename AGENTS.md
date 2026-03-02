@@ -181,6 +181,12 @@
    - `src/app/api/posts/[id]/comments/route.ts`: 멘션 푸시 큐 적재를 `notificationDelivery.createMany` 배치 방식으로 전환
    - `src/app/api/posts/[id]/comments/route.ts`: `limit/cursor` 기반 루트 댓글 커서 페이지네이션 추가(기본 응답 계약 유지)
    - `src/__tests__/api/post-comments.route.test.ts`: 페이지네이션/멘션 배치 적재 회귀 테스트 추가
+ - 메인/상세 렌더링 최적화 4차(P2)
+   - `src/app/page.tsx`: 목록 데이터 로드를 `Suspense` 경계로 분리하고 fallback 스켈레톤을 스트리밍해 첫 페인트 지연 완화
+   - `src/app/posts/[id]/page.tsx`: 상세 데이터 로드를 `Suspense` 경계로 분리하고 상세 fallback 스켈레톤을 제공해 FCP 체감 개선
+   - `src/components/comments/CommentSection.tsx`: 댓글 composer 리저브 높이를 고정(220px)하고 `overflow-anchor`를 비활성화해 레이아웃 점프 완화
+   - `src/styles/globals.css`: 본문 이미지/임베드에 `aspect-ratio`와 최소 높이를 부여해 미디어 로딩 시 CLS 완화
+   - `src/lib/services/posts-service.ts`, `src/lib/services/post-detail-service.ts`: 초기 목록 쿼리의 보정 groupBy 제거 및 상세 초기 루트 로드 수 축소(20→12)로 서버 렌더 부담 완화
 - 댓글 삭제 권한 회귀 강화
   - `src/app/api/comments/[id]/route.ts`: 삭제 권한을 작성자 또는 관리자만 허용 정책 유지
   - `src/__tests__/api/comments.route.test.ts`: DELETE 권한 케이스(401/403/author/admin 허용) 보강

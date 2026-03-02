@@ -80,6 +80,8 @@ interface InitialCommentViewState {
 	expandedThreadRoots: Set<number>;
 }
 
+const COMPOSER_RESERVE_HEIGHT = 220;
+
 function toDateKey(value: string): string {
 	const date = new Date(value);
 	if (!Number.isFinite(date.getTime())) {
@@ -228,7 +230,7 @@ export default function CommentSection({
 		nextCursor: number | null;
 		hasMore: boolean;
 	}>(() => ({
-		limit: initialCommentsPage?.limit ?? 20,
+		limit: initialCommentsPage?.limit ?? 12,
 		nextCursor: initialCommentsPage?.nextCursor ?? null,
 		hasMore: initialCommentsPage?.hasMore ?? false,
 	}));
@@ -237,7 +239,6 @@ export default function CommentSection({
 	const [highlightedCommentId, setHighlightedCommentId] = useState<number | null>(null);
 	const [isPinnedModalOpen, setIsPinnedModalOpen] = useState(false);
 	const [visibleStart, setVisibleStart] = useState(initialViewState.visibleStart);
-	const [composerReserveHeight, setComposerReserveHeight] = useState(120);
 	const [expandedThreadRoots, setExpandedThreadRoots] = useState<Set<number>>(
 		() => new Set(initialViewState.expandedThreadRoots)
 	);
@@ -532,27 +533,6 @@ export default function CommentSection({
 		}
 	);
 
-	// 작성기 높이 리저브 관측
-	useEffect(() => {
-		const composer = composerShellRef.current;
-		if (!composer) return;
-		const updateReserve = () => {
-			const nextHeight = Math.ceil(composer.getBoundingClientRect().height) + 24;
-			setComposerReserveHeight((prev) => (prev === nextHeight ? prev : nextHeight));
-		};
-		updateReserve();
-		window.addEventListener("resize", updateReserve);
-		if (typeof ResizeObserver === "undefined") {
-			return () => window.removeEventListener("resize", updateReserve);
-		}
-		const observer = new ResizeObserver(updateReserve);
-		observer.observe(composer);
-		return () => {
-			observer.disconnect();
-			window.removeEventListener("resize", updateReserve);
-		};
-	}, []);
-
 	useEffect(() => {
 		const header = headerRef.current;
 		if (!header) {
@@ -713,7 +693,7 @@ export default function CommentSection({
 			</div>
 
 			<div className="comment-stream" ref={streamRef}>
-				<div className="comment-list" style={{ paddingBottom: `${composerReserveHeight}px` }}>
+				<div className="comment-list" style={{ paddingBottom: `${COMPOSER_RESERVE_HEIGHT}px` }}>
 					{hasOlderComments && (
 						<div className="older-loader">
 							<button type="button" className="btn btn-secondary btn-sm" onClick={handleLoadOlderComments}>
@@ -873,9 +853,10 @@ export default function CommentSection({
 					/* 통합 스크롤 영역 */
 				}
 
-					.comment-list {
-						padding: 0;
-					}
+				.comment-list {
+					padding: 0;
+					overflow-anchor: none;
+				}
 
 				.older-loader {
 					display: flex;
@@ -1034,6 +1015,7 @@ export default function CommentSection({
 					justify-content: center;
 					padding: 0 16px 0 16px;
 					pointer-events: none;
+					overflow-anchor: none;
 				}
 
 				.composer-shell {

@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { listPosts } from "@/lib/services/posts-service";
 import { toSessionUserId } from "@/lib/session-user";
+import { Suspense } from "react";
 
 export const preferredRegion = "icn1";
 
@@ -19,18 +20,28 @@ interface PageProps {
 	searchParams: Promise<{ [key: string]: string | undefined }>;
 }
 
-export default async function Home(props: PageProps) {
-	const session = await auth();
-	if (!session?.user) {
-		redirect("/login?callbackUrl=/");
-	}
+interface HomeFeedSectionProps {
+	searchParams: { [key: string]: string | undefined };
+	sessionUserId: number;
+}
 
-	const sessionUserId = toSessionUserId(session.user.id);
-	if (!sessionUserId) {
-		redirect("/login?callbackUrl=/");
-	}
+function HomeFeedFallback() {
+	return (
+		<div className="flex flex-col gap-6">
+			<div className="h-20 rounded-lg border border-bg-tertiary bg-bg-secondary/60" />
+			<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+				{Array.from({ length: 8 }).map((_, index) => (
+					<div
+						key={`home-skeleton-${index}`}
+						className="h-40 rounded-lg border border-bg-tertiary bg-bg-secondary/60"
+					/>
+				))}
+			</div>
+		</div>
+	);
+}
 
-	const searchParams = await props.searchParams;
+async function HomeFeedSection({ searchParams, sessionUserId }: HomeFeedSectionProps) {
 	let data;
 	try {
 		data = await listPosts({
@@ -49,7 +60,7 @@ export default async function Home(props: PageProps) {
 	}
 
 	return (
-		<div className="max-w-4xl mx-auto">
+		<>
 			<PostFilters totalPosts={Number(data.metadata.total ?? 0)} board="forum" />
 
 			<div className="min-h-[500px]">
@@ -61,6 +72,28 @@ export default async function Home(props: PageProps) {
 					board="forum"
 				/>
 			</div>
+		</>
+	);
+}
+
+export default async function Home(props: PageProps) {
+	const session = await auth();
+	if (!session?.user) {
+		redirect("/login?callbackUrl=/");
+	}
+
+	const sessionUserId = toSessionUserId(session.user.id);
+	if (!sessionUserId) {
+		redirect("/login?callbackUrl=/");
+	}
+
+	const searchParams = await props.searchParams;
+
+	return (
+		<div className="max-w-4xl mx-auto">
+			<Suspense fallback={<HomeFeedFallback />}>
+				<HomeFeedSection searchParams={searchParams} sessionUserId={sessionUserId} />
+			</Suspense>
 		</div>
 	);
 }

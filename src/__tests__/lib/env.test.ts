@@ -23,6 +23,7 @@ describe("env schema validation", () => {
 		vi.resetModules();
 		vi.unstubAllEnvs();
 		vi.stubEnv("DATABASE_URL", "libsql://example.turso.io");
+		vi.stubEnv("TURSO_AUTH_TOKEN", "");
 		vi.stubEnv("NODE_ENV", "test");
 		await expect(import("@/lib/env")).rejects.toThrow("TURSO_AUTH_TOKEN");
 	});

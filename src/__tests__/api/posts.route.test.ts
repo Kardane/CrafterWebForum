@@ -73,6 +73,7 @@ describe("POST /api/posts", () => {
 				title: "secure title",
 				content: "secure content",
 				tags: "[\"news\"]",
+				commentCount: 0,
 				authorId: 5,
 			},
 		});

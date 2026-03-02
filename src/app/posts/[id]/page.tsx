@@ -11,11 +11,17 @@ import { PostLikeStateProvider } from "@/components/posts/PostLikeStateProvider"
 import ServerAddressTag from "@/components/posts/ServerAddressTag";
 import { isSessionUserApproved, toSessionUserId } from "@/lib/session-user";
 import { getPostDetail } from "@/lib/services/post-detail-service";
+import { Suspense } from "react";
 
 export const preferredRegion = "icn1";
 
 interface PostDetailPageProps {
 	params: Promise<{ id: string }>;
+}
+
+interface PostDetailContentProps {
+	postId: number;
+	sessionUserId: number;
 }
 
 function renderNotFound() {
@@ -30,26 +36,18 @@ function renderNotFound() {
 	);
 }
 
-export default async function PostDetailPage({ params }: PostDetailPageProps) {
-	const { id } = await params;
-	const session = await auth();
-	if (!session?.user) {
-		redirect("/login");
-	}
-	if (!isSessionUserApproved(session.user.isApproved)) {
-		redirect("/pending");
-	}
+function PostDetailFallback() {
+	return (
+		<div className="mx-auto w-full px-3 pb-6 pt-0 md:px-5 lg:px-7 xl:px-12 2xl:px-16">
+			<div className="h-16 rounded-lg border border-border bg-bg-secondary/70" />
+			<div className="mt-4 h-56 rounded-lg border border-border bg-bg-secondary/70" />
+			<div className="mt-6 h-72 rounded-lg border border-border bg-bg-secondary/70" />
+			<div className="mt-8 h-96 rounded-lg border border-border bg-bg-secondary/70" />
+		</div>
+	);
+}
 
-	const sessionUserId = toSessionUserId(session.user.id);
-	if (!sessionUserId) {
-		redirect("/login");
-	}
-
-	const postId = Number.parseInt(id, 10);
-	if (!Number.isInteger(postId)) {
-		return renderNotFound();
-	}
-
+async function PostDetailContent({ postId, sessionUserId }: PostDetailContentProps) {
 	const data = await getPostDetail({ postId, sessionUserId });
 	if (!data?.post) {
 		return renderNotFound();
@@ -91,17 +89,17 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 							{post.title}
 						</h1>
 
-					{post.board === "ombudsman" && post.serverAddress && (
-						<div className="flex flex-wrap gap-2 mb-4">
-							<ServerAddressTag address={post.serverAddress} className="bg-bg-secondary text-white hover:bg-bg-tertiary" />
-						</div>
-					)}
+						{post.board === "ombudsman" && post.serverAddress && (
+							<div className="flex flex-wrap gap-2 mb-4">
+								<ServerAddressTag address={post.serverAddress} className="bg-bg-secondary text-white hover:bg-bg-tertiary" />
+							</div>
+						)}
 
-					{post.tags && post.tags.length > 0 && (
-						<div className="flex flex-wrap gap-2 mb-4">
-							{post.tags.map((tag: string) => (
-								<span
-									key={tag}
+						{post.tags && post.tags.length > 0 && (
+							<div className="flex flex-wrap gap-2 mb-4">
+								{post.tags.map((tag: string) => (
+									<span
+										key={tag}
 										className="inline-flex items-center rounded px-2 py-[2px] text-[11px] font-semibold bg-bg-secondary text-white"
 									>
 										{tag}
@@ -149,5 +147,32 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 				</div>
 			</div>
 		</PostLikeStateProvider>
+	);
+}
+
+export default async function PostDetailPage({ params }: PostDetailPageProps) {
+	const { id } = await params;
+	const session = await auth();
+	if (!session?.user) {
+		redirect("/login");
+	}
+	if (!isSessionUserApproved(session.user.isApproved)) {
+		redirect("/pending");
+	}
+
+	const sessionUserId = toSessionUserId(session.user.id);
+	if (!sessionUserId) {
+		redirect("/login");
+	}
+
+	const postId = Number.parseInt(id, 10);
+	if (!Number.isInteger(postId)) {
+		return renderNotFound();
+	}
+
+	return (
+		<Suspense fallback={<PostDetailFallback />}>
+			<PostDetailContent postId={postId} sessionUserId={sessionUserId} />
+		</Suspense>
 	);
 }

@@ -244,28 +244,6 @@ async function listPostsCoreUncached(
 			},
 		},
 	});
-	const zeroCommentCountPostIds = posts
-		.filter((post) => post.commentCount === 0)
-		.map((post) => post.id);
-	const commentCountByPostId = new Map<number, number>(
-		posts.map((post) => [post.id, post.commentCount])
-	);
-	if (zeroCommentCountPostIds.length > 0) {
-		const groupedCommentCounts = await prisma.comment.groupBy({
-			by: ["postId"],
-			where: {
-				postId: {
-					in: zeroCommentCountPostIds,
-				},
-			},
-			_count: {
-				_all: true,
-			},
-		});
-		for (const row of groupedCommentCounts) {
-			commentCountByPostId.set(row.postId, row._count._all);
-		}
-	}
 	let total: number;
 	if (input.skipExactTotal) {
 		const hasMore = posts.length === limit;
@@ -292,7 +270,7 @@ async function listPostsCoreUncached(
 			updatedAt: post.updatedAt.toISOString(),
 			authorName: post.author.nickname,
 			authorUuid: post.author.minecraftUuid,
-			commentCount: commentCountByPostId.get(post.id) ?? 0,
+			commentCount: post.commentCount,
 		};
 	});
 	const serializeMs = performance.now() - serializeStart;
