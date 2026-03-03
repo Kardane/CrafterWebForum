@@ -257,6 +257,10 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 		issues: asNumber(repoData?.open_issues_count) ?? 0,
 		updatedAt: normalizeText(repoData?.pushed_at || repoData?.updated_at),
 	};
+	const repositoryCardStats = {
+		stars: repositoryStats.stars,
+		issues: repositoryStats.issues,
+	};
 
 	if (section === "issues" && sectionId) {
 		const issueResponse = await fetchGitHubWithTimeout(
@@ -295,7 +299,7 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 		};
 	}
 
-	if (section === "pull" && sectionId) {
+	if ((section === "pull" || section === "pulls") && sectionId) {
 		const pullResponse = await fetchGitHubWithTimeout(
 			`https://api.github.com/repos/${repoPath}/pulls/${encodeURIComponent(sectionId)}`
 		);
@@ -406,7 +410,7 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 		authorAvatarUrl: repositoryAvatar,
 		chips: repositoryChips,
 		metrics: [],
-		stats: repositoryStats,
+		stats: repositoryCardStats,
 	};
 }
 
@@ -454,6 +458,18 @@ async function buildModrinthPreview(parsedUrl: URL): Promise<LinkPreview> {
 	const gameVersions = asStringArray(project?.game_versions);
 	const loaders = asStringArray(project?.loaders);
 	const categories = asStringArray(project?.categories);
+	const primaryGameVersion = gameVersions[0] ?? "";
+	const primaryLoader = loaders[0] ?? "";
+	const categoryChips = categories.map((category) => `#${category}`).slice(0, 2);
+	const extraCategoryChip = categories.length > 2 ? `+${categories.length - 2}` : "";
+	const modrinthChips = [
+		primaryGameVersion ? `MC ${primaryGameVersion}` : "",
+		primaryLoader ? `로더 ${primaryLoader}` : "",
+		...categoryChips,
+		extraCategoryChip,
+	]
+		.filter((chip) => chip.length > 0)
+		.slice(0, 4);
 
 	return {
 		provider: "modrinth",
@@ -466,17 +482,16 @@ async function buildModrinthPreview(parsedUrl: URL): Promise<LinkPreview> {
 		iconUrl,
 		authorName: authorName || undefined,
 		authorAvatarUrl: authorAvatarUrl || undefined,
-		chips: categories.map((category) => `#${category}`),
+		chips: modrinthChips,
 		metrics: [
 			formatMetric("⬇", asNumber(project?.downloads) ?? 0, "다운로드"),
 			formatMetric("❤", asNumber(project?.followers) ?? 0, "좋아요"),
 		],
 		stats: {
-			downloads: asNumber(project?.downloads) ?? 0,
 			updatedAt: normalizeText(project?.updated),
-			version: gameVersions[0],
-			platforms: gameVersions,
-			environments: loaders,
+			version: primaryGameVersion || undefined,
+			platforms: gameVersions.slice(0, 10),
+			environments: loaders.slice(0, 10),
 		},
 	};
 }

@@ -49,21 +49,21 @@ describe("GET /api/link-preview", () => {
 		const req = new NextRequest(`http://localhost/api/link-preview?url=${targetUrl}`);
 		const res = await GET(req);
 		expect(res.status).toBe(200);
-		const payload = (await res.json()) as {
-			preview: {
-				provider: string;
-				kind: string;
-				title: string;
-				stats?: { stars?: number; forks?: number; issues?: number };
-			};
+	const payload = (await res.json()) as {
+		preview: {
+			provider: string;
+			kind: string;
+			title: string;
+			stats?: { stars?: number; forks?: number; issues?: number };
 		};
-		expect(payload.preview.provider).toBe("github");
-		expect(payload.preview.kind).toBe("repository");
-		expect(payload.preview.title).toBe("vercel/next.js");
-		expect(payload.preview.stats?.stars).toBe(100);
-		expect(payload.preview.stats?.forks).toBe(20);
-		expect(payload.preview.stats?.issues).toBe(5);
-	});
+	};
+	expect(payload.preview.provider).toBe("github");
+	expect(payload.preview.kind).toBe("repository");
+	expect(payload.preview.title).toBe("vercel/next.js");
+	expect(payload.preview.stats?.stars).toBe(100);
+	expect(payload.preview.stats?.forks).toBeUndefined();
+	expect(payload.preview.stats?.issues).toBe(5);
+});
 
 	it("reuses in-memory ttl cache for repeated url requests", async () => {
 		fetchMock.mockResolvedValueOnce(
@@ -229,5 +229,45 @@ describe("GET /api/link-preview", () => {
 		expect(payload.preview.title).toBe("Some-Page");
 		expect(payload.preview.stats?.stars).toBe(7);
 		expect(payload.preview.stats?.forks).toBe(1);
+	});
+
+	it("returns modrinth project preview with metrics and no duplicate downloads stat", async () => {
+		fetchMock.mockResolvedValueOnce(
+			new Response(
+				JSON.stringify({
+					title: "Fabric API",
+					description: "Hooks into Fabric.",
+					icon_url: "https://cdn.modrinth.com/icon.png",
+					project_type: "mod",
+					downloads: 12345,
+					followers: 321,
+					updated: "2026-03-03T10:00:00Z",
+					game_versions: ["1.20.1"],
+					loaders: ["fabric"],
+					categories: ["library", "utility"],
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			)
+		);
+
+		const { GET } = await import("@/app/api/link-preview/route");
+		const targetUrl = encodeURIComponent("https://modrinth.com/mod/fabric-api");
+		const req = new NextRequest(`http://localhost/api/link-preview?url=${targetUrl}`);
+		const res = await GET(req);
+		expect(res.status).toBe(200);
+		const payload = (await res.json()) as {
+			preview: {
+				provider: string;
+				kind: string;
+				metrics?: string[];
+				stats?: { downloads?: number; version?: string };
+			};
+		};
+		expect(payload.preview.provider).toBe("modrinth");
+		expect(payload.preview.kind).toBe("project");
+		expect(payload.preview.metrics?.join(" ") ?? "").toContain("다운로드");
+		expect(payload.preview.metrics?.join(" ") ?? "").toContain("좋아요");
+		expect(payload.preview.stats?.downloads).toBeUndefined();
+		expect(payload.preview.stats?.version).toBe("1.20.1");
 	});
 });
