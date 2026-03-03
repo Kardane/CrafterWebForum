@@ -140,7 +140,7 @@ export function buildExternalCardByUrl(rawUrl: string): string {
 				if (section === "issues" && sectionId) {
 					kind = "issue";
 					subtitle = `Issue #${sectionId}`;
-				} else if (section === "pull" && sectionId) {
+				} else if ((section === "pull" || section === "pulls") && sectionId) {
 					kind = "pull_request";
 					subtitle = `Pull Request #${sectionId}`;
 				} else if (section === "wiki") {
@@ -294,7 +294,7 @@ export function processExternalLinks(html: string): string {
 	html = html.replace(
 		/https?:\/\/(?:www\.)?(github\.com|gitlab\.com|codeberg\.org|modrinth\.com|curseforge\.com|spigotmc\.org|minecraft\.wiki|dcinside\.com|gall\.dcinside\.com|m\.dcinside\.com|localhost|127\.0\.0\.1|mcbrass\.kro\.kr)\/[^\s<"']+/gi,
 		(match) => {
-			const cleanUrl = match.trim().replace(/[.,]$/, "");
+			const cleanUrl = match.trim().replace(/[\])}>.,]+$/, "");
 			externalLinks.push(cleanUrl);
 			return `__EXT_LINK_${externalLinks.length - 1}__`;
 		}

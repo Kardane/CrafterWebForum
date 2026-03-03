@@ -33,6 +33,19 @@ describe("embed utils", () => {
 		expect(html).toContain("Issue #1");
 	});
 
+	it("renders github pull request links with /pulls path as cards", () => {
+		const html = processAllEmbeds("https://github.com/vercel/next.js/pulls/999");
+		expect(html).toContain("external-link-card");
+		expect(html).toContain("Pull Request #999");
+	});
+
+	it("strips trailing punctuation from external link matches", () => {
+		const html = processAllEmbeds("https://github.com/vercel/next.js/issues/1)");
+		expect(html).toContain("external-link-card");
+		expect(html).toContain("href=\"https://github.com/vercel/next.js/issues/1\"");
+		expect(html).toContain("Issue #1");
+	});
+
 	it("renders minecraft wiki links as cards with icon", () => {
 		const html = processAllEmbeds("https://minecraft.wiki/w/Redstone");
 		expect(html).toContain("external-link-card");
