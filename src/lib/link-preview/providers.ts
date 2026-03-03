@@ -106,6 +106,29 @@ async function fetchWithTimeout(url: string): Promise<Response> {
 	}
 }
 
+async function fetchGitHubWithTimeout(url: string): Promise<Response> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+	try {
+		const headers: Record<string, string> = {
+			...REQUEST_HEADERS,
+			Accept: "application/vnd.github+json",
+			"X-GitHub-Api-Version": "2022-11-28",
+		};
+		const token = (process.env.GITHUB_TOKEN ?? "").trim();
+		if (token) {
+			headers.Authorization = `Bearer ${token}`;
+		}
+		return await fetch(url, {
+			headers,
+			signal: controller.signal,
+			next: { revalidate: 60 * 5 },
+		});
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
 function extractMetaContent(html: string, key: string, attr: "property" | "name" = "property"): string | undefined {
 	const pattern = new RegExp(`<meta\\s+[^>]*${attr}=["']${key}["'][^>]*content=["']([^"']+)["'][^>]*>`, "i");
 	const matched = html.match(pattern)?.[1];
@@ -169,11 +192,11 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 
 	if (segments.length === 1) {
 		const login = segments[0];
-		const response = await fetchWithTimeout(`https://api.github.com/users/${encodeURIComponent(login)}`);
+		const response = await fetchGitHubWithTimeout(`https://api.github.com/users/${encodeURIComponent(login)}`);
 		if (!response.ok) {
 			return {
 				...fallbackPreview(parsedUrl, "github", "profile"),
-				badge: "GitHub",
+				badge: "GitHub 프로필",
 				title: `@${login}`,
 				subtitle: "GitHub 프로필",
 				iconUrl,
@@ -186,7 +209,7 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 		return {
 			provider: "github",
 			kind: "profile",
-			badge: "GitHub",
+			badge: "GitHub 프로필",
 			title: normalizeText(user?.name, `@${login}`),
 			subtitle: `@${normalizeText(user?.login, login)}`,
 			description: clampText(user?.bio),
@@ -207,70 +230,118 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 
 	const [owner, repo, section, sectionId] = segments;
 	const repoPath = `${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
-	const repoResponse = await fetchWithTimeout(`https://api.github.com/repos/${repoPath}`);
+	const repoResponse = await fetchGitHubWithTimeout(`https://api.github.com/repos/${repoPath}`);
 	const repoData = repoResponse.ok ? asRecord(await repoResponse.json()) : null;
 	const repositoryTitle = `${owner}/${repo}`;
 	const repositoryDescription = clampText(repoData?.description);
-	const repositoryAvatar = normalizeText(asRecord(repoData?.owner)?.avatar_url);
-	const repositoryChips = [clampText(repoData?.language, 32)].filter((item): item is string => Boolean(item));
+	const ownerData = asRecord(repoData?.owner);
+	const repositoryAvatar = normalizeText(ownerData?.avatar_url);
+	const repositoryOwnerLogin = normalizeText(ownerData?.login, owner);
+	const repositoryOwnerLabel = repositoryOwnerLogin ? `@${repositoryOwnerLogin}` : `@${owner}`;
+	const licenseId = normalizeText(asRecord(repoData?.license)?.spdx_id);
+	const repoVisibility = normalizeText(repoData?.visibility);
+	const isArchived = Boolean(repoData?.archived);
+	const isFork = Boolean(repoData?.fork);
+	const repositoryChips = [
+		clampText(repoData?.language, 32),
+		repoVisibility ? `가시성 ${repoVisibility}` : "",
+		licenseId && licenseId !== "NOASSERTION" ? `라이선스 ${licenseId}` : "",
+		isArchived ? "archived" : "",
+		isFork ? "fork" : "",
+	]
+		.filter((item): item is string => Boolean(item))
+		.slice(0, 4);
 	const repositoryStats = {
 		stars: asNumber(repoData?.stargazers_count) ?? 0,
 		forks: asNumber(repoData?.forks_count) ?? 0,
 		issues: asNumber(repoData?.open_issues_count) ?? 0,
 		updatedAt: normalizeText(repoData?.pushed_at || repoData?.updated_at),
-		version: clampText(repoData?.language, 32),
 	};
 
 	if (section === "issues" && sectionId) {
-		const issueResponse = await fetchWithTimeout(`https://api.github.com/repos/${repoPath}/issues/${encodeURIComponent(sectionId)}`);
+		const issueResponse = await fetchGitHubWithTimeout(
+			`https://api.github.com/repos/${repoPath}/issues/${encodeURIComponent(sectionId)}`
+		);
 		const issue = issueResponse.ok ? asRecord(await issueResponse.json()) : null;
+		const issueAuthor = asRecord(issue?.user);
+		const issueComments = asNumber(issue?.comments) ?? 0;
+		const labels = Array.isArray(issue?.labels)
+			? (issue.labels
+					.map((label) => normalizeText(asRecord(label)?.name))
+					.filter((value) => value.length > 0) as string[])
+			: [];
+		const stateRaw = normalizeText(issue?.state, "unknown").toUpperCase();
 		return {
 			provider: "github",
 			kind: "issue",
-			badge: "GitHub",
+			badge: "GitHub 이슈",
 			title: normalizeText(issue?.title, `${repositoryTitle} · Issue #${sectionId}`),
 			subtitle: `${repositoryTitle} · Issue #${sectionId}`,
 			description: clampText(issue?.body),
 			imageUrl: repositoryAvatar,
 			iconUrl,
-			authorName: normalizeText(asRecord(issue?.user)?.login),
-			authorAvatarUrl: normalizeText(asRecord(issue?.user)?.avatar_url),
-			status: normalizeText(issue?.state, "unknown").toUpperCase(),
-			chips: repositoryChips,
-			metrics: [formatMetric("💬", asNumber(issue?.comments) ?? 0, "댓글")],
+			authorName: normalizeText(issueAuthor?.login),
+			authorAvatarUrl: normalizeText(issueAuthor?.avatar_url),
+			status: stateRaw,
+			chips: [...repositoryChips, ...labels.slice(0, 3), labels.length > 3 ? `+${labels.length - 3}` : ""].filter(
+				(item) => item.length > 0
+			),
+			metrics: [formatMetric("💬", issueComments, "댓글")],
 			stats: {
-				...repositoryStats,
-				issues: asNumber(issue?.comments) ?? 0,
+				stars: repositoryStats.stars,
+				forks: repositoryStats.forks,
+				updatedAt: repositoryStats.updatedAt,
 			},
 		};
 	}
 
 	if (section === "pull" && sectionId) {
-		const pullResponse = await fetchWithTimeout(`https://api.github.com/repos/${repoPath}/pulls/${encodeURIComponent(sectionId)}`);
+		const pullResponse = await fetchGitHubWithTimeout(
+			`https://api.github.com/repos/${repoPath}/pulls/${encodeURIComponent(sectionId)}`
+		);
 		const pull = pullResponse.ok ? asRecord(await pullResponse.json()) : null;
 		const state = normalizeText(pull?.state, "unknown").toUpperCase();
 		const mergedAt = normalizeText(pull?.merged_at);
+		const isDraft = Boolean(pull?.draft);
+		const pullAuthor = asRecord(pull?.user);
+		const commits = asNumber(pull?.commits) ?? 0;
+		const changedFiles = asNumber(pull?.changed_files) ?? 0;
+		const additions = asNumber(pull?.additions) ?? 0;
+		const deletions = asNumber(pull?.deletions) ?? 0;
+		const pullComments = asNumber(pull?.comments) ?? 0;
+		const reviewComments = asNumber(pull?.review_comments) ?? 0;
+		const baseRef = normalizeText(asRecord(pull?.base)?.ref);
+		const headRef = normalizeText(asRecord(pull?.head)?.ref);
 		return {
 			provider: "github",
 			kind: "pull_request",
-			badge: "GitHub",
+			badge: "GitHub PR",
 			title: normalizeText(pull?.title, `${repositoryTitle} · PR #${sectionId}`),
 			subtitle: `${repositoryTitle} · PR #${sectionId}`,
 			description: clampText(pull?.body),
 			imageUrl: repositoryAvatar,
 			iconUrl,
-			authorName: normalizeText(asRecord(pull?.user)?.login),
-			authorAvatarUrl: normalizeText(asRecord(pull?.user)?.avatar_url),
-			status: mergedAt ? "MERGED" : state,
-			chips: repositoryChips,
+			authorName: normalizeText(pullAuthor?.login),
+			authorAvatarUrl: normalizeText(pullAuthor?.avatar_url),
+			status: mergedAt ? "MERGED" : isDraft ? "DRAFT" : state,
+			chips: [
+				...repositoryChips,
+				baseRef && headRef ? `${headRef} → ${baseRef}` : "",
+				isDraft ? "draft" : "",
+			]
+				.filter((item) => item.length > 0)
+				.slice(0, 4),
 			metrics: [
-				formatMetric("🧩", asNumber(pull?.commits) ?? 0, "커밋"),
-				formatMetric("💬", asNumber(pull?.comments) ?? 0, "댓글"),
+				formatMetric("🧩", commits, "커밋"),
+				formatMetric("📄", changedFiles, "파일"),
+				formatMetric("＋", additions, "추가"),
+				formatMetric("－", deletions, "삭제"),
+				formatMetric("💬", pullComments + reviewComments, "댓글"),
 			],
 			stats: {
-				...repositoryStats,
-				pulls: asNumber(pull?.commits) ?? 0,
-				issues: asNumber(pull?.comments) ?? 0,
+				stars: repositoryStats.stars,
+				forks: repositoryStats.forks,
+				updatedAt: repositoryStats.updatedAt,
 			},
 		};
 	}
@@ -286,14 +357,21 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 		return {
 			provider: "github",
 			kind: "wiki",
-			badge: "GitHub",
+			badge: "GitHub Wiki",
 			title: wikiTitle,
 			subtitle: `${repositoryTitle} · Wiki`,
 			description: repositoryDescription,
 			imageUrl: repositoryAvatar,
 			iconUrl,
+			authorName: repositoryOwnerLabel,
+			authorAvatarUrl: repositoryAvatar,
 			chips: repositoryChips,
 			metrics: [],
+			stats: {
+				stars: repositoryStats.stars,
+				forks: repositoryStats.forks,
+				updatedAt: repositoryStats.updatedAt,
+			},
 		};
 	}
 
@@ -301,17 +379,16 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 		return {
 			provider: "github",
 			kind: "release",
-			badge: "GitHub",
+			badge: "GitHub 릴리스",
 			title: repositoryTitle,
 			subtitle: `${repositoryTitle} · Releases`,
 			description: repositoryDescription,
 			imageUrl: repositoryAvatar,
 			iconUrl,
+			authorName: repositoryOwnerLabel,
+			authorAvatarUrl: repositoryAvatar,
 			chips: repositoryChips,
-			metrics: [
-				formatMetric("★", repositoryStats.stars, "스타"),
-				formatMetric("⑂", repositoryStats.forks, "포크"),
-			],
+			metrics: [],
 			stats: repositoryStats,
 		};
 	}
@@ -319,17 +396,16 @@ async function buildGitHubPreview(parsedUrl: URL): Promise<LinkPreview> {
 	return {
 		provider: "github",
 		kind: "repository",
-		badge: "GitHub",
+		badge: "GitHub 저장소",
 		title: repositoryTitle,
 		subtitle: "GitHub 저장소",
 		description: repositoryDescription,
 		imageUrl: repositoryAvatar,
 		iconUrl,
+		authorName: repositoryOwnerLabel,
+		authorAvatarUrl: repositoryAvatar,
 		chips: repositoryChips,
-		metrics: [
-			formatMetric("★", repositoryStats.stars, "스타"),
-			formatMetric("⑂", repositoryStats.forks, "포크"),
-		],
+		metrics: [],
 		stats: repositoryStats,
 	};
 }
