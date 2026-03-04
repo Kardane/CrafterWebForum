@@ -28,17 +28,92 @@ const POST_META_QUERY_CACHE_MAX_ENTRIES = 100;
 const postMetaPayloadByQueryKey = new Map<string, PostMetaItemPayload[]>();
 const postMetaEtagByQueryKey = new Map<string, string>();
 
-function setQueryCacheEntry<T>(map: Map<string, T>, key: string, value: T) {
+const EXTERNAL_PREVIEW_CACHE_MAX_ENTRIES = 250;
+const EXTERNAL_PREVIEW_MAX_CONCURRENT_FETCHES = 4;
+const EXTERNAL_PREVIEW_RATE_LIMIT_BACKOFF_MS = 30_000;
+
+const externalPreviewPayloadByUrl = new Map<string, LinkPreviewPayload>();
+const externalPreviewInFlightByUrl = new Map<string, Promise<LinkPreviewPayload>>();
+const externalPreviewFailureAtByUrl = new Map<string, number>();
+
+let externalPreviewActiveFetches = 0;
+const externalPreviewFetchQueue: Array<() => void> = [];
+
+function setQueryCacheEntry<T>(map: Map<string, T>, key: string, value: T, maxEntries = POST_META_QUERY_CACHE_MAX_ENTRIES) {
 	if (map.has(key)) {
 		map.delete(key);
 	}
 	map.set(key, value);
-	if (map.size > POST_META_QUERY_CACHE_MAX_ENTRIES) {
+	if (map.size > maxEntries) {
 		const oldestKey = map.keys().next().value;
 		if (oldestKey) {
 			map.delete(oldestKey);
 		}
 	}
+}
+
+function acquireExternalPreviewFetchSlot(): Promise<void> {
+	if (externalPreviewActiveFetches < EXTERNAL_PREVIEW_MAX_CONCURRENT_FETCHES) {
+		externalPreviewActiveFetches += 1;
+		return Promise.resolve();
+	}
+	return new Promise((resolve) => {
+		externalPreviewFetchQueue.push(() => {
+			externalPreviewActiveFetches += 1;
+			resolve();
+		});
+	});
+}
+
+function releaseExternalPreviewFetchSlot() {
+	externalPreviewActiveFetches = Math.max(0, externalPreviewActiveFetches - 1);
+	const next = externalPreviewFetchQueue.shift();
+	if (next) {
+		next();
+	}
+}
+
+async function fetchExternalPreview(previewUrl: string): Promise<LinkPreviewPayload> {
+	const cached = externalPreviewPayloadByUrl.get(previewUrl);
+	if (cached) {
+		return cached;
+	}
+
+	const failureAt = externalPreviewFailureAtByUrl.get(previewUrl);
+	if (failureAt && Date.now() - failureAt < EXTERNAL_PREVIEW_RATE_LIMIT_BACKOFF_MS) {
+		return { chips: ["메타데이터 조회 대기"] };
+	}
+
+	const inFlight = externalPreviewInFlightByUrl.get(previewUrl);
+	if (inFlight) {
+		return inFlight;
+	}
+
+	const promise = (async () => {
+		await acquireExternalPreviewFetchSlot();
+		try {
+			const endpoint = `/api/link-preview?url=${encodeURIComponent(previewUrl)}`;
+			const response = await fetch(endpoint, {
+				cache: "force-cache",
+			});
+			if (!response.ok) {
+				if (response.status === 429) {
+					externalPreviewFailureAtByUrl.set(previewUrl, Date.now());
+				}
+				throw new Error(`Failed to load link preview metadata: ${response.status}`);
+			}
+			const data = (await response.json()) as { preview?: LinkPreviewPayload };
+			const preview = data.preview ?? { chips: ["메타데이터 조회 실패"] };
+			setQueryCacheEntry(externalPreviewPayloadByUrl, previewUrl, preview, EXTERNAL_PREVIEW_CACHE_MAX_ENTRIES);
+			return preview;
+		} finally {
+			releaseExternalPreviewFetchSlot();
+			externalPreviewInFlightByUrl.delete(previewUrl);
+		}
+	})();
+
+	externalPreviewInFlightByUrl.set(previewUrl, promise);
+	return promise;
 }
 
 function normalizePostMetaIds(rawIds: string[]) {
@@ -205,9 +280,15 @@ export default function PostContent({ content }: PostContentProps) {
 
 		const uncachedPreviewEntries: Array<[string, HTMLAnchorElement[]]> = [];
 		cardsByPreviewUrl.forEach((cards, previewUrl) => {
-			const cached = externalCardMetaCacheRef.current.get(previewUrl);
-			if (cached) {
-				cards.forEach((card) => renderPreviewCard(card, cached));
+			const localCached = externalCardMetaCacheRef.current.get(previewUrl);
+			if (localCached) {
+				cards.forEach((card) => renderPreviewCard(card, localCached));
+				return;
+			}
+			const sharedCached = externalPreviewPayloadByUrl.get(previewUrl);
+			if (sharedCached) {
+				externalCardMetaCacheRef.current.set(previewUrl, sharedCached);
+				cards.forEach((card) => renderPreviewCard(card, sharedCached));
 				return;
 			}
 			uncachedPreviewEntries.push([previewUrl, cards]);
@@ -215,50 +296,28 @@ export default function PostContent({ content }: PostContentProps) {
 
 		if (uncachedPreviewEntries.length > 0) {
 			void (async () => {
-				const maxConcurrentFetches = 4;
-				for (let index = 0; index < uncachedPreviewEntries.length; index += maxConcurrentFetches) {
-					const batch = uncachedPreviewEntries.slice(index, index + maxConcurrentFetches);
-					await Promise.all(
-						batch.map(async ([previewUrl, cards]) => {
-							try {
-								const endpoint = `/api/link-preview?url=${encodeURIComponent(previewUrl)}`;
-								const response = await fetch(endpoint, {
-									cache: "force-cache",
-									signal: controller.signal,
-								});
-								if (!response.ok) {
-									throw new Error(`Failed to load link preview metadata: ${response.status}`);
-								}
-								const data = (await response.json()) as { preview?: LinkPreviewPayload };
-								if (!data.preview || isDisposed) {
-									return;
-								}
-								externalCardMetaCacheRef.current.set(previewUrl, data.preview);
-								await renderCardsIncrementally(
-									cards,
-									(card) => renderPreviewCard(card, data.preview as LinkPreviewPayload)
-								);
-							} catch (error) {
-								const fetchError = error as { name?: string };
-								if (fetchError.name === "AbortError") {
-									return;
-								}
-								console.error("Failed to hydrate external link metadata:", error);
-								if (isDisposed) {
-									return;
-								}
-								const fallback: LinkPreviewPayload = {
-									chips: ["메타데이터 조회 실패"],
-								};
-								externalCardMetaCacheRef.current.set(previewUrl, fallback);
-								await renderCardsIncrementally(cards, (card) => renderPreviewCard(card, fallback));
+				await Promise.all(
+					uncachedPreviewEntries.map(async ([previewUrl, cards]) => {
+						try {
+							const preview = await fetchExternalPreview(previewUrl);
+							if (isDisposed) {
+								return;
 							}
-						})
-					);
-					if (isDisposed) {
-						return;
-					}
-				}
+							externalCardMetaCacheRef.current.set(previewUrl, preview);
+							await renderCardsIncrementally(cards, (card) => renderPreviewCard(card, preview));
+						} catch (error) {
+							console.error("Failed to hydrate external link metadata:", error);
+							if (isDisposed) {
+								return;
+							}
+							const fallback: LinkPreviewPayload = {
+								chips: ["메타데이터 조회 실패"],
+							};
+							externalCardMetaCacheRef.current.set(previewUrl, fallback);
+							await renderCardsIncrementally(cards, (card) => renderPreviewCard(card, fallback));
+						}
+					})
+				);
 			})();
 		}
 
