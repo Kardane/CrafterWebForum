@@ -60,6 +60,7 @@ export default function CommentForm({
 	const dragDepthRef = useRef(0);
 	const isUserResizedRef = useRef(false);
 	const resizeStartHeightRef = useRef<number | null>(null);
+	const resizeDragCleanupRef = useRef<(() => void) | null>(null);
 	const isEditMode = mode === "edit";
 	const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -136,6 +137,16 @@ export default function CommentForm({
 		textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
 	};
 
+	const getTextareaLimits = (textarea: HTMLTextAreaElement) => {
+		const computed = window.getComputedStyle(textarea);
+		const lineHeight = Number.parseFloat(computed.lineHeight || "20") || 20;
+		const paddingTop = Number.parseFloat(computed.paddingTop || "0");
+		const paddingBottom = Number.parseFloat(computed.paddingBottom || "0");
+		const minHeight = lineHeight + paddingTop + paddingBottom;
+		const maxHeight = Number.parseFloat(computed.maxHeight || "0") || Math.min(window.innerHeight * 0.7, 720);
+		return { minHeight, maxHeight };
+	};
+
 	useEffect(() => {
 		resizeTextarea();
 	}, [content, initialValue]);
@@ -144,6 +155,13 @@ export default function CommentForm({
 		isUserResizedRef.current = false;
 		resizeStartHeightRef.current = null;
 	}, [initialValue, isEditMode]);
+
+	useEffect(() => {
+		return () => {
+			resizeDragCleanupRef.current?.();
+			resizeDragCleanupRef.current = null;
+		};
+	}, []);
 
 	const handleTextareaMouseDown = () => {
 		if (!textareaRef.current) {
@@ -165,6 +183,42 @@ export default function CommentForm({
 			isUserResizedRef.current = true;
 			textareaRef.current.style.overflowY = "auto";
 		}
+	};
+
+	const handleComposerResizeMouseDown = (event: React.MouseEvent<HTMLButtonElement>) => {
+		if (variant !== "composer" || !textareaRef.current) {
+			return;
+		}
+
+		event.preventDefault();
+		setIsMenuOpen(false);
+
+		const textarea = textareaRef.current;
+		const { minHeight, maxHeight } = getTextareaLimits(textarea);
+		const startY = event.clientY;
+		const startHeight = textarea.offsetHeight;
+
+		const onMouseMove = (moveEvent: MouseEvent) => {
+			const delta = startY - moveEvent.clientY;
+			const nextHeight = Math.max(minHeight, Math.min(maxHeight, startHeight + delta));
+			isUserResizedRef.current = true;
+			textarea.style.height = `${nextHeight}px`;
+			textarea.style.overflowY = "auto";
+		};
+
+		const cleanup = () => {
+			window.removeEventListener("mousemove", onMouseMove);
+			window.removeEventListener("mouseup", cleanup);
+			document.body.style.removeProperty("user-select");
+			document.body.style.removeProperty("cursor");
+			resizeDragCleanupRef.current = null;
+		};
+
+		document.body.style.setProperty("user-select", "none");
+		document.body.style.setProperty("cursor", "ns-resize");
+		window.addEventListener("mousemove", onMouseMove);
+		window.addEventListener("mouseup", cleanup);
+		resizeDragCleanupRef.current = cleanup;
 	};
 
 	const uploadFiles = async (files: File[]) => {
@@ -351,6 +405,15 @@ export default function CommentForm({
 					</div>
 				)}
 
+				{variant === "composer" && (
+					<button
+						type="button"
+						className="composer-resize-handle"
+						onMouseDown={handleComposerResizeMouseDown}
+						aria-label="댓글 입력창 높이 조절"
+					/>
+				)}
+
 				<div className="form-input-wrapper">
 					{!isEditMode && (
 						<div className="plus-btn-wrapper">
@@ -490,6 +553,35 @@ export default function CommentForm({
 					border: none;
 				}
 
+				.composer-resize-handle {
+					display: flex;
+					justify-content: center;
+					align-items: center;
+					width: 100%;
+					height: 12px;
+					padding: 0;
+					margin-bottom: 4px;
+					background: transparent;
+					border: 0;
+					cursor: ns-resize;
+					touch-action: none;
+				}
+
+				.composer-resize-handle::before {
+					content: "";
+					display: block;
+					width: 56px;
+					height: 4px;
+					border-radius: 999px;
+					background: color-mix(in srgb, var(--border) 70%, transparent);
+					transition: background-color 0.15s ease;
+				}
+
+				.composer-resize-handle:hover::before,
+				.composer-resize-handle:active::before {
+					background: color-mix(in srgb, var(--accent) 55%, var(--border));
+				}
+
 				.reply-bar {
 					display: flex;
 					align-items: center;
@@ -623,6 +715,7 @@ export default function CommentForm({
 
 				.comment-form.composer .comment-textarea {
 					background: var(--bg-primary);
+					resize: none;
 				}
 
 				.comment-form.edit-mode .comment-textarea {
