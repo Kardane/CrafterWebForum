@@ -326,6 +326,48 @@ export default function PostContent({ content }: PostContentProps) {
 			if (!(target instanceof HTMLImageElement)) {
 				return;
 			}
+
+			const card = target.closest<HTMLAnchorElement>(".external-link-card");
+			if (card && target.dataset.fallbackTried !== "1") {
+				if (target.classList.contains("external-link-card__thumb")) {
+					const icon = card.querySelector<HTMLImageElement>(".external-link-card__icon");
+					const fallbackSrc = icon?.currentSrc || icon?.src || "";
+					if (fallbackSrc && fallbackSrc !== target.currentSrc && fallbackSrc !== target.src) {
+						target.dataset.fallbackTried = "1";
+						target.src = fallbackSrc;
+						return;
+					}
+				}
+
+				if (target.classList.contains("external-link-card__icon")) {
+					const fallbackCandidates: string[] = [];
+					let parsedHostname = "";
+					try {
+						const href = card.getAttribute("href") ?? "";
+						if (href) {
+							parsedHostname = new URL(href).hostname;
+						}
+					} catch {
+						parsedHostname = "";
+					}
+					if (parsedHostname) {
+						fallbackCandidates.push(
+							`https://www.google.com/s2/favicons?domain=${encodeURIComponent(parsedHostname)}&sz=64`
+						);
+					}
+					fallbackCandidates.push("/img/Crafter.png");
+
+					const fallbackSrc = fallbackCandidates.find(
+						(candidate) => candidate && candidate !== target.currentSrc && candidate !== target.src
+					);
+					if (fallbackSrc) {
+						target.dataset.fallbackTried = "1";
+						target.src = fallbackSrc;
+						return;
+					}
+				}
+			}
+
 			if (shouldHideExternalCardImage(target)) {
 				target.style.display = "none";
 			}

@@ -63,6 +63,13 @@ function ensureCardBody(card: HTMLAnchorElement) {
 }
 
 export function renderMeta(card: HTMLAnchorElement, chips: string[]) {
+	const normalizedChips = chips
+		.map((chip) => chip.trim())
+		.filter((chip) => chip.length > 0);
+	if (normalizedChips.length === 0) {
+		return;
+	}
+
 	const body = ensureCardBody(card);
 	let metaContainer = body.querySelector<HTMLDivElement>(".external-link-card__meta");
 	if (!metaContainer) {
@@ -71,7 +78,7 @@ export function renderMeta(card: HTMLAnchorElement, chips: string[]) {
 		body.appendChild(metaContainer);
 	}
 	metaContainer.innerHTML = "";
-	chips.forEach((chip) => {
+	normalizedChips.forEach((chip) => {
 		const chipNode = document.createElement("span");
 		chipNode.className = "external-link-card__meta-chip";
 		chipNode.textContent = chip;
@@ -82,13 +89,18 @@ export function renderMeta(card: HTMLAnchorElement, chips: string[]) {
 function renderStatus(card: HTMLAnchorElement, status?: string) {
 	const body = ensureCardBody(card);
 	const existing = body.querySelector<HTMLSpanElement>(".external-link-card__status");
-	if (!status) {
+	if (status === undefined) {
+		return;
+	}
+
+	const normalized = status.trim();
+	if (!normalized) {
 		existing?.remove();
 		return;
 	}
 	const statusNode = existing ?? document.createElement("span");
 	statusNode.className = "external-link-card__status";
-	statusNode.textContent = status;
+	statusNode.textContent = normalized;
 	if (!existing) {
 		body.appendChild(statusNode);
 	}
@@ -97,7 +109,15 @@ function renderStatus(card: HTMLAnchorElement, status?: string) {
 function renderAuthor(card: HTMLAnchorElement, authorName?: string, authorAvatarUrl?: string) {
 	const body = ensureCardBody(card);
 	const existing = body.querySelector<HTMLSpanElement>(".external-link-card__author");
-	if (!authorName && !authorAvatarUrl) {
+	const shouldUpdateAuthor = authorName !== undefined || authorAvatarUrl !== undefined;
+	if (!shouldUpdateAuthor) {
+		return;
+	}
+
+	const normalizedAuthorName = (authorName ?? "").trim();
+	const normalizedAuthorAvatarUrl = (authorAvatarUrl ?? "").trim();
+
+	if (!normalizedAuthorName && !normalizedAuthorAvatarUrl) {
 		existing?.remove();
 		return;
 	}
@@ -105,9 +125,9 @@ function renderAuthor(card: HTMLAnchorElement, authorName?: string, authorAvatar
 	authorNode.className = "external-link-card__author";
 	authorNode.innerHTML = "";
 
-	if (authorAvatarUrl) {
+	if (normalizedAuthorAvatarUrl) {
 		const avatar = document.createElement("img");
-		avatar.src = authorAvatarUrl;
+		avatar.src = normalizedAuthorAvatarUrl;
 		avatar.alt = "";
 		avatar.className = "external-link-card__author-avatar";
 		avatar.loading = "lazy";
@@ -115,10 +135,10 @@ function renderAuthor(card: HTMLAnchorElement, authorName?: string, authorAvatar
 		authorNode.appendChild(avatar);
 	}
 
-	if (authorName) {
+	if (normalizedAuthorName) {
 		const name = document.createElement("span");
 		name.className = "external-link-card__author-name";
-		name.textContent = authorName;
+		name.textContent = normalizedAuthorName;
 		authorNode.appendChild(name);
 	}
 
@@ -144,15 +164,17 @@ export function renderPreviewCard(card: HTMLAnchorElement, preview: LinkPreviewP
 		subtitleNode.textContent = preview.subtitle || subtitleNode.textContent || "";
 	}
 	const existingDescription = body.querySelector<HTMLElement>(".external-link-card__description");
-	if (preview.description) {
-		const descriptionNode = existingDescription ?? document.createElement("span");
-		descriptionNode.className = "external-link-card__description";
-		descriptionNode.textContent = preview.description;
-		if (!existingDescription) {
-			body.appendChild(descriptionNode);
+	if (preview.description !== undefined) {
+		if (preview.description) {
+			const descriptionNode = existingDescription ?? document.createElement("span");
+			descriptionNode.className = "external-link-card__description";
+			descriptionNode.textContent = preview.description;
+			if (!existingDescription) {
+				body.appendChild(descriptionNode);
+			}
+		} else {
+			existingDescription?.remove();
 		}
-	} else {
-		existingDescription?.remove();
 	}
 
 	const thumbnailNode = card.querySelector<HTMLImageElement>(".external-link-card__thumb");
