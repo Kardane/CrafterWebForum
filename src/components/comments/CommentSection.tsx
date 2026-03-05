@@ -85,6 +85,26 @@ type RenderRow =
 
 const COMPOSER_RESERVE_HEIGHT = 220;
 
+function parseTargetCommentIdFromLocation(): number | null {
+	const searchParams = new URLSearchParams(window.location.search);
+	const queryCommentId = Number.parseInt(searchParams.get("commentId") ?? "", 10);
+	if (Number.isInteger(queryCommentId) && queryCommentId > 0) {
+		return queryCommentId;
+	}
+
+	const hashMatched = window.location.hash.match(/^#comment-(\d+)$/);
+	if (!hashMatched) {
+		return null;
+	}
+
+	const hashCommentId = Number.parseInt(hashMatched[1] ?? "", 10);
+	if (!Number.isInteger(hashCommentId) || hashCommentId <= 0) {
+		return null;
+	}
+
+	return hashCommentId;
+}
+
 export default function CommentSection({
 	postId,
 	initialComments,
@@ -121,6 +141,7 @@ export default function CommentSection({
 	const streamRef = useRef<HTMLDivElement>(null);
 	const composerShellRef = useRef<HTMLDivElement>(null);
 	const [composerDockInsets, setComposerDockInsets] = useState<{ left: number; right: number } | null>(null);
+	const initialUrlCommentJumpHandledRef = useRef(false);
 
 	// --- 파생 데이터 ---
 	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
@@ -310,6 +331,29 @@ export default function CommentSection({
 			window.removeEventListener(SCROLL_COMMENT_FEED_BOTTOM_EVENT, scrollFeedBottom);
 		};
 	}, [scrollToBottom]);
+
+	useEffect(() => {
+		if (initialUrlCommentJumpHandledRef.current || flattenedComments.length === 0) {
+			return;
+		}
+
+		const targetCommentId = parseTargetCommentIdFromLocation();
+		initialUrlCommentJumpHandledRef.current = true;
+		if (!targetCommentId) {
+			return;
+		}
+
+		const rafId = window.requestAnimationFrame(() => {
+			if (!ensureCommentVisible(targetCommentId)) {
+				return;
+			}
+			scrollToCommentElement(targetCommentId, true, setHighlightedCommentId);
+		});
+
+		return () => {
+			window.cancelAnimationFrame(rafId);
+		};
+	}, [ensureCommentVisible, flattenedComments.length, scrollToCommentElement]);
 
 	useRealtimeBroadcast(REALTIME_TOPICS.post(postId), {
 		[REALTIME_EVENTS.COMMENT_CREATED]: (payload) => {

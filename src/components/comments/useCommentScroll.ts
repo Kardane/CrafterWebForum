@@ -20,6 +20,16 @@ interface UseCommentScrollOptions {
 	flattenedCommentsLength: number;
 }
 
+function hasTargetCommentInUrl(): boolean {
+	const searchParams = new URLSearchParams(window.location.search);
+	const queryCommentId = Number.parseInt(searchParams.get("commentId") ?? "", 10);
+	if (Number.isInteger(queryCommentId) && queryCommentId > 0) {
+		return true;
+	}
+
+	return /^#comment-\d+$/.test(window.location.hash);
+}
+
 export function useCommentScroll({
 	postId,
 	streamRef,
@@ -170,6 +180,10 @@ export function useCommentScroll({
 			return;
 		}
 		if (!restoreCheckedRef.current) {
+			return;
+		}
+		if (hasTargetCommentInUrl()) {
+			latestJumpAppliedRef.current = true;
 			return;
 		}
 		latestJumpAppliedRef.current = true;
