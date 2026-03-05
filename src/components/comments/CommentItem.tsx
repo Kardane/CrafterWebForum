@@ -541,6 +541,30 @@ export default function CommentItem({
 					margin: 0;
 				}
 
+				.comment-body :global(.embed-container) {
+					width: fit-content;
+					max-width: 100%;
+					min-height: 0;
+					aspect-ratio: auto;
+				}
+
+				.comment-body :global(.embed-container video),
+				.comment-body :global(.embed-container img) {
+					display: block;
+					width: auto;
+					max-width: 100%;
+					height: auto;
+					max-height: min(56vh, 420px);
+				}
+
+				.comment-body :global(.embed-container iframe) {
+					display: block;
+					width: min(100%, 720px);
+					height: auto;
+					aspect-ratio: 16 / 9;
+					min-height: 0;
+				}
+
 				.comment-hover-time {
 					font-size: 0.7rem;
 					color: rgba(255, 255, 255, 0.4);

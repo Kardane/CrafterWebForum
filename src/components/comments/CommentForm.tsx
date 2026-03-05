@@ -58,6 +58,8 @@ export default function CommentForm({
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const dragDepthRef = useRef(0);
+	const isUserResizedRef = useRef(false);
+	const resizeStartHeightRef = useRef<number | null>(null);
 	const isEditMode = mode === "edit";
 	const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -117,6 +119,10 @@ export default function CommentForm({
 	const resizeTextarea = () => {
 		const textarea = textareaRef.current;
 		if (!textarea) return;
+		if (isUserResizedRef.current) {
+			textarea.style.overflowY = "auto";
+			return;
+		}
 
 		const computed = window.getComputedStyle(textarea);
 		const lineHeight = Number.parseFloat(computed.lineHeight || "20") || 20;
@@ -133,6 +139,33 @@ export default function CommentForm({
 	useEffect(() => {
 		resizeTextarea();
 	}, [content, initialValue]);
+
+	useEffect(() => {
+		isUserResizedRef.current = false;
+		resizeStartHeightRef.current = null;
+	}, [initialValue, isEditMode]);
+
+	const handleTextareaMouseDown = () => {
+		if (!textareaRef.current) {
+			return;
+		}
+		resizeStartHeightRef.current = textareaRef.current.offsetHeight;
+	};
+
+	const handleTextareaMouseUp = () => {
+		if (!textareaRef.current) {
+			return;
+		}
+		const startHeight = resizeStartHeightRef.current;
+		resizeStartHeightRef.current = null;
+		if (startHeight === null) {
+			return;
+		}
+		if (Math.abs(textareaRef.current.offsetHeight - startHeight) >= 2) {
+			isUserResizedRef.current = true;
+			textareaRef.current.style.overflowY = "auto";
+		}
+	};
 
 	const uploadFiles = async (files: File[]) => {
 		if (files.length === 0) return content;
@@ -235,6 +268,8 @@ export default function CommentForm({
 
 		try {
 			await onSubmit(targetContent);
+			isUserResizedRef.current = false;
+			resizeStartHeightRef.current = null;
 			setContent("");
 			if (postId) {
 				localStorage.removeItem(`comment_draft_${postId}`);
@@ -398,6 +433,8 @@ export default function CommentForm({
 						rows={1}
 						onFocus={() => setIsMenuOpen(false)}
 						onPaste={handlePaste}
+						onMouseDown={handleTextareaMouseDown}
+						onMouseUp={handleTextareaMouseUp}
 					/>
 
 					<button type="submit" disabled={disabled || isUploading || !content.trim()} className="submit-btn">
@@ -578,10 +615,10 @@ export default function CommentForm({
 					color: var(--text-primary);
 					font-size: 0.92rem;
 					line-height: 1.45;
-					resize: none;
+					resize: vertical;
 					min-height: calc(1.45em + 20px);
-					max-height: calc(1.45em * 5 + 20px);
-					overflow-y: hidden;
+					max-height: min(70vh, 720px);
+					overflow-y: auto;
 				}
 
 				.comment-form.composer .comment-textarea {
