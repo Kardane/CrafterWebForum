@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 import { getPostListCacheTags } from "@/lib/cache-tags";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
 import { type PostBoardType, parsePostTagMetadata } from "@/lib/post-board";
+import { isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 12;
@@ -342,28 +343,37 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 					},
 			  })
 			: Promise.resolve([] as Array<{ postId: number; lastReadCommentCount: number }>);
-		const subscriptionsPromise = shouldLoadSubscriptionOverlay
-			? prisma.postSubscription.findMany({
-					where: {
-						userId: sessionUserId,
-						postId: { in: postIds },
-					},
-					select: { postId: true },
-			  })
-			: Promise.resolve([] as Array<{ postId: number }>);
-		const [likes, reads, subscriptions] = await Promise.all([
+		const [likes, reads] = await Promise.all([
 			likesPromise,
 			readsPromise,
-			subscriptionsPromise,
 		]);
-		queryAuxMs = performance.now() - queryAuxStart;
 		likedPostIdSet = new Set(likes.map((like) => like.postId));
-		subscribedPostIdSet = new Set(subscriptions.map((subscription) => subscription.postId));
 		if (shouldLoadReadOverlay) {
 			readCountByPostId = new Map(
 				reads.map((read) => [read.postId, read.lastReadCommentCount])
 			);
 		}
+
+		if (shouldLoadSubscriptionOverlay) {
+			try {
+				const subscriptions = await prisma.postSubscription.findMany({
+					where: {
+						userId: sessionUserId,
+						postId: { in: postIds },
+					},
+					select: { postId: true },
+				});
+				subscribedPostIdSet = new Set(subscriptions.map((subscription) => subscription.postId));
+			} catch (error) {
+				if (isMissingPostSubscriptionTableError(error)) {
+					console.warn("[posts-service] post subscription table missing; skipping subscription overlay");
+				} else {
+					throw error;
+				}
+			}
+		}
+
+		queryAuxMs = performance.now() - queryAuxStart;
 	}
 
 	const serializeStart = performance.now();

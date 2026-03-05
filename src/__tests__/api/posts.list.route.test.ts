@@ -138,6 +138,41 @@ describe("GET /api/posts", () => {
 		expect(serverTiming).toContain("total;dur=");
 	}, 15_000);
 
+	it("falls back when PostSubscription table is missing", async () => {
+		authMock.mockResolvedValue({ user: { id: "7" } });
+		postFindManyMock.mockResolvedValue([
+			{
+				id: 31,
+				title: "gamma",
+				content: "hello",
+				tags: "[]",
+				likes: 0,
+				views: 0,
+				createdAt: new Date("2026-02-11T00:00:00Z"),
+				updatedAt: new Date("2026-02-11T01:00:00Z"),
+				author: { nickname: "tester", minecraftUuid: null },
+				commentCount: 0,
+			},
+		]);
+		postCountMock.mockResolvedValue(1);
+		likeFindManyMock.mockResolvedValue([]);
+		postReadFindManyMock.mockResolvedValue([]);
+		postSubscriptionFindManyMock.mockRejectedValue(
+			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.PostSubscription")
+		);
+
+		const { GET } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts?page=1&limit=12");
+
+		const res = await GET(req as never);
+		expect(res.status).toBe(200);
+		const payload = (await res.json()) as {
+			posts: Array<{ userSubscribed: boolean }>;
+		};
+		expect(payload.posts).toHaveLength(1);
+		expect(payload.posts[0]?.userSubscribed).toBe(false);
+	});
+
 	it("returns unreadCount based on total comments when unauthenticated", async () => {
 		authMock.mockResolvedValue(null);
 		postFindManyMock.mockResolvedValue([

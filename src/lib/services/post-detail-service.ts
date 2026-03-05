@@ -7,6 +7,7 @@ import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 import { parsePostTagMetadata } from "@/lib/post-board";
 import { fetchCommentSubtreeRowsByRootIds } from "@/lib/comment-subtree-query";
+import { isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 
 const POST_DETAIL_CACHE_VERSION = "v1";
 const POST_DETAIL_REVALIDATE_SECONDS = 30;
@@ -233,17 +234,6 @@ export async function getPostDetail(
 			id: true,
 		},
 	});
-	const subscriptionPromise = prisma.postSubscription.findUnique({
-		where: {
-			userId_postId: {
-				userId: input.sessionUserId,
-				postId: input.postId,
-			},
-		},
-		select: {
-			postId: true,
-		},
-	});
 
 	const readStart = performance.now();
 	const readPromise = prisma.postRead.findUnique({
@@ -281,7 +271,27 @@ export async function getPostDetail(
 		return null;
 	}
 
-	const [liked, subscription, previousRead] = await Promise.all([likePromise, subscriptionPromise, readPromise]);
+	const [liked, previousRead] = await Promise.all([likePromise, readPromise]);
+	let subscription: { postId: number } | null = null;
+	try {
+		subscription = await prisma.postSubscription.findUnique({
+			where: {
+				userId_postId: {
+					userId: input.sessionUserId,
+					postId: input.postId,
+				},
+			},
+			select: {
+				postId: true,
+			},
+		});
+	} catch (error) {
+		if (isMissingPostSubscriptionTableError(error)) {
+			console.warn("[post-detail] post subscription table missing; using unsubscribed fallback");
+		} else {
+			throw error;
+		}
+	}
 	const queryLikeMs = performance.now() - likeStart;
 	const queryReadMs = performance.now() - readStart;
 

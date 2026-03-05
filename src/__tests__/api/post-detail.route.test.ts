@@ -275,4 +275,40 @@ describe("GET /api/posts/[id]", () => {
 		expect(res.status).toBe(200);
 		expect(postReadUpsertMock).not.toHaveBeenCalled();
 	});
+
+	it("falls back when PostSubscription table is missing", async () => {
+		authMock.mockResolvedValue({ user: { id: "1" } });
+		postFindFirstMock.mockResolvedValue({
+			id: 10,
+			title: "title",
+			content: "content",
+			tags: "[]",
+			commentCount: 0,
+			likes: 2,
+			views: 7,
+			createdAt: new Date("2026-01-01T00:00:00.000Z"),
+			updatedAt: new Date("2026-01-01T01:00:00.000Z"),
+			authorId: 1,
+			author: {
+				id: 1,
+				nickname: "writer",
+				minecraftUuid: "uuid-1",
+			},
+		});
+		likeFindFirstMock.mockResolvedValue(null);
+		postSubscriptionFindUniqueMock.mockRejectedValue(
+			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.PostSubscription")
+		);
+		commentCountMock.mockResolvedValue(0);
+		commentFindManyMock.mockResolvedValueOnce([]);
+		fetchCommentSubtreeRowsByRootIdsMock.mockResolvedValue([]);
+		postReadFindUniqueMock.mockResolvedValue(null);
+
+		const { GET } = await import("@/app/api/posts/[id]/route");
+		const req = new Request("http://localhost/api/posts/10");
+		const res = await GET(req as never, { params: Promise.resolve({ id: "10" }) });
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { post: { user_subscribed: boolean } };
+		expect(body.post.user_subscribed).toBe(false);
+	});
 	});
