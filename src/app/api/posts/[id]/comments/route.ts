@@ -6,6 +6,7 @@ import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/ca
 import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 import { queueMentionNotificationsAndDeliveries } from "@/lib/comment-mention-notifications";
+import { queuePostSubscriptionNotificationsAndDeliveries } from "@/lib/comment-subscription-notifications";
 import { resolveActiveUserFromSession } from "@/lib/active-user";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { fetchCommentSubtreeRowsByRootIds } from "@/lib/comment-subtree-query";
@@ -276,6 +277,26 @@ export async function POST(
 				event: REALTIME_EVENTS.NOTIFICATION_CREATED,
 				payload: {
 					type: "mention_comment",
+					postId,
+					commentId: comment.id,
+					actorNickname,
+					targetNickname: target.nickname,
+				},
+			});
+		}
+
+		const subscriptionTargets = await queuePostSubscriptionNotificationsAndDeliveries({
+			postId,
+			commentId: comment.id,
+			actorUserId: sessionUserId,
+			actorNickname,
+		});
+		for (const target of subscriptionTargets) {
+			void broadcastRealtime({
+				topic: REALTIME_TOPICS.user(target.id),
+				event: REALTIME_EVENTS.NOTIFICATION_CREATED,
+				payload: {
+					type: "post_comment",
 					postId,
 					commentId: comment.id,
 					actorNickname,

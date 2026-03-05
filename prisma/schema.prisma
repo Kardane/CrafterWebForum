@@ -34,6 +34,7 @@ model User {
   comments         Comment[]
   likes            Like[]
   postReads        PostRead[]
+  postSubscriptions PostSubscription[]
   minecraftCodes   MinecraftCode[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsSent     Notification[] @relation("NotificationActor")
@@ -64,6 +65,7 @@ model Post {
   comments    Comment[]
   likeRecords Like[]
   postReads   PostRead[]
+  subscriptions PostSubscription[]
 
   @@index([authorId])
   @@index([deletedAt, updatedAt])
@@ -123,6 +125,24 @@ model PostRead {
   post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   @@id([userId, postId])
+}
+
+// ============================================
+// 게시글 알림 구독 상태
+// ============================================
+model PostSubscription {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  postId    Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId, updatedAt])
+  @@index([postId])
 }
 
 // ============================================

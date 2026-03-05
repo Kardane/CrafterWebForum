@@ -11,6 +11,7 @@ const userFindManyMock = vi.fn();
 const notificationCreateManyMock = vi.fn();
 const notificationFindManyMock = vi.fn();
 const pushSubscriptionFindManyMock = vi.fn();
+const postSubscriptionFindManyMock = vi.fn();
 const notificationDeliveryCreateManyMock = vi.fn();
 const transactionMock = vi.fn();
 const resolveActiveUserFromSessionMock = vi.fn();
@@ -40,6 +41,9 @@ vi.mock("@/lib/prisma", () => ({
 		},
 		pushSubscription: {
 			findMany: pushSubscriptionFindManyMock,
+		},
+		postSubscription: {
+			findMany: postSubscriptionFindManyMock,
 		},
 		notificationDelivery: {
 			createMany: notificationDeliveryCreateManyMock,
@@ -99,6 +103,7 @@ describe("POST /api/posts/[id]/comments", () => {
 		notificationCreateManyMock.mockReset();
 		notificationFindManyMock.mockReset();
 		pushSubscriptionFindManyMock.mockReset();
+		postSubscriptionFindManyMock.mockReset();
 		notificationDeliveryCreateManyMock.mockReset();
 		transactionMock.mockReset();
 		resolveActiveUserFromSessionMock.mockReset();
@@ -113,6 +118,7 @@ describe("POST /api/posts/[id]/comments", () => {
 		notificationCreateManyMock.mockResolvedValue({ count: 0 });
 		notificationFindManyMock.mockResolvedValue([]);
 		pushSubscriptionFindManyMock.mockResolvedValue([]);
+		postSubscriptionFindManyMock.mockResolvedValue([]);
 		notificationDeliveryCreateManyMock.mockResolvedValue({ count: 0 });
 	});
 
@@ -212,6 +218,51 @@ describe("POST /api/posts/[id]/comments", () => {
 						subscriptionId: 33,
 						channel: "web_push",
 						status: "queued",
+					}),
+				]),
+			})
+		);
+	});
+
+	it("queues post subscription notifications for subscribed users", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1, nickname: "actor" } });
+		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null, tags: null });
+		commentCreateMock.mockResolvedValue(
+			buildCommentRow({ id: 102, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "hello" })
+		);
+		postUpdateMock.mockResolvedValue({ commentCount: 6 });
+		postSubscriptionFindManyMock.mockResolvedValue([{ userId: 30, user: { nickname: "watcher" } }]);
+		notificationCreateManyMock.mockResolvedValue({ count: 1 });
+		notificationFindManyMock.mockResolvedValue([{ id: 601, userId: 30 }]);
+		pushSubscriptionFindManyMock.mockResolvedValue([{ id: 41, userId: 30 }]);
+
+		const { POST } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "hello" }),
+		});
+
+		const res = await POST(req as never, { params: Promise.resolve({ id: "12" }) });
+
+		expect(res.status).toBe(200);
+		expect(postSubscriptionFindManyMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					postId: 12,
+					userId: { not: 10 },
+				}),
+			})
+		);
+		expect(notificationCreateManyMock).toHaveBeenCalled();
+		expect(notificationDeliveryCreateManyMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.arrayContaining([
+					expect.objectContaining({
+						notificationId: 601,
+						userId: 30,
+						subscriptionId: 41,
+						channel: "web_push",
 					}),
 				]),
 			})
