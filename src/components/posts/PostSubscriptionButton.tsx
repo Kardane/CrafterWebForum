@@ -4,12 +4,24 @@ import { useEffect, useState } from "react";
 import classNames from "classnames";
 import { Bell, BellOff, Loader2 } from "lucide-react";
 
+interface SidebarFallbackPostItem {
+	title: string;
+	href: string;
+	author: {
+		nickname: string;
+		minecraftUuid: string | null;
+	};
+	commentCount: number;
+	latestCommentId: number | null;
+}
+
 interface PostSubscriptionButtonProps {
 	postId: number;
 	initialSubscribed: boolean;
 	variant?: "icon" | "button";
 	className?: string;
 	onChange?: (nextSubscribed: boolean) => void;
+	sidebarFallbackItem?: SidebarFallbackPostItem;
 }
 
 export default function PostSubscriptionButton({
@@ -18,6 +30,7 @@ export default function PostSubscriptionButton({
 	variant = "icon",
 	className,
 	onChange,
+	sidebarFallbackItem,
 }: PostSubscriptionButtonProps) {
 	const [isSubscribed, setIsSubscribed] = useState(initialSubscribed);
 	const [isPending, setIsPending] = useState(false);
@@ -45,10 +58,24 @@ export default function PostSubscriptionButton({
 			if (!response.ok) {
 				throw new Error(`failed_to_toggle_subscription:${response.status}`);
 			}
+			const payload = (await response.json()) as { fallbackLocalOnly?: boolean; enabled?: boolean };
 
 			setIsSubscribed(nextSubscribed);
 			onChange?.(nextSubscribed);
-			window.dispatchEvent(new CustomEvent("sidebarTrackedPostsChanged"));
+
+			if (payload.fallbackLocalOnly) {
+				window.dispatchEvent(
+					new CustomEvent("sidebarTrackedPostsFallbackChanged", {
+						detail: {
+							postId,
+							enabled: nextSubscribed,
+							item: sidebarFallbackItem,
+						},
+					})
+				);
+			} else {
+				window.dispatchEvent(new CustomEvent("sidebarTrackedPostsChanged"));
+			}
 		} catch (error) {
 			console.error("[post-subscription] failed to toggle", error);
 		} finally {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { resolveActiveUserFromSession } from "@/lib/active-user";
+import { isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { z } from "zod";
 
@@ -46,35 +47,45 @@ export async function PATCH(
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
-		if (parsedBody.data.enabled) {
-			await prisma.postSubscription.upsert({
-				where: {
-					userId_postId: {
+		let fallbackLocalOnly = false;
+		try {
+			if (parsedBody.data.enabled) {
+				await prisma.postSubscription.upsert({
+					where: {
+						userId_postId: {
+							userId: activeUser.context.userId,
+							postId,
+						},
+					},
+					update: {
+						updatedAt: new Date(),
+					},
+					create: {
 						userId: activeUser.context.userId,
 						postId,
 					},
-				},
-				update: {
-					updatedAt: new Date(),
-				},
-				create: {
-					userId: activeUser.context.userId,
-					postId,
-				},
-			});
-		} else {
-			await prisma.postSubscription.deleteMany({
-				where: {
-					userId: activeUser.context.userId,
-					postId,
-				},
-			});
+				});
+			} else {
+				await prisma.postSubscription.deleteMany({
+					where: {
+						userId: activeUser.context.userId,
+						postId,
+					},
+				});
+			}
+		} catch (error) {
+			if (isMissingPostSubscriptionTableError(error)) {
+				fallbackLocalOnly = true;
+			} else {
+				throw error;
+			}
 		}
 
 		return NextResponse.json({
 			success: true,
 			postId,
 			enabled: parsedBody.data.enabled,
+			fallbackLocalOnly,
 		});
 	} catch (error) {
 		if (error instanceof JsonBodyError) {

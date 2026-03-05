@@ -10,6 +10,7 @@ interface PostStickyHeaderProps {
 	postId: number;
 	title: string;
 	authorName: string;
+	authorMinecraftUuid?: string | null;
 	createdAt: string | Date;
 	commentCount: number;
 	initialLikes: number;
@@ -35,6 +36,7 @@ export default function PostStickyHeader({
 	postId,
 	title,
 	authorName,
+	authorMinecraftUuid = null,
 	createdAt,
 	commentCount,
 	initialLikes,
@@ -76,6 +78,16 @@ export default function PostStickyHeader({
 						postId={postId}
 						initialSubscribed={initialSubscribed}
 						variant="button"
+						sidebarFallbackItem={{
+							title,
+							href: `/posts/${postId}`,
+							author: {
+								nickname: authorName,
+								minecraftUuid: authorMinecraftUuid,
+							},
+							commentCount,
+							latestCommentId: null,
+						}}
 					/>
 
 					<div className="flex items-center gap-1 text-xs text-text-secondary">

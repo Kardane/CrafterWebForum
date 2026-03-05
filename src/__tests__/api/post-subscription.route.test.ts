@@ -88,7 +88,7 @@ describe("PATCH /api/posts/[id]/subscription", () => {
 		expect(res.status).toBe(200);
 		expect(postSubscriptionUpsertMock).toHaveBeenCalledTimes(1);
 		expect(postSubscriptionDeleteManyMock).not.toHaveBeenCalled();
-		await expect(res.json()).resolves.toEqual({ success: true, postId: 12, enabled: true });
+		await expect(res.json()).resolves.toEqual({ success: true, postId: 12, enabled: true, fallbackLocalOnly: false });
 	});
 
 	it("deletes subscription when enabled=false", async () => {
@@ -105,7 +105,25 @@ describe("PATCH /api/posts/[id]/subscription", () => {
 		expect(res.status).toBe(200);
 		expect(postSubscriptionDeleteManyMock).toHaveBeenCalledWith({ where: { userId: 44, postId: 12 } });
 		expect(postSubscriptionUpsertMock).not.toHaveBeenCalled();
-		await expect(res.json()).resolves.toEqual({ success: true, postId: 12, enabled: false });
+		await expect(res.json()).resolves.toEqual({ success: true, postId: 12, enabled: false, fallbackLocalOnly: false });
+	});
+
+	it("returns fallbackLocalOnly when PostSubscription table is missing", async () => {
+		authMock.mockResolvedValue({ user: { id: "44" } });
+		postSubscriptionUpsertMock.mockRejectedValue(
+			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.PostSubscription")
+		);
+
+		const { PATCH } = await import("@/app/api/posts/[id]/subscription/route");
+		const req = new Request("http://localhost/api/posts/12/subscription", {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ enabled: true }),
+		});
+
+		const res = await PATCH(req as never, { params: Promise.resolve({ id: "12" }) });
+		expect(res.status).toBe(200);
+		await expect(res.json()).resolves.toEqual({ success: true, postId: 12, enabled: true, fallbackLocalOnly: true });
 	});
 
 	it("returns 404 when post is missing", async () => {

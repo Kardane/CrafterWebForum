@@ -7,6 +7,7 @@ import { createServerTimingHeader } from "@/lib/server-timing";
 import { getPostMutationTags, safeRevalidateTags } from "@/lib/cache-tags";
 import { toStoredTags } from "@/lib/post-board";
 import { resolveActiveUserFromSession } from "@/lib/active-user";
+import { isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { z } from "zod";
 
@@ -112,21 +113,28 @@ export async function POST(request: NextRequest) {
 				authorId: sessionUserId,
 			},
 		});
-		await prisma.postSubscription.upsert({
-			where: {
-				userId_postId: {
+		try {
+			await prisma.postSubscription.upsert({
+				where: {
+					userId_postId: {
+						userId: sessionUserId,
+						postId: post.id,
+					},
+				},
+				update: {
+					updatedAt: new Date(),
+				},
+				create: {
 					userId: sessionUserId,
 					postId: post.id,
 				},
-			},
-			update: {
-				updatedAt: new Date(),
-			},
-			create: {
-				userId: sessionUserId,
-				postId: post.id,
-			},
-		});
+			});
+		} catch (error) {
+			if (!isMissingPostSubscriptionTableError(error)) {
+				throw error;
+			}
+			console.warn("[API] POST /api/posts post subscription table missing; skipping authored auto-subscription");
+		}
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId: post.id,

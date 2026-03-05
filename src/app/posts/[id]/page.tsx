@@ -68,6 +68,7 @@ async function PostDetailContent({ postId, sessionUserId }: PostDetailContentPro
 					postId={post.id}
 					title={post.title}
 					authorName={post.author_name}
+					authorMinecraftUuid={post.author_uuid}
 					createdAt={post.createdAt}
 					initialLikes={post.likes}
 					initialLiked={post.user_liked}

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import classNames from "classnames";
 import { ChevronDown, ChevronUp, Settings, Wrench } from "lucide-react";
 import SidebarSettingsModal from "@/components/sidebar/SidebarSettingsModal";
 import SafeImage from "@/components/ui/SafeImage";
@@ -63,7 +62,8 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 	const [links, setLinks] = useState<SidebarLink[]>(() => buildSidebarToolLinks(DEFAULT_SETTINGS));
 	const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
 	const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-	const [isToolsCollapsed, setIsToolsCollapsed] = useState(false);
+	const [isDesktopCollapsed, setIsDesktopCollapsed] = useState(false);
+	const [isMobileListCollapsed, setIsMobileListCollapsed] = useState(false);
 
 	useEffect(() => {
 		const refreshLinks = () => {
@@ -91,41 +91,48 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 
 	return (
 		<>
-			<div className="pointer-events-none fixed right-4 top-16 z-[90] hidden md:block">
-				<aside className="pointer-events-auto flex w-56 max-h-[calc(100vh-80px)] flex-col overflow-hidden rounded-lg border border-bg-tertiary bg-bg-secondary/95 shadow-lg backdrop-blur">
-					<div className="flex items-center justify-between border-b border-bg-tertiary px-3 py-2">
-						<div className="text-xs font-semibold tracking-wide text-text-muted">도구 모음</div>
-						<div className="flex items-center gap-1">
-							<button
-								type="button"
-								onClick={() => setIsToolsCollapsed((prev) => !prev)}
-								className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-								title={isToolsCollapsed ? "도구 모음 펼치기" : "도구 모음 접기"}
-							>
-								{isToolsCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
-							</button>
-							<button
-								type="button"
-								onClick={() => setIsSettingsModalOpen(true)}
-								className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-								title="도구 링크 설정"
-							>
-								<Settings size={12} /> 설정
-							</button>
+			<div className="pointer-events-none fixed right-4 top-1/2 z-[90] hidden -translate-y-1/2 md:block">
+				{isDesktopCollapsed ? (
+					<button
+						type="button"
+						onClick={() => setIsDesktopCollapsed(false)}
+						className="pointer-events-auto inline-flex h-12 w-12 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg transition-colors hover:bg-bg-tertiary"
+						title="도구 모음 열기"
+					>
+						<Wrench size={18} />
+					</button>
+				) : (
+					<aside className="pointer-events-auto flex w-56 max-h-[70vh] flex-col overflow-hidden rounded-lg border border-bg-tertiary bg-bg-secondary/95 shadow-lg backdrop-blur">
+						<div className="flex items-center justify-between border-b border-bg-tertiary px-3 py-2">
+							<div className="text-xs font-semibold tracking-wide text-text-muted">도구 모음</div>
+							<div className="flex items-center gap-1">
+								<button
+									type="button"
+									onClick={() => setIsDesktopCollapsed(true)}
+									className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+									title="도구 모음 접기"
+								>
+									<ChevronDown size={12} />
+								</button>
+								<button
+									type="button"
+									onClick={() => setIsSettingsModalOpen(true)}
+									className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+									title="도구 링크 설정"
+								>
+									<Settings size={12} /> 설정
+								</button>
+							</div>
 						</div>
-					</div>
-					{!isToolsCollapsed ? (
 						<nav className="custom-scrollbar overflow-y-auto p-2">{links.map((link) => renderToolLink(link))}</nav>
-					) : null}
-				</aside>
+					</aside>
+				)}
 			</div>
 
 			<button
 				type="button"
 				onClick={() => setIsMobileModalOpen(true)}
-				className={classNames(
-					"fixed bottom-5 right-4 z-[95] inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg transition-colors hover:bg-bg-tertiary md:hidden"
-				)}
+				className="fixed bottom-5 right-4 z-[95] inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg transition-colors hover:bg-bg-tertiary md:hidden"
 				title="도구 모음"
 			>
 				<Wrench size={18} />
@@ -151,13 +158,13 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 				</button>
 				<button
 					type="button"
-					onClick={() => setIsToolsCollapsed((prev) => !prev)}
+					onClick={() => setIsMobileListCollapsed((prev) => !prev)}
 					className="mb-2 inline-flex w-full items-center justify-center gap-1 rounded border border-border px-2 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
 				>
-					{isToolsCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
-					{isToolsCollapsed ? "도구 목록 펼치기" : "도구 목록 접기"}
+					{isMobileListCollapsed ? <ChevronDown size={13} /> : <ChevronUp size={13} />}
+					{isMobileListCollapsed ? "도구 목록 펼치기" : "도구 목록 접기"}
 				</button>
-				{!isToolsCollapsed ? (
+				{!isMobileListCollapsed ? (
 					<nav className="max-h-[60vh] overflow-y-auto">
 						{links.map((link) => renderToolLink(link, () => setIsMobileModalOpen(false)))}
 					</nav>

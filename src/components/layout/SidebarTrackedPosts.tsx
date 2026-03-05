@@ -7,7 +7,6 @@ import classNames from "classnames";
 import { useSession } from "next-auth/react";
 import { Bell, BellOff, Loader2, MessageSquare } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
-import UserAvatar from "@/components/ui/UserAvatar";
 import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 import type { SidebarTrackedPost } from "@/types/sidebar";
@@ -25,6 +24,44 @@ interface SidebarTrackedPostsResponse {
 }
 
 const DEFAULT_FETCH_LIMIT = 30;
+
+interface SidebarTrackedPostsFallbackItem {
+	title: string;
+	href: string;
+	author: {
+		nickname: string;
+		minecraftUuid: string | null;
+	};
+	commentCount: number;
+	latestCommentId: number | null;
+}
+
+interface SidebarTrackedPostsFallbackChangeDetail {
+	postId: number;
+	enabled: boolean;
+	item?: SidebarTrackedPostsFallbackItem;
+}
+
+function buildFallbackTrackedPost(postId: number, item: SidebarTrackedPostsFallbackItem): SidebarTrackedPost {
+	return {
+		postId,
+		title: item.title,
+		href: item.href,
+		lastActivityAt: new Date().toISOString(),
+		author: {
+			nickname: item.author.nickname,
+			minecraftUuid: item.author.minecraftUuid,
+		},
+		sourceFlags: {
+			authored: false,
+			subscribed: true,
+		},
+		isSubscribed: true,
+		commentCount: item.commentCount,
+		newCommentCount: 0,
+		latestCommentId: item.latestCommentId,
+	};
+}
 
 function sortTrackedPosts(rows: SidebarTrackedPost[]): SidebarTrackedPost[] {
 	return [...rows].sort((a, b) => {
@@ -63,6 +100,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 	const { showToast } = useToast();
 
 	const [items, setItems] = useState<SidebarTrackedPost[]>([]);
+	const [fallbackLocalItems, setFallbackLocalItems] = useState<SidebarTrackedPost[]>([]);
 	const [nextCursor, setNextCursor] = useState<string | null>(null);
 	const [hasMore, setHasMore] = useState(false);
 	const [isInitialLoading, setIsInitialLoading] = useState(false);
@@ -73,6 +111,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 	const refreshTrackedPosts = useCallback(async () => {
 		if (!sessionUserId) {
 			setItems([]);
+			setFallbackLocalItems([]);
 			setNextCursor(null);
 			setHasMore(false);
 			return;
@@ -88,7 +127,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			}
 			const payload = (await response.json()) as SidebarTrackedPostsResponse;
 			const rows = Array.isArray(payload.items) ? payload.items : [];
-			setItems(sortTrackedPosts(rows));
+			setItems(mergeTrackedPosts(rows, fallbackLocalItems));
 			setNextCursor(payload.page?.nextCursor ?? null);
 			setHasMore(Boolean(payload.page?.hasMore));
 			hasShownFetchErrorToastRef.current = false;
@@ -101,7 +140,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 		} finally {
 			setIsInitialLoading(false);
 		}
-	}, [sessionUserId, showToast]);
+	}, [fallbackLocalItems, sessionUserId, showToast]);
 
 	const loadMoreTrackedPosts = useCallback(async () => {
 		if (!sessionUserId || !hasMore || !nextCursor || isLoadingMore) {
@@ -163,6 +202,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 				if (!response.ok) {
 					throw new Error(`failed_to_toggle:${response.status}`);
 				}
+				const payload = (await response.json()) as { fallbackLocalOnly?: boolean };
 				setItems((previous) => {
 					const updated = previous
 						.map((item) => {
@@ -181,6 +221,30 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 						.filter((item) => item.sourceFlags.authored || item.sourceFlags.subscribed);
 					return sortTrackedPosts(updated);
 				});
+
+				if (payload.fallbackLocalOnly) {
+					if (enabled) {
+						const existingItem = items.find((item) => item.postId === postId);
+						if (!existingItem) {
+							return;
+						}
+						const ensuredExistingItem: SidebarTrackedPost = existingItem;
+						setFallbackLocalItems((previous) => {
+							const fallback: SidebarTrackedPost = {
+								...ensuredExistingItem,
+								lastActivityAt: new Date().toISOString(),
+								sourceFlags: {
+									authored: false,
+									subscribed: true,
+								},
+								isSubscribed: true,
+							};
+							return mergeTrackedPosts(previous, [fallback]);
+						});
+					} else {
+						setFallbackLocalItems((previous) => previous.filter((item) => item.postId !== postId));
+					}
+				}
 				showToast({
 					type: "success",
 					message: enabled ? "포스트 알림 켰음" : "포스트 알림 껐음",
@@ -192,7 +256,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 				setTogglePending(postId, false);
 			}
 		},
-		[sessionUserId, setTogglePending, showToast]
+		[items, sessionUserId, setTogglePending, showToast]
 	);
 
 	useEffect(() => {
@@ -207,10 +271,35 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 		const handleTrackedPostsChanged = () => {
 			void refreshTrackedPosts();
 		};
+		const handleFallbackChanged = (event: Event) => {
+			const detail = (event as CustomEvent<SidebarTrackedPostsFallbackChangeDetail>).detail;
+			if (!detail || !Number.isInteger(detail.postId) || detail.postId <= 0) {
+				return;
+			}
+
+			if (detail.enabled) {
+				if (!detail.item) {
+					return;
+				}
+				const fallbackItem = buildFallbackTrackedPost(detail.postId, detail.item);
+				setFallbackLocalItems((previous) => mergeTrackedPosts(previous, [fallbackItem]));
+				setItems((previous) => mergeTrackedPosts(previous, [fallbackItem]));
+				return;
+			}
+
+			setFallbackLocalItems((previous) => previous.filter((item) => item.postId !== detail.postId));
+			setItems((previous) =>
+				sortTrackedPosts(
+					previous.filter((item) => item.postId !== detail.postId || item.sourceFlags.authored)
+				)
+			);
+		};
 
 		window.addEventListener("sidebarTrackedPostsChanged", handleTrackedPostsChanged);
+		window.addEventListener("sidebarTrackedPostsFallbackChanged", handleFallbackChanged as EventListener);
 		return () => {
 			window.removeEventListener("sidebarTrackedPostsChanged", handleTrackedPostsChanged);
+			window.removeEventListener("sidebarTrackedPostsFallbackChanged", handleFallbackChanged as EventListener);
 		};
 	}, [refreshTrackedPosts, sessionUserId]);
 
@@ -322,12 +411,6 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 								title={item.title}
 							>
 								<div className="flex items-start gap-2">
-									<UserAvatar
-										nickname={item.author.nickname}
-										uuid={item.author.minecraftUuid}
-										size={30}
-										className="h-[30px] w-[30px] rounded-[5px]"
-									/>
 									<div className="min-w-0 flex-1">
 										<div className="truncate text-sm text-text-primary">{item.title}</div>
 										<div className="mt-0.5 truncate text-[11px] text-text-muted">{item.author.nickname}</div>

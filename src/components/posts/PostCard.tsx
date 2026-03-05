@@ -36,6 +36,7 @@ export default function PostCard({
 	preview,
 	thumbnailUrl,
 	authorName,
+	authorUuid,
 	createdAt,
 	updatedAt,
 	likeCount,
@@ -109,7 +110,21 @@ export default function PostCard({
 							}}
 							className="flex items-center"
 						>
-							<PostSubscriptionButton postId={id} initialSubscribed={initialSubscribed} variant="icon" />
+							<PostSubscriptionButton
+								postId={id}
+								initialSubscribed={initialSubscribed}
+								variant="icon"
+								sidebarFallbackItem={{
+									title,
+									href: `/posts/${id}`,
+									author: {
+										nickname: authorName,
+										minecraftUuid: authorUuid ?? null,
+									},
+									commentCount,
+									latestCommentId: null,
+								}}
+							/>
 						</div>
 						<div className="flex items-center gap-1">
 							<MessageSquare size={14} />
