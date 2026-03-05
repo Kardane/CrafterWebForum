@@ -177,19 +177,19 @@ export function ImageLightboxProvider({ children }: { children: React.ReactNode 
 				hideCloseButton
 				size="xl"
 				variant="sidebarLike"
-				className="!max-w-[96vw] !border-none !bg-transparent !shadow-none"
-				bodyClassName="!overflow-visible !p-0"
+				className="!h-[100dvh] !w-screen !max-h-none !max-w-none !border-none !bg-transparent !shadow-none !pointer-events-none"
+				bodyClassName="!pointer-events-none !flex !h-full !items-center !justify-center !overflow-visible !p-0"
 			>
 				{selectedImage && (
 					<div
-						className="relative h-[82vh] w-[96vw] max-w-[1440px]"
+						className="relative flex h-full w-full items-center justify-center pointer-events-auto"
 						onClick={closeImage}
 					>
 						<SafeImage
 							src={selectedImage.src}
 							alt={selectedImage.alt}
 							fill
-							sizes="96vw"
+							sizes="100vw"
 							loading="eager"
 							onLoad={handleImageLoad}
 							onClick={(event) => {
@@ -197,7 +197,7 @@ export function ImageLightboxProvider({ children }: { children: React.ReactNode 
 									event.stopPropagation();
 								}
 							}}
-							className="object-contain"
+							className="object-contain select-none"
 						/>
 					</div>
 				)}
