@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma";
+import {
+	isMissingNotificationDeliveryTableError,
+	isMissingPostSubscriptionTableError,
+} from "@/lib/db-schema-guard";
 import { buildDeliveryDedupeKey } from "@/lib/push";
 
 export interface PostSubscriptionNotificationTarget {
@@ -12,27 +16,36 @@ export async function queuePostSubscriptionNotificationsAndDeliveries(params: {
 	actorUserId: number;
 	actorNickname: string;
 }): Promise<PostSubscriptionNotificationTarget[]> {
-	const subscriptions = await prisma.postSubscription.findMany({
-		where: {
-			postId: params.postId,
-			userId: {
-				not: params.actorUserId,
-			},
-			user: {
-				deletedAt: null,
-				isBanned: 0,
-				isApproved: 1,
-			},
-		},
-		select: {
-			userId: true,
-			user: {
-				select: {
-					nickname: true,
+	let subscriptions: Array<{ userId: number; user: { nickname: string } }> = [];
+	try {
+		subscriptions = await prisma.postSubscription.findMany({
+			where: {
+				postId: params.postId,
+				userId: {
+					not: params.actorUserId,
+				},
+				user: {
+					deletedAt: null,
+					isBanned: 0,
+					isApproved: 1,
 				},
 			},
-		},
-	});
+			select: {
+				userId: true,
+				user: {
+					select: {
+						nickname: true,
+					},
+				},
+			},
+		});
+	} catch (error) {
+		if (isMissingPostSubscriptionTableError(error)) {
+			console.warn("[comment-subscription] post subscription table missing; skipping subscription notifications");
+			return [];
+		}
+		throw error;
+	}
 
 	if (subscriptions.length === 0) {
 		return [];
@@ -117,9 +130,17 @@ export async function queuePostSubscriptionNotificationsAndDeliveries(params: {
 	});
 
 	if (deliveries.length > 0) {
-		await prisma.notificationDelivery.createMany({
-			data: deliveries,
-		});
+		try {
+			await prisma.notificationDelivery.createMany({
+				data: deliveries,
+			});
+		} catch (error) {
+			if (isMissingNotificationDeliveryTableError(error)) {
+				console.warn("[comment-subscription] notification delivery table missing; skipping push queue");
+			} else {
+				throw error;
+			}
+		}
 	}
 
 	return targets;

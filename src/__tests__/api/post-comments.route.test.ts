@@ -268,4 +268,33 @@ describe("POST /api/posts/[id]/comments", () => {
 			})
 		);
 	});
+
+	it("keeps comment creation working when PostSubscription table is missing", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1, nickname: "actor" } });
+		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null, tags: null });
+		commentCreateMock.mockResolvedValue(
+			buildCommentRow({ id: 103, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "hello" })
+		);
+		postUpdateMock.mockResolvedValue({ commentCount: 7 });
+		postSubscriptionFindManyMock.mockRejectedValue(
+			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.PostSubscription")
+		);
+
+		const { POST } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "hello" }),
+		});
+
+		const res = await POST(req as never, { params: Promise.resolve({ id: "12" }) });
+		expect(res.status).toBe(200);
+		expect(notificationCreateManyMock).not.toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.arrayContaining([
+					expect.objectContaining({ type: "post_comment" }),
+				]),
+			})
+		);
+	});
 });

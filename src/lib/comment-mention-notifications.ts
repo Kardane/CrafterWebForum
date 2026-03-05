@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isMissingNotificationDeliveryTableError } from "@/lib/db-schema-guard";
 import { extractMentionNicknames } from "@/lib/mentions";
 import { buildDeliveryDedupeKey } from "@/lib/push";
 
@@ -102,9 +103,17 @@ export async function queueMentionNotificationsAndDeliveries(params: {
 	});
 
 	if (deliveries.length > 0) {
-		await prisma.notificationDelivery.createMany({
-			data: deliveries,
-		});
+		try {
+			await prisma.notificationDelivery.createMany({
+				data: deliveries,
+			});
+		} catch (error) {
+			if (isMissingNotificationDeliveryTableError(error)) {
+				console.warn("[comment-mention] notification delivery table missing; skipping push queue");
+			} else {
+				throw error;
+			}
+		}
 	}
 
 	return targets;
