@@ -44,6 +44,7 @@ export interface GetPostDetailResult {
 		author_name: string;
 		author_uuid: string | null;
 		user_liked: boolean;
+		user_subscribed: boolean;
 	};
 	comments: TreeComment[];
 	commentsPage: {
@@ -67,7 +68,7 @@ export interface GetPostDetailResult {
 }
 
 interface CachedPostDetailCoreResult {
-	post: Omit<GetPostDetailResult["post"], "user_liked">;
+	post: Omit<GetPostDetailResult["post"], "user_liked" | "user_subscribed">;
 	comments: TreeComment[];
 	commentsPage: GetPostDetailResult["commentsPage"];
 	totalCommentCount: number;
@@ -232,6 +233,17 @@ export async function getPostDetail(
 			id: true,
 		},
 	});
+	const subscriptionPromise = prisma.postSubscription.findUnique({
+		where: {
+			userId_postId: {
+				userId: input.sessionUserId,
+				postId: input.postId,
+			},
+		},
+		select: {
+			postId: true,
+		},
+	});
 
 	const readStart = performance.now();
 	const readPromise = prisma.postRead.findUnique({
@@ -269,7 +281,7 @@ export async function getPostDetail(
 		return null;
 	}
 
-	const [liked, previousRead] = await Promise.all([likePromise, readPromise]);
+	const [liked, subscription, previousRead] = await Promise.all([likePromise, subscriptionPromise, readPromise]);
 	const queryLikeMs = performance.now() - likeStart;
 	const queryReadMs = performance.now() - readStart;
 
@@ -320,6 +332,7 @@ export async function getPostDetail(
 		post: {
 			...core.post,
 			user_liked: Boolean(liked),
+			user_subscribed: Boolean(subscription),
 		},
 		comments: core.comments,
 		commentsPage: core.commentsPage,

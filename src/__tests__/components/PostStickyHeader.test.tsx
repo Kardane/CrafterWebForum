@@ -32,6 +32,7 @@ describe("PostStickyHeader", () => {
 				commentCount={4}
 				initialLikes={0}
 				initialLiked={false}
+				initialSubscribed={false}
 			/>,
 		);
 
@@ -51,6 +52,7 @@ describe("PostStickyHeader", () => {
 				commentCount={4}
 				initialLikes={0}
 				initialLiked={false}
+				initialSubscribed={false}
 			/>,
 		);
 
@@ -70,6 +72,7 @@ describe("PostStickyHeader", () => {
 				commentCount={0}
 				initialLikes={0}
 				initialLiked={false}
+				initialSubscribed={false}
 				backHref="/"
 			/>
 		);

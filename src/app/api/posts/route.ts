@@ -112,6 +112,21 @@ export async function POST(request: NextRequest) {
 				authorId: sessionUserId,
 			},
 		});
+		await prisma.postSubscription.upsert({
+			where: {
+				userId_postId: {
+					userId: sessionUserId,
+					postId: post.id,
+				},
+			},
+			update: {
+				updatedAt: new Date(),
+			},
+			create: {
+				userId: sessionUserId,
+				postId: post.id,
+			},
+		});
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId: post.id,

@@ -42,6 +42,7 @@ export interface ListPostsResult {
 		serverAddress: string | null;
 		unreadCount: number;
 		userLiked: boolean;
+		userSubscribed: boolean;
 	}>;
 	metadata: {
 		total: number;
@@ -313,10 +314,12 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 	const postIds = core.posts.map((post) => post.id);
 	let queryAuxMs = 0;
 	let likedPostIdSet = new Set<number>();
+	let subscribedPostIdSet = new Set<number>();
 	let readCountByPostId = new Map<number, number>();
 	const shouldLoadUserOverlay = normalizedInput.includeUserOverlay;
 	const shouldLoadLikeOverlay = shouldLoadUserOverlay && Boolean(sessionUserId) && postIds.length > 0;
 	const shouldLoadReadOverlay = shouldLoadLikeOverlay;
+	const shouldLoadSubscriptionOverlay = shouldLoadLikeOverlay;
 
 	if (shouldLoadLikeOverlay && sessionUserId) {
 		const queryAuxStart = performance.now();
@@ -339,12 +342,23 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 					},
 			  })
 			: Promise.resolve([] as Array<{ postId: number; lastReadCommentCount: number }>);
-		const [likes, reads] = await Promise.all([
+		const subscriptionsPromise = shouldLoadSubscriptionOverlay
+			? prisma.postSubscription.findMany({
+					where: {
+						userId: sessionUserId,
+						postId: { in: postIds },
+					},
+					select: { postId: true },
+			  })
+			: Promise.resolve([] as Array<{ postId: number }>);
+		const [likes, reads, subscriptions] = await Promise.all([
 			likesPromise,
 			readsPromise,
+			subscriptionsPromise,
 		]);
 		queryAuxMs = performance.now() - queryAuxStart;
 		likedPostIdSet = new Set(likes.map((like) => like.postId));
+		subscribedPostIdSet = new Set(subscriptions.map((subscription) => subscription.postId));
 		if (shouldLoadReadOverlay) {
 			readCountByPostId = new Map(
 				reads.map((read) => [read.postId, read.lastReadCommentCount])
@@ -365,6 +379,7 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 			...post,
 			unreadCount,
 			userLiked: likedPostIdSet.has(post.id),
+			userSubscribed: subscribedPostIdSet.has(post.id),
 		};
 	});
 	const overlaySerializeMs = performance.now() - serializeStart;

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const authMock = vi.fn();
 const postFindFirstMock = vi.fn();
 const likeFindFirstMock = vi.fn();
+const postSubscriptionFindUniqueMock = vi.fn();
 const commentFindManyMock = vi.fn();
 const commentCountMock = vi.fn();
 const postReadFindUniqueMock = vi.fn();
@@ -21,6 +22,9 @@ vi.mock("@/lib/prisma", () => ({
 		},
 		like: {
 			findFirst: likeFindFirstMock,
+		},
+		postSubscription: {
+			findUnique: postSubscriptionFindUniqueMock,
 		},
 		comment: {
 			count: commentCountMock,
@@ -46,6 +50,7 @@ describe("GET /api/posts/[id]", () => {
 		authMock.mockReset();
 		postFindFirstMock.mockReset();
 		likeFindFirstMock.mockReset();
+		postSubscriptionFindUniqueMock.mockReset();
 		commentFindManyMock.mockReset();
 		commentCountMock.mockReset();
 		postReadFindUniqueMock.mockReset();
@@ -101,6 +106,7 @@ describe("GET /api/posts/[id]", () => {
 			},
 		});
 		likeFindFirstMock.mockResolvedValue(null);
+		postSubscriptionFindUniqueMock.mockResolvedValue(null);
 		commentCountMock.mockResolvedValue(2);
 		commentFindManyMock.mockResolvedValueOnce([
 			{
@@ -167,6 +173,17 @@ describe("GET /api/posts/[id]", () => {
 			where: { postId: 10, userId: 1 },
 			select: { id: true },
 		});
+		expect(postSubscriptionFindUniqueMock).toHaveBeenCalledWith({
+			where: {
+				userId_postId: {
+					userId: 1,
+					postId: 10,
+				},
+			},
+			select: {
+				postId: true,
+			},
+		});
 		expect(body.comments).toHaveLength(1);
 			expect(body.comments[0].author).toEqual({
 				id: 2,
@@ -211,6 +228,7 @@ describe("GET /api/posts/[id]", () => {
 			},
 		});
 		likeFindFirstMock.mockResolvedValue(null);
+		postSubscriptionFindUniqueMock.mockResolvedValue(null);
 		commentCountMock.mockResolvedValue(1);
 		commentFindManyMock.mockResolvedValueOnce([
 			{

@@ -21,6 +21,7 @@ interface Post {
 	tags: string[];
 	unreadCount?: number;
 	userLiked?: boolean;
+	userSubscribed?: boolean;
 }
 
 interface PostListProps {
@@ -276,11 +277,12 @@ export default function PostList({
 						updatedAt={post.updatedAt}
 						viewCount={post.views}
 						likeCount={post.likes}
-							commentCount={post.commentCount}
-							tags={post.tags}
-							unreadCount={post.unreadCount}
-							userLiked={post.userLiked}
-							onNavigate={handlePostNavigate}
+						commentCount={post.commentCount}
+						tags={post.tags}
+						unreadCount={post.unreadCount}
+						userLiked={post.userLiked}
+						initialSubscribed={!!post.userSubscribed}
+						onNavigate={handlePostNavigate}
 					/>
 				))}
 			</div>

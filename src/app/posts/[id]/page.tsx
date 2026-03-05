@@ -71,6 +71,7 @@ async function PostDetailContent({ postId, sessionUserId }: PostDetailContentPro
 					createdAt={post.createdAt}
 					initialLikes={post.likes}
 					initialLiked={post.user_liked}
+					initialSubscribed={post.user_subscribed}
 					commentCount={totalCommentCount}
 					backHref="/"
 				/>

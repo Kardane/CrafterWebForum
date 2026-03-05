@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { ArrowDown, ArrowLeft, ArrowUp, MessageCircle, Pin } from "lucide-react";
 import LikeButton from "./LikeButton";
+import PostSubscriptionButton from "./PostSubscriptionButton";
 import { OPEN_PINNED_COMMENTS_EVENT, SCROLL_COMMENT_FEED_BOTTOM_EVENT } from "@/constants/comments";
 
 interface PostStickyHeaderProps {
@@ -13,6 +14,7 @@ interface PostStickyHeaderProps {
 	commentCount: number;
 	initialLikes: number;
 	initialLiked: boolean;
+	initialSubscribed: boolean;
 	triggerId?: string;
 	topOffsetClassName?: string;
 	observerOffsetTop?: number;
@@ -37,6 +39,7 @@ export default function PostStickyHeader({
 	commentCount,
 	initialLikes,
 	initialLiked,
+	initialSubscribed,
 	triggerId = "post-header-trigger",
 	topOffsetClassName = "top-header",
 	observerOffsetTop = 56,
@@ -61,15 +64,21 @@ export default function PostStickyHeader({
 						</div>
 						</div>
 
-						<LikeButton
+					<LikeButton
 							postId={postId}
 							initialLikes={initialLikes}
 							initialLiked={initialLiked}
 							variant="legacy"
 							className="!px-2.5 !py-1 !text-xs"
-						/>
+					/>
 
-						<div className="flex items-center gap-1 text-xs text-text-secondary">
+					<PostSubscriptionButton
+						postId={postId}
+						initialSubscribed={initialSubscribed}
+						variant="button"
+					/>
+
+					<div className="flex items-center gap-1 text-xs text-text-secondary">
 							<MessageCircle size={14} />
 							<span>{commentCount}</span>
 						</div>

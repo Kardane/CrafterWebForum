@@ -5,6 +5,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ko } from "date-fns/locale";
 import { MessageSquare } from "lucide-react";
 import LikeButton from "./LikeButton";
+import PostSubscriptionButton from "./PostSubscriptionButton";
 import SafeImage from "@/components/ui/SafeImage";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
 
@@ -24,6 +25,7 @@ interface PostCardProps {
 	tags: string[];
 	unreadCount?: number;
 	userLiked?: boolean;
+	initialSubscribed?: boolean;
 	onNavigate?: (postId: number) => void;
 }
 
@@ -41,6 +43,7 @@ export default function PostCard({
 	tags,
 	unreadCount = 0,
 	userLiked,
+	initialSubscribed = false,
 	onNavigate,
 }: PostCardProps) {
 	const thumb = thumbnailUrl ?? (content ? extractFirstImage(content) : null);
@@ -98,6 +101,15 @@ export default function PostCard({
 								variant="legacy"
 								className="!px-2 !py-0.5 !rounded-md h-auto text-xs"
 							/>
+						</div>
+						<div
+							onClick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+							}}
+							className="flex items-center"
+						>
+							<PostSubscriptionButton postId={id} initialSubscribed={initialSubscribed} variant="icon" />
 						</div>
 						<div className="flex items-center gap-1">
 							<MessageSquare size={14} />

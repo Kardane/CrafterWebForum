@@ -5,6 +5,7 @@ const postFindManyMock = vi.fn();
 const postCountMock = vi.fn();
 const transactionMock = vi.fn();
 const likeFindManyMock = vi.fn();
+const postSubscriptionFindManyMock = vi.fn();
 const postReadFindManyMock = vi.fn();
 const commentGroupByMock = vi.fn();
 
@@ -22,6 +23,9 @@ vi.mock("@/lib/prisma", () => ({
 		like: {
 			findMany: likeFindManyMock,
 		},
+		postSubscription: {
+			findMany: postSubscriptionFindManyMock,
+		},
 		postRead: {
 			findMany: postReadFindManyMock,
 		},
@@ -38,6 +42,7 @@ describe("GET /api/posts", () => {
 		postCountMock.mockReset();
 		transactionMock.mockReset();
 		likeFindManyMock.mockReset();
+		postSubscriptionFindManyMock.mockReset();
 		postReadFindManyMock.mockReset();
 		commentGroupByMock.mockReset();
 		commentGroupByMock.mockResolvedValue([]);
@@ -76,6 +81,7 @@ describe("GET /api/posts", () => {
 		]);
 		postCountMock.mockResolvedValue(2);
 		likeFindManyMock.mockResolvedValue([{ postId: 11 }]);
+		postSubscriptionFindManyMock.mockResolvedValue([{ postId: 12 }]);
 		postReadFindManyMock.mockResolvedValue([
 			{ postId: 11, lastReadCommentCount: 2 },
 			{ postId: 12, lastReadCommentCount: 3 },
@@ -91,6 +97,7 @@ describe("GET /api/posts", () => {
 				id: number;
 				unreadCount: number;
 				userLiked: boolean;
+				userSubscribed: boolean;
 				tags: string[];
 				preview: string;
 				thumbnailUrl: string | null;
@@ -103,6 +110,7 @@ describe("GET /api/posts", () => {
 			id: 11,
 			unreadCount: 3,
 			userLiked: true,
+			userSubscribed: false,
 			tags: ["질문"],
 			preview: "hello",
 			thumbnailUrl: null,
@@ -111,6 +119,7 @@ describe("GET /api/posts", () => {
 			id: 12,
 			unreadCount: 0,
 			userLiked: false,
+			userSubscribed: true,
 			tags: [],
 			preview: "world",
 			thumbnailUrl: null,
@@ -153,16 +162,18 @@ describe("GET /api/posts", () => {
 		const res = await GET(req as never);
 		expect(res.status).toBe(200);
 		const payload = (await res.json()) as {
-			posts: Array<{ unreadCount: number; userLiked: boolean; preview: string; thumbnailUrl: string | null }>;
+			posts: Array<{ unreadCount: number; userLiked: boolean; userSubscribed: boolean; preview: string; thumbnailUrl: string | null }>;
 		};
 
 		expect(payload.posts[0]).toMatchObject({
 			unreadCount: 4,
 			userLiked: false,
+			userSubscribed: false,
 			preview: "guest content",
 			thumbnailUrl: null,
 		});
 		expect(likeFindManyMock).not.toHaveBeenCalled();
+		expect(postSubscriptionFindManyMock).not.toHaveBeenCalled();
 		expect(postFindManyMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				orderBy: { updatedAt: "desc" },

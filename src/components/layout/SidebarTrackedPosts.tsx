@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import classNames from "classnames";
 import { useSession } from "next-auth/react";
 import { Bell, BellOff, Loader2, MessageSquare } from "lucide-react";
@@ -56,6 +57,7 @@ function mergeTrackedPosts(existing: SidebarTrackedPost[], incoming: SidebarTrac
 }
 
 export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsProps) {
+	const pathname = usePathname();
 	const { data: session } = useSession();
 	const sessionUserId = Number(session?.user?.id ?? 0);
 	const { showToast } = useToast();
@@ -195,7 +197,22 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 
 	useEffect(() => {
 		void refreshTrackedPosts();
-	}, [refreshTrackedPosts]);
+	}, [pathname, refreshTrackedPosts]);
+
+	useEffect(() => {
+		if (!sessionUserId) {
+			return;
+		}
+
+		const handleTrackedPostsChanged = () => {
+			void refreshTrackedPosts();
+		};
+
+		window.addEventListener("sidebarTrackedPostsChanged", handleTrackedPostsChanged);
+		return () => {
+			window.removeEventListener("sidebarTrackedPostsChanged", handleTrackedPostsChanged);
+		};
+	}, [refreshTrackedPosts, sessionUserId]);
 
 	useEffect(() => {
 		if (!sessionUserId) {
