@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 import type { SidebarTrackedPost, SidebarTrackedPostsPage } from "@/types/sidebar";
 
 const DEFAULT_LIMIT = 30;
@@ -99,17 +100,19 @@ export async function listSidebarTrackedPosts(
 	const limit = normalizeLimit(input.limit);
 	const parsedCursor = parseCursor(input.cursor);
 
-	const [authoredRows, subscribedRows] = await Promise.all([
-		prisma.post.findMany({
-			where: {
-				authorId: input.userId,
-				deletedAt: null,
-			},
-			select: {
-				id: true,
-			},
-		}),
-		prisma.postSubscription.findMany({
+	const authoredRows = await prisma.post.findMany({
+		where: {
+			authorId: input.userId,
+			deletedAt: null,
+		},
+		select: {
+			id: true,
+		},
+	});
+
+	let subscribedRows: Array<{ postId: number }> = [];
+	try {
+		subscribedRows = await prisma.postSubscription.findMany({
 			where: {
 				userId: input.userId,
 				post: {
@@ -119,8 +122,14 @@ export async function listSidebarTrackedPosts(
 			select: {
 				postId: true,
 			},
-		}),
-	]);
+		});
+	} catch (error) {
+		if (isMissingPostSubscriptionTableError(error)) {
+			console.warn("[sidebar-tracked-posts] post subscription table missing; using authored-only list");
+		} else {
+			throw error;
+		}
+	}
 
 	const authoredSet = new Set(authoredRows.map((row) => row.id));
 	const subscribedSet = new Set(subscribedRows.map((row) => row.postId));

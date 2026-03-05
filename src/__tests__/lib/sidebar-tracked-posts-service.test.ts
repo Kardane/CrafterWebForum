@@ -146,4 +146,38 @@ vi.mock("@/lib/prisma", () => ({
 		expect(secondPage.items.map((item) => item.postId)).toEqual([10]);
 		expect(secondPage.page.hasMore).toBe(true);
 	});
+
+	it("falls back to authored posts when PostSubscription table is missing", async () => {
+		const activityRows = [
+			{
+				id: 5,
+				title: "authored-only",
+				updatedAt: new Date("2026-03-03T12:00:00.000Z"),
+				commentCount: 2,
+				author: { nickname: "u5", minecraftUuid: null },
+			},
+		];
+		postFindManyMock.mockImplementation(async (args: { select?: { id?: boolean; title?: boolean } }) => {
+			if (args.select?.title) {
+				return activityRows;
+			}
+			return [{ id: 5 }];
+		});
+		postSubscriptionFindManyMock.mockRejectedValue(
+			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.PostSubscription")
+		);
+		postReadFindManyMock.mockResolvedValue([]);
+		commentGroupByMock.mockResolvedValue([{ postId: 5, _max: { id: 55 } }]);
+		commentCountMock.mockResolvedValue(0);
+
+		const { listSidebarTrackedPosts } = await import("@/lib/services/sidebar-tracked-posts-service");
+		const result = await listSidebarTrackedPosts({ userId: 7, limit: 30 });
+
+		expect(result.items).toHaveLength(1);
+		expect(result.items[0]).toMatchObject({
+			postId: 5,
+			sourceFlags: { authored: true, subscribed: false },
+			isSubscribed: false,
+		});
+	});
 });
