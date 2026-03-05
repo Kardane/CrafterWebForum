@@ -9,6 +9,9 @@ import AuthShell from "@/components/auth/AuthShell";
 import styles from "@/components/auth/AuthShell.module.css";
 import { text } from "@/lib/system-text";
 
+const LOGIN_BACKGROUND_IMAGE_URL =
+	"https://i.namu.wiki/i/JSCXlcOdyQNZFb_D6XncRSZWuQMpBbl2UoJm97nhmtHdKsAQcm0JTgTNg3e9EP9jJ-V8wUsXkzkAV52tnzZ65jvbK6cJ4n79EeYTleOsaqfdQVBg8uYwHWvV2Pfa0ARGeJDaA-cNHSRAZXkhmZKfmQ.webp";
+
 export default function LoginPage() {
 	const router = useRouter();
 	const [nickname, setNickname] = useState("");
@@ -67,6 +70,7 @@ export default function LoginPage() {
 			title={text("auth.title")}
 			subtitle={text("auth.subtitle")}
 			align="left"
+			backgroundImageUrl={LOGIN_BACKGROUND_IMAGE_URL}
 			footer={
 				<>
 					<p>

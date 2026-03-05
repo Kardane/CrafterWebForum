@@ -20,6 +20,11 @@
 }
 
 .background {
+	position: absolute;
+	inset: 0;
+	background-position: center;
+	background-repeat: no-repeat;
+	background-size: cover;
 	object-fit: cover;
 	object-position: center;
 	z-index: -3;

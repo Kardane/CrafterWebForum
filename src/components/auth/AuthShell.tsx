@@ -12,6 +12,7 @@ interface AuthShellProps {
 	footer?: ReactNode;
 	align?: "left" | "center";
 	logoSize?: number;
+	backgroundImageUrl?: string;
 }
 
 export default function AuthShell({
@@ -21,19 +22,24 @@ export default function AuthShell({
 	footer,
 	align = "left",
 	logoSize = 80,
+	backgroundImageUrl,
 }: AuthShellProps) {
 	return (
 		<div className={classNames(styles.container, align === "left" ? styles.alignLeft : styles.alignCenter)}>
-			<Image
-				src={authBackgroundImage}
-				alt=""
-				fill
-				priority
-				sizes="100vw"
-				quality={62}
-				placeholder="blur"
-				className={styles.background}
-			/>
+			{backgroundImageUrl ? (
+				<div className={styles.background} style={{ backgroundImage: `url(${backgroundImageUrl})` }} aria-hidden />
+			) : (
+				<Image
+					src={authBackgroundImage}
+					alt=""
+					fill
+					priority
+					sizes="100vw"
+					quality={62}
+					placeholder="blur"
+					className={styles.background}
+				/>
+			)}
 			<div className={styles.backgroundOverlay} aria-hidden />
 
 			<div className={styles.card}>
