@@ -7,6 +7,7 @@ declare module "next-auth" {
 			nickname: string;
 			role: string;
 			isApproved: number;
+			isBanned: number;
 			minecraftUuid: string | null;
 		} & DefaultSession["user"];
 	}
@@ -17,6 +18,7 @@ declare module "next-auth" {
 		nickname: string;
 		role: string;
 		isApproved: number;
+		isBanned: number;
 		minecraftUuid: string | null;
 	}
 }
@@ -27,6 +29,7 @@ declare module "next-auth/jwt" {
 		nickname: string;
 		role: string;
 		isApproved: number;
+		isBanned: number;
 		minecraftUuid: string | null;
 	}
 }

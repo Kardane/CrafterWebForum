@@ -16,8 +16,8 @@ function isValidIpv4(host: string): boolean {
 }
 
 function isValidHost(host: string): boolean {
-	if (host === "localhost") {
-		return true;
+	if (host === "localhost" || host.endsWith(".local")) {
+		return false;
 	}
 	if (isValidIpv4(host)) {
 		return true;

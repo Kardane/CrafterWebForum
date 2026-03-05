@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
+import { z } from "zod";
 
 
 function parsePostId(value: string) {
@@ -15,6 +17,10 @@ function parsePostId(value: string) {
 function parsePermanentFlag(value: string | null) {
 	return value === "true";
 }
+
+const restorePostBodySchema = z.object({
+	action: z.literal("restore"),
+});
 
 export async function PATCH(
 	request: Request,
@@ -30,8 +36,10 @@ export async function PATCH(
 			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
-		const body = (await request.json()) as { action?: string };
-		if (body.action !== "restore") {
+		const parsedBody = restorePostBodySchema.safeParse(
+			await readJsonBody(request, { maxBytes: 32 * 1024 })
+		);
+		if (!parsedBody.success) {
 			return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 		}
 
@@ -59,6 +67,9 @@ export async function PATCH(
 
 		return NextResponse.json({ success: true, mode: "restored" });
 	} catch (error) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json({ error: error.code }, { status: error.status });
+		}
 		console.error("[API] PATCH /api/admin/posts/[id] error:", error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}

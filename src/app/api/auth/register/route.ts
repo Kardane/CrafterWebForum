@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimitAsync } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
 import { normalizeMinecraftAuthCode } from "@/lib/minecraft-auth-code";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
+import { z } from "zod";
+
+const registerBodySchema = z.object({
+	nickname: z.string().trim().min(1).max(32),
+	password: z.string().min(1),
+	code: z.string().trim().min(1),
+	signupNote: z.string().optional().default(""),
+});
 
 /**
  * 회원가입 API
@@ -17,14 +26,23 @@ import { normalizeMinecraftAuthCode } from "@/lib/minecraft-auth-code";
  */
 export async function POST(req: NextRequest) {
 	try {
-		const rateLimitedResponse = enforceRateLimit(req, RATE_LIMIT_POLICIES.authRegister);
+		const rateLimitedResponse = await enforceRateLimitAsync(req, RATE_LIMIT_POLICIES.authRegister);
 		if (rateLimitedResponse) {
 			return rateLimitedResponse;
 		}
 
-		const body = await req.json();
-		const { nickname, password, code, signupNote } = body;
-		const normalizedCode = typeof code === "string" ? normalizeMinecraftAuthCode(code) : "";
+		const parsedBody = registerBodySchema.safeParse(
+			await readJsonBody(req, { maxBytes: 256 * 1024 })
+		);
+		if (!parsedBody.success) {
+			const hasCodeIssue = parsedBody.error.issues.some((issue) => issue.path[0] === "code");
+			return NextResponse.json(
+				{ message: hasCodeIssue ? "인증 코드가 필요합니다." : "모든 필드를 입력해주세요." },
+				{ status: 400 }
+			);
+		}
+		const { nickname, password, code, signupNote } = parsedBody.data;
+		const normalizedCode = normalizeMinecraftAuthCode(code);
 
 		// 필수 필드 검증
 		if (!normalizedCode) {
@@ -114,6 +132,12 @@ export async function POST(req: NextRequest) {
 			{ status: 201 }
 		);
 	} catch (error: unknown) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json(
+				{ message: "요청 본문 형식이 올바르지 않습니다." },
+				{ status: 400 }
+			);
+		}
 		console.error("[Auth] Registration error:", error);
 
 		if (

@@ -93,14 +93,7 @@ npm run setup:win
 
 ## 8) 서버 신문고 기능
 
-- 헤더 타이틀 클릭 시 드롭다운에서 `스티브 갤러리 개발 포럼 Beta v0.2` / `스티브 갤러리 서버 신문고 Beta v0.1` 전환 가능
-- `서버 신문고` 목록 페이지: `/ombudsman`
-- `서버 신문고` 작성 페이지: `/ombudsman/new`
-- 신문고 작성 시 `태그` 대신 `서버 주소(host:port)`를 입력 (형식 검증만 수행)
-- 신문고 목록/상세에서 서버 주소 태그 클릭 시 클립보드 복사
-- 신문고 상태(`/ombudsman`, `/posts/[id]?board=ombudsman`)에서는 키컬러/배경이 보라 톤으로 자동 전환
-- 신문고 목록은 사용자 오버레이(읽음 카운트) 조회를 생략해 목록 응답 비용을 축소
-- 신문고 무한 스크롤 페이지 캐시 키를 정규화해 동일 조건 재조회 시 캐시 적중률을 개선
+- 2026-03 기준 신문고 기능은 본 프로젝트에서 제거됨
 
 ## 9) Web Push + GitHub Actions Scheduler 알림 전달
 
@@ -169,4 +162,4 @@ GET /api/server-address/check?address=mc.example.com:25565
 ```
 
 - 성공 응답 예시: `{ ok: true, open: true|false, latencyMs: number, normalizedAddress: string }`
-- 신문고 포스트는 내부 메타 태그(`__sys:board:ombudsman`, `__sys:server:<address>`)로 저장되며, 일반 태그 목록에서는 숨김 처리됨
+- 서버 주소 확인 API는 포럼 공용 유틸리티로 유지됨

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextResponse } from "next/server";
 
-const enforceRateLimitMock = vi.fn();
+const enforceRateLimitAsyncMock = vi.fn();
 const findUniqueCodeMock = vi.fn();
 const deleteCodeMock = vi.fn();
 const findFirstUserMock = vi.fn();
@@ -10,7 +10,7 @@ const transactionMock = vi.fn();
 const hashMock = vi.fn();
 
 vi.mock("@/lib/rate-limit", () => ({
-	enforceRateLimit: enforceRateLimitMock,
+	enforceRateLimitAsync: enforceRateLimitAsyncMock,
 }));
 
 vi.mock("bcryptjs", () => ({
@@ -33,7 +33,7 @@ vi.mock("@/lib/prisma", () => ({
 
 describe("POST /api/auth/password/forgot", () => {
 	beforeEach(() => {
-		enforceRateLimitMock.mockReset();
+		enforceRateLimitAsyncMock.mockReset();
 		findUniqueCodeMock.mockReset();
 		deleteCodeMock.mockReset();
 		findFirstUserMock.mockReset();
@@ -41,7 +41,7 @@ describe("POST /api/auth/password/forgot", () => {
 		transactionMock.mockReset();
 		hashMock.mockReset();
 
-		enforceRateLimitMock.mockReturnValue(null);
+		enforceRateLimitAsyncMock.mockResolvedValue(null);
 		updateUserMock.mockResolvedValue({ id: 1 });
 		deleteCodeMock.mockResolvedValue({ code: "AB12CD3" });
 		transactionMock.mockResolvedValue(undefined);
@@ -49,7 +49,7 @@ describe("POST /api/auth/password/forgot", () => {
 	});
 
 	it("returns 429 when rate-limited", async () => {
-		enforceRateLimitMock.mockReturnValue(
+		enforceRateLimitAsyncMock.mockResolvedValue(
 			NextResponse.json({ error: "too_many_requests" }, { status: 429 })
 		);
 

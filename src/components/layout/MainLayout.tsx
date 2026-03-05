@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
@@ -14,19 +14,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
 	const pathname = usePathname();
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-	useEffect(() => {
-		if (typeof window === "undefined") {
-			return;
-		}
-		const queryBoardIsOmbudsman = new URLSearchParams(window.location.search).get("board") === "ombudsman";
-		const isOmbudsmanTheme = pathname.startsWith("/ombudsman") || queryBoardIsOmbudsman;
-		if (isOmbudsmanTheme) {
-			document.documentElement.dataset.board = "ombudsman";
-		} else {
-			delete document.documentElement.dataset.board;
-		}
-	}, [pathname]);
-
 	// 인증 플로우 페이지에서는 사이드바/헤더 숨김
 	const isAuthPage =
 		pathname.startsWith("/login") ||
@@ -36,7 +23,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 		pathname.startsWith("/auth/");
 	const isPostDetailPage = pathname.includes("/posts/") && !pathname.includes("/new") && !pathname.includes("/edit");
 	const isPostEditPage = /^\/posts\/[^/]+\/edit(?:\/|$)/.test(pathname);
-	const isComposerPage = pathname.includes("/new") || pathname.includes("/inquiries/new") || isPostEditPage;
+	const isComposerPage = pathname.includes("/new") || isPostEditPage;
 	const showSidebar = !isAuthPage;
 	const showHeader = !isAuthPage && !isPostDetailPage && !isComposerPage;
 

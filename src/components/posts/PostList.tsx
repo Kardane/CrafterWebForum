@@ -19,8 +19,6 @@ interface Post {
 	likes: number;
 	commentCount: number;
 	tags: string[];
-	board?: "forum" | "ombudsman";
-	serverAddress?: string | null;
 	unreadCount?: number;
 	userLiked?: boolean;
 }
@@ -30,7 +28,6 @@ interface PostListProps {
 	totalPages: number;
 	initialPage: number;
 	initialLimit: number;
-	board?: "forum" | "ombudsman";
 }
 
 interface PostsResponse {
@@ -60,9 +57,8 @@ function normalizePositiveParam(value: string | null, fallback: number): string 
 	return String(parsed);
 }
 
-function buildNormalizedListParams(params: URLSearchParams, board: "forum" | "ombudsman", initialLimit: number): URLSearchParams {
+function buildNormalizedListParams(params: URLSearchParams, initialLimit: number): URLSearchParams {
 	const normalized = new URLSearchParams();
-	normalized.set("board", board);
 	normalized.set("limit", normalizePositiveParam(params.get("limit"), initialLimit));
 
 	const sort = params.get("sort")?.trim();
@@ -75,11 +71,9 @@ function buildNormalizedListParams(params: URLSearchParams, board: "forum" | "om
 		normalized.set("search", search);
 	}
 
-	if (board === "forum") {
-		const tag = params.get("tag")?.trim();
-		if (tag) {
-			normalized.set("tag", tag);
-		}
+	const tag = params.get("tag")?.trim();
+	if (tag) {
+		normalized.set("tag", tag);
 	}
 
 	return normalized;
@@ -113,12 +107,11 @@ export default function PostList({
 	totalPages,
 	initialPage,
 	initialLimit,
-	board = "forum",
 }: PostListProps) {
 	const searchParams = useSearchParams();
 	const searchQuery = useMemo(
-		() => buildNormalizedListParams(new URLSearchParams(searchParams.toString()), board, initialLimit).toString(),
-		[searchParams, board, initialLimit]
+		() => buildNormalizedListParams(new URLSearchParams(searchParams.toString()), initialLimit).toString(),
+		[searchParams, initialLimit]
 	);
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	const [posts, setPosts] = useState<Post[]>(initialPosts);
@@ -285,8 +278,6 @@ export default function PostList({
 						likeCount={post.likes}
 							commentCount={post.commentCount}
 							tags={post.tags}
-							board={post.board}
-							serverAddress={post.serverAddress}
 							unreadCount={post.unreadCount}
 							userLiked={post.userLiked}
 							onNavigate={handlePostNavigate}

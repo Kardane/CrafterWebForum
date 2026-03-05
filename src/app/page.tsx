@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { listPosts } from "@/lib/services/posts-service";
 import { toSessionUserId } from "@/lib/session-user";
 import { Suspense } from "react";
+import { resolveActiveUserFromSession } from "@/lib/active-user";
 
 export const preferredRegion = "icn1";
 
@@ -61,7 +62,7 @@ async function HomeFeedSection({ searchParams, sessionUserId }: HomeFeedSectionP
 
 	return (
 		<>
-			<PostFilters totalPosts={Number(data.metadata.total ?? 0)} board="forum" />
+			<PostFilters totalPosts={Number(data.metadata.total ?? 0)} />
 
 			<div className="min-h-[500px]">
 				<PostList
@@ -69,7 +70,6 @@ async function HomeFeedSection({ searchParams, sessionUserId }: HomeFeedSectionP
 					totalPages={data.metadata.totalPages || 0}
 					initialPage={Number(data.metadata.page || 1)}
 					initialLimit={Number(data.metadata.limit || 12)}
-					board="forum"
 				/>
 			</div>
 		</>
@@ -78,11 +78,15 @@ async function HomeFeedSection({ searchParams, sessionUserId }: HomeFeedSectionP
 
 export default async function Home(props: PageProps) {
 	const session = await auth();
-	if (!session?.user) {
+	const activeUser = await resolveActiveUserFromSession(session);
+	if (!activeUser.ok) {
+		if (activeUser.error === "pending_approval") {
+			redirect("/pending");
+		}
 		redirect("/login?callbackUrl=/");
 	}
 
-	const sessionUserId = toSessionUserId(session.user.id);
+	const sessionUserId = toSessionUserId(activeUser.context.userId);
 	if (!sessionUserId) {
 		redirect("/login?callbackUrl=/");
 	}

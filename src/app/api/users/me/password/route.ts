@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { changeUserPassword } from '@/lib/user-service';
+import { resolveActiveUserFromSession } from '@/lib/active-user';
+import { JsonBodyError, readJsonBody } from '@/lib/http-body';
+import { z } from 'zod';
+
+const changePasswordBodySchema = z.object({
+	currentPassword: z.string().trim().min(1),
+	newPassword: z.string().trim().min(1),
+});
 
 /**
  * POST /api/users/me/password
@@ -9,18 +17,21 @@ import { changeUserPassword } from '@/lib/user-service';
 export async function POST(request: NextRequest) {
 	try {
 		const session = await auth();
-		if (!session?.user) {
-			return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session);
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
 
-		const body = await request.json() as {
-			currentPassword?: unknown;
-			newPassword?: unknown;
-		};
+		const parsedBody = changePasswordBodySchema.safeParse(
+			await readJsonBody(request, { maxBytes: 128 * 1024 })
+		);
+		if (!parsedBody.success) {
+			return NextResponse.json({ error: 'validation_error' }, { status: 400 });
+		}
 		const result = await changeUserPassword(
-			session.user.id,
-			body.currentPassword,
-			body.newPassword
+			activeUser.context.userId,
+			parsedBody.data.currentPassword,
+			parsedBody.data.newPassword
 		);
 
 		if (!result.ok) {
@@ -38,6 +49,9 @@ export async function POST(request: NextRequest) {
 			message: 'password_updated',
 		});
 	} catch (error: unknown) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json({ error: error.code }, { status: error.status });
+		}
 		console.error('[API] POST /api/users/me/password error:', error);
 		return NextResponse.json({ error: 'internal_server_error' }, { status: 500 });
 	}

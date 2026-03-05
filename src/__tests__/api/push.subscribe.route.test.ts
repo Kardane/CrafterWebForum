@@ -2,14 +2,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 
 const authMock = vi.fn();
-const enforceRateLimitMock = vi.fn();
+const enforceRateLimitAsyncMock = vi.fn();
 const upsertMock = vi.fn();
 const findManyMock = vi.fn();
 const findUniqueMock = vi.fn();
-const parsePushSubscriptionPayloadMock = vi.fn();
+const parsePushSubscriptionPayloadAsyncMock = vi.fn();
+const resolveActiveUserFromSessionMock = vi.fn();
 
 vi.mock("@/auth", () => ({ auth: authMock }));
-vi.mock("@/lib/rate-limit", () => ({ enforceRateLimit: enforceRateLimitMock }));
+vi.mock("@/lib/rate-limit", () => ({ enforceRateLimitAsync: enforceRateLimitAsyncMock }));
 vi.mock("@/lib/prisma", () => ({
 	prisma: {
 		pushSubscription: {
@@ -20,22 +21,31 @@ vi.mock("@/lib/prisma", () => ({
 	},
 }));
 vi.mock("@/lib/push", () => ({
-	parsePushSubscriptionPayload: parsePushSubscriptionPayloadMock,
+	parsePushSubscriptionPayloadAsync: parsePushSubscriptionPayloadAsyncMock,
+}));
+vi.mock("@/lib/active-user", () => ({
+	resolveActiveUserFromSession: resolveActiveUserFromSessionMock,
 }));
 
 describe("POST /api/push/subscribe", () => {
 	beforeEach(() => {
 		authMock.mockReset();
-		enforceRateLimitMock.mockReset();
+		enforceRateLimitAsyncMock.mockReset();
 		upsertMock.mockReset();
 		findManyMock.mockReset();
 		findUniqueMock.mockReset();
-		parsePushSubscriptionPayloadMock.mockReset();
-		enforceRateLimitMock.mockReturnValue(null);
+		parsePushSubscriptionPayloadAsyncMock.mockReset();
+		resolveActiveUserFromSessionMock.mockReset();
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: true,
+			context: { userId: 10, role: "user", nickname: "tester", isApproved: 1, isBanned: 0 },
+		});
+		enforceRateLimitAsyncMock.mockResolvedValue(null);
 	});
 
 	it("returns 401 on GET without session", async () => {
 		authMock.mockResolvedValue(null);
+		resolveActiveUserFromSessionMock.mockResolvedValue({ ok: false, status: 401, error: "unauthorized" });
 		const { GET } = await import("@/app/api/push/subscribe/route");
 		const req = new NextRequest("http://localhost/api/push/subscribe");
 		const res = await GET(req);
@@ -61,7 +71,7 @@ describe("POST /api/push/subscribe", () => {
 
 	it("returns 429 on GET when rate limited", async () => {
 		authMock.mockResolvedValue({ user: { id: "10" } });
-		enforceRateLimitMock.mockReturnValue(NextResponse.json({ error: "rate_limited" }, { status: 429 }));
+		enforceRateLimitAsyncMock.mockResolvedValue(NextResponse.json({ error: "rate_limited" }, { status: 429 }));
 		const { GET } = await import("@/app/api/push/subscribe/route");
 		const req = new NextRequest("http://localhost/api/push/subscribe");
 		const res = await GET(req);
@@ -69,7 +79,7 @@ describe("POST /api/push/subscribe", () => {
 	});
 
 	it("returns 429 when rate limited", async () => {
-		enforceRateLimitMock.mockReturnValue(NextResponse.json({ error: "rate_limited" }, { status: 429 }));
+		enforceRateLimitAsyncMock.mockResolvedValue(NextResponse.json({ error: "rate_limited" }, { status: 429 }));
 		const { POST } = await import("@/app/api/push/subscribe/route");
 		const req = new NextRequest("http://localhost/api/push/subscribe", {
 			method: "POST",
@@ -81,6 +91,7 @@ describe("POST /api/push/subscribe", () => {
 
 	it("returns 401 without session", async () => {
 		authMock.mockResolvedValue(null);
+		resolveActiveUserFromSessionMock.mockResolvedValue({ ok: false, status: 401, error: "unauthorized" });
 		const { POST } = await import("@/app/api/push/subscribe/route");
 		const req = new NextRequest("http://localhost/api/push/subscribe", {
 			method: "POST",
@@ -92,7 +103,7 @@ describe("POST /api/push/subscribe", () => {
 
 	it("returns 400 for invalid payload", async () => {
 		authMock.mockResolvedValue({ user: { id: "10" } });
-		parsePushSubscriptionPayloadMock.mockReturnValue(null);
+		parsePushSubscriptionPayloadAsyncMock.mockResolvedValue(null);
 		const { POST } = await import("@/app/api/push/subscribe/route");
 		const req = new NextRequest("http://localhost/api/push/subscribe", {
 			method: "POST",
@@ -106,7 +117,7 @@ describe("POST /api/push/subscribe", () => {
 	it("upserts subscription on valid payload", async () => {
 		authMock.mockResolvedValue({ user: { id: "10" } });
 		findUniqueMock.mockResolvedValue(null);
-		parsePushSubscriptionPayloadMock.mockReturnValue({
+		parsePushSubscriptionPayloadAsyncMock.mockResolvedValue({
 			endpoint: "https://example.com/push",
 			keys: { p256dh: "p", auth: "a" },
 		});
@@ -125,7 +136,7 @@ describe("POST /api/push/subscribe", () => {
 	it("returns 409 when endpoint belongs to another user", async () => {
 		authMock.mockResolvedValue({ user: { id: "10" } });
 		findUniqueMock.mockResolvedValue({ userId: 99 });
-		parsePushSubscriptionPayloadMock.mockReturnValue({
+		parsePushSubscriptionPayloadAsyncMock.mockResolvedValue({
 			endpoint: "https://example.com/push",
 			keys: { p256dh: "p", auth: "a" },
 		});

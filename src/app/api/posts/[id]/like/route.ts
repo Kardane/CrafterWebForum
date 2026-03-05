@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { prisma } from '@/lib/prisma';
-import { toSessionUserId } from '@/lib/session-user';
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from '@/lib/cache-tags';
 import { broadcastRealtime } from '@/lib/realtime/server-broadcast';
 import { REALTIME_EVENTS, REALTIME_TOPICS } from '@/lib/realtime/constants';
+import { resolveActiveUserFromSession } from '@/lib/active-user';
 
 
 /**
@@ -18,13 +18,11 @@ export async function POST(
 	try {
 		const { id } = await params;
 		const session = await auth();
-		if (!session?.user) {
-			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session);
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
-		const sessionUserId = toSessionUserId(session.user.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-		}
+		const sessionUserId = activeUser.context.userId;
 
 		const postId = parseInt(id, 10);
 		if (isNaN(postId)) {
@@ -44,94 +42,72 @@ export async function POST(
 		}
 		const postTags = parsePostTags(post.tags);
 
-		// 좋아요 여부 확인
-		const existing = await prisma.like.findFirst({
-			where: {
-				postId,
-				userId: sessionUserId,
-			},
-		});
-
-		if (existing) {
-			// 좋아요 취소
-			await prisma.like.delete({
-				where: { id: existing.id },
-			});
-
-			await prisma.post.update({
-				where: { id: postId },
-				data: { likes: { decrement: 1 } },
-			});
-
-			const updatedPost = await prisma.post.findUnique({
-				where: { id: postId },
-				select: { likes: true },
-			});
-			void broadcastRealtime({
-				topic: REALTIME_TOPICS.post(postId),
-				event: REALTIME_EVENTS.POST_LIKE_TOGGLED,
-				payload: {
-					postId,
-					likes: updatedPost?.likes ?? 0,
-					actorUserId: sessionUserId,
-					likedByActor: false,
+		const toggled = await prisma.$transaction(async (tx) => {
+			const existing = await tx.like.findUnique({
+				where: {
+					postId_userId: {
+						postId,
+						userId: sessionUserId,
+					},
 				},
+				select: { id: true },
 			});
-			safeRevalidateTags(
-				getPostMutationTags({
-					postId,
-					tags: postTags,
-				})
-			);
 
-			return NextResponse.json({
-				success: true,
-				message: 'Like removed',
-				liked: false,
-				likes: updatedPost?.likes || 0,
-			});
-		} else {
-			// 좋아요 추가
-			await prisma.like.create({
+			if (existing) {
+				await tx.like.delete({ where: { id: existing.id } });
+				const updated = await tx.post.update({
+					where: { id: postId },
+					data: { likes: { decrement: 1 } },
+					select: { likes: true },
+				});
+				return {
+					liked: false,
+					likes: updated.likes,
+					message: 'Like removed',
+				};
+			}
+
+			await tx.like.create({
 				data: {
 					postId,
 					userId: sessionUserId,
 				},
 			});
-
-			await prisma.post.update({
+			const updated = await tx.post.update({
 				where: { id: postId },
 				data: { likes: { increment: 1 } },
-			});
-
-			const updatedPost = await prisma.post.findUnique({
-				where: { id: postId },
 				select: { likes: true },
 			});
-			void broadcastRealtime({
-				topic: REALTIME_TOPICS.post(postId),
-				event: REALTIME_EVENTS.POST_LIKE_TOGGLED,
-				payload: {
-					postId,
-					likes: updatedPost?.likes ?? 0,
-					actorUserId: sessionUserId,
-					likedByActor: true,
-				},
-			});
-			safeRevalidateTags(
-				getPostMutationTags({
-					postId,
-					tags: postTags,
-				})
-			);
-
-			return NextResponse.json({
-				success: true,
-				message: 'Like added',
+			return {
 				liked: true,
-				likes: updatedPost?.likes || 0,
-			});
-		}
+				likes: updated.likes,
+				message: 'Like added',
+			};
+		});
+
+		void broadcastRealtime({
+			topic: REALTIME_TOPICS.post(postId),
+			event: REALTIME_EVENTS.POST_LIKE_TOGGLED,
+			payload: {
+				postId,
+				likes: toggled.likes,
+				actorUserId: sessionUserId,
+				likedByActor: toggled.liked,
+			},
+		});
+		safeRevalidateTags(
+			getPostMutationTags({
+				postId,
+				tags: postTags,
+			})
+		);
+
+		return NextResponse.json({
+			success: true,
+			message: toggled.message,
+			liked: toggled.liked,
+			likes: toggled.likes,
+		});
 
 	} catch (error) {
 		console.error('[API] POST /api/posts/[id]/like error:', error);

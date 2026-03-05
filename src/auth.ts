@@ -46,6 +46,10 @@ export const authConfig: NextAuthConfig = {
 						return null;
 					}
 
+					if (foundUser.isBanned === 1) {
+						return null;
+					}
+
 					const updateData: { lastAuthAt: Date } = {
 						lastAuthAt: new Date(),
 					};
@@ -62,6 +66,7 @@ export const authConfig: NextAuthConfig = {
 						nickname: updatedUser.nickname,
 						role: updatedUser.role,
 						isApproved: updatedUser.isApproved,
+						isBanned: updatedUser.isBanned,
 						minecraftUuid: updatedUser.minecraftUuid,
 					};
 				} catch {
@@ -81,6 +86,7 @@ export const authConfig: NextAuthConfig = {
 				token.nickname = user.nickname;
 				token.role = user.role;
 				token.isApproved = user.isApproved;
+				token.isBanned = user.isBanned;
 				token.minecraftUuid = user.minecraftUuid;
 			}
 			return token;
@@ -97,6 +103,7 @@ export const authConfig: NextAuthConfig = {
 						nickname: token.nickname as string,
 						role: token.role as string,
 						isApproved: token.isApproved as number,
+						isBanned: token.isBanned as number,
 						minecraftUuid: (token.minecraftUuid as string | null) ?? null,
 					},
 				};

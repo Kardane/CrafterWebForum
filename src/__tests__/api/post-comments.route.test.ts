@@ -13,6 +13,8 @@ const notificationFindManyMock = vi.fn();
 const pushSubscriptionFindManyMock = vi.fn();
 const notificationDeliveryCreateManyMock = vi.fn();
 const transactionMock = vi.fn();
+const resolveActiveUserFromSessionMock = vi.fn();
+const fetchCommentSubtreeRowsByRootIdsMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -47,6 +49,14 @@ vi.mock("@/lib/prisma", () => ({
 		},
 		$transaction: transactionMock,
 	},
+}));
+
+vi.mock("@/lib/active-user", () => ({
+	resolveActiveUserFromSession: resolveActiveUserFromSessionMock,
+}));
+
+vi.mock("@/lib/comment-subtree-query", () => ({
+	fetchCommentSubtreeRowsByRootIds: fetchCommentSubtreeRowsByRootIdsMock,
 }));
 
 function buildCommentRow(input: {
@@ -91,6 +101,12 @@ describe("POST /api/posts/[id]/comments", () => {
 		pushSubscriptionFindManyMock.mockReset();
 		notificationDeliveryCreateManyMock.mockReset();
 		transactionMock.mockReset();
+		resolveActiveUserFromSessionMock.mockReset();
+		fetchCommentSubtreeRowsByRootIdsMock.mockReset();
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: true,
+			context: { userId: 10, role: "user", nickname: "actor", isApproved: 1, isBanned: 0 },
+		});
 
 		transactionMock.mockImplementation(async (operations: unknown[]) => Promise.all(operations as Promise<unknown>[]));
 		postUpdateMock.mockResolvedValue({ commentCount: 1 });
@@ -103,15 +119,14 @@ describe("POST /api/posts/[id]/comments", () => {
 	it("returns paginated comment tree when cursor pagination is requested", async () => {
 		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1 } });
 		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null });
-		commentFindManyMock
-			.mockResolvedValueOnce([
-				buildCommentRow({ id: 30, postId: 12, authorId: 1, parentId: null, nickname: "root-a" }),
-				buildCommentRow({ id: 20, postId: 12, authorId: 2, parentId: null, nickname: "root-b" }),
-			])
-			.mockResolvedValueOnce([
-				buildCommentRow({ id: 31, postId: 12, authorId: 3, parentId: 30, nickname: "reply-a" }),
-			])
-			.mockResolvedValueOnce([]);
+		commentFindManyMock.mockResolvedValueOnce([
+			buildCommentRow({ id: 30, postId: 12, authorId: 1, parentId: null, nickname: "root-a" }),
+			buildCommentRow({ id: 20, postId: 12, authorId: 2, parentId: null, nickname: "root-b" }),
+		]);
+		fetchCommentSubtreeRowsByRootIdsMock.mockResolvedValue([
+			buildCommentRow({ id: 30, postId: 12, authorId: 1, parentId: null, nickname: "root-a" }),
+			buildCommentRow({ id: 31, postId: 12, authorId: 3, parentId: 30, nickname: "reply-a" }),
+		]);
 
 		const { GET } = await import("@/app/api/posts/[id]/comments/route");
 		const req = new Request("http://localhost/api/posts/12/comments?limit=1");
@@ -126,7 +141,8 @@ describe("POST /api/posts/[id]/comments", () => {
 		expect(body.comments).toHaveLength(1);
 		expect(body.comments[0]?.id).toBe(30);
 		expect(body.comments[0]?.replies).toHaveLength(1);
-		expect(commentFindManyMock).toHaveBeenCalledTimes(3);
+		expect(commentFindManyMock).toHaveBeenCalledTimes(1);
+		expect(fetchCommentSubtreeRowsByRootIdsMock).toHaveBeenCalledWith(12, [30]);
 	});
 
 	it("returns 400 when pagination cursor is invalid", async () => {
@@ -143,6 +159,7 @@ describe("POST /api/posts/[id]/comments", () => {
 
 	it("returns 403 when user is pending approval", async () => {
 		authMock.mockResolvedValue({ user: { id: "10", isApproved: 0 } });
+		resolveActiveUserFromSessionMock.mockResolvedValue({ ok: false, status: 403, error: "pending_approval" });
 
 		const { POST } = await import("@/app/api/posts/[id]/comments/route");
 		const req = new Request("http://localhost/api/posts/12/comments", {

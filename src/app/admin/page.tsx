@@ -1,7 +1,6 @@
 import AdminTabNav, { AdminTabId, isAdminTabId } from "@/components/admin/AdminTabNav";
 import AdminBackupTab from "@/components/admin/tabs/AdminBackupTab";
 import AdminDashboardTab from "@/components/admin/tabs/AdminDashboardTab";
-import AdminInquiriesTab from "@/components/admin/tabs/AdminInquiriesTab";
 import AdminPostsTab from "@/components/admin/tabs/AdminPostsTab";
 import AdminUsersTab from "@/components/admin/tabs/AdminUsersTab";
 
@@ -15,9 +14,6 @@ function renderTabContent(tab: AdminTabId) {
 	}
 	if (tab === "posts") {
 		return <AdminPostsTab />;
-	}
-	if (tab === "inquiries") {
-		return <AdminInquiriesTab />;
 	}
 	if (tab === "backup") {
 		return <AdminBackupTab />;

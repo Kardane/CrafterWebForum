@@ -5,8 +5,10 @@ import { toSessionUserId } from "@/lib/session-user";
 import { listPosts } from "@/lib/services/posts-service";
 import { createServerTimingHeader } from "@/lib/server-timing";
 import { getPostMutationTags, safeRevalidateTags } from "@/lib/cache-tags";
-import { normalizeBoardType, toStoredTags } from "@/lib/post-board";
-import { parseServerAddress } from "@/lib/server-address";
+import { toStoredTags } from "@/lib/post-board";
+import { resolveActiveUserFromSession } from "@/lib/active-user";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 export const preferredRegion = "icn1";
@@ -19,6 +21,19 @@ function parsePositiveInt(value: string | null, fallback: number) {
 	return parsed;
 }
 
+const postCreateBodySchema = z.object({
+	title: z.string().trim().min(1),
+	content: z.string().trim().min(1),
+	tags: z
+		.array(z.string())
+		.optional()
+		.transform((value) =>
+			(value ?? [])
+				.map((tag) => tag.trim())
+				.filter((tag) => tag.length > 0)
+		),
+});
+
 export async function GET(req: NextRequest) {
 	const requestStart = performance.now();
 	try {
@@ -29,17 +44,16 @@ export async function GET(req: NextRequest) {
 
 		const { searchParams } = new URL(req.url);
 		const page = parsePositiveInt(searchParams.get("page"), 1);
-		const board = searchParams.get("board") === "ombudsman" ? "ombudsman" : "forum";
 		const data = await listPosts({
 			page,
 			limit: parsePositiveInt(searchParams.get("limit"), 12),
 			tag: searchParams.get("tag"),
-			board,
+			board: "forum",
 			sort: searchParams.get("sort") ?? "activity",
 			search: searchParams.get("search") ?? "",
 			searchInComments: searchParams.get("searchInComments") === "1",
 			sessionUserId,
-			includeUserOverlay: board !== "ombudsman",
+			includeUserOverlay: true,
 			skipExactTotal: page > 1,
 		});
 
@@ -70,44 +84,23 @@ export async function GET(req: NextRequest) {
 export async function POST(request: NextRequest) {
 	try {
 		const session = await auth();
-		const sessionUserId = toSessionUserId(session?.user?.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session);
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
+		const sessionUserId = activeUser.context.userId;
 
-		const body = (await request.json()) as {
-			title?: unknown;
-			content?: unknown;
-			tags?: unknown;
-			board?: unknown;
-			serverAddress?: unknown;
-		};
-
-		const title = typeof body.title === "string" ? body.title.trim() : "";
-		const content = typeof body.content === "string" ? body.content.trim() : "";
-		if (!title || !content) {
+		const parsedBody = postCreateBodySchema.safeParse(
+			await readJsonBody(request, { maxBytes: 256 * 1024 })
+		);
+		if (!parsedBody.success) {
 			return NextResponse.json({ error: "validation_error" }, { status: 400 });
 		}
-
-		const tags = Array.isArray(body.tags)
-			? body.tags.filter(
-					(tag): tag is string => typeof tag === "string" && tag.trim().length > 0
-			  )
-			: [];
-		const board = normalizeBoardType(body.board);
-		const rawServerAddress = typeof body.serverAddress === "string" ? body.serverAddress.trim() : "";
-
-		let parsedServerAddress: ReturnType<typeof parseServerAddress> = null;
-		if (board === "ombudsman") {
-			parsedServerAddress = parseServerAddress(rawServerAddress);
-			if (!parsedServerAddress) {
-				return NextResponse.json({ error: "invalid_server_address" }, { status: 400 });
-			}
-		}
+		const title = parsedBody.data.title;
+		const content = parsedBody.data.content;
+		const tags = parsedBody.data.tags;
 		const storedTags = toStoredTags({
-			board,
 			tags,
-			serverAddress: parsedServerAddress?.normalizedAddress ?? null,
 		});
 
 		const post = await prisma.post.create({
@@ -132,6 +125,9 @@ export async function POST(request: NextRequest) {
 			postId: post.id,
 		});
 	} catch (error: unknown) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json({ error: error.code }, { status: error.status });
+		}
 		console.error("[API] POST /api/posts error:", error);
 		return NextResponse.json({ error: "internal_server_error" }, { status: 500 });
 	}

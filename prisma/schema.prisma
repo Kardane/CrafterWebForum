@@ -35,8 +35,6 @@ model User {
   likes            Like[]
   postReads        PostRead[]
   minecraftCodes   MinecraftCode[]
-  inquiries        Inquiry[]
-  inquiryReplies   InquiryReply[]
   notificationsReceived Notification[] @relation("NotificationRecipient")
   notificationsSent     Notification[] @relation("NotificationActor")
   pushSubscriptions     PushSubscription[]
@@ -162,41 +160,6 @@ model Link {
   iconUrl   String?
   category  String @default("external") // "external" | "ai"
   sortOrder Int    @default(0)
-}
-
-// ============================================
-// 문의 모델
-// ============================================
-model Inquiry {
-  id        Int      @id @default(autoincrement())
-  authorId  Int
-  title     String
-  content   String
-  status    String   @default("pending") // "pending" | "answered" | "closed"
-  createdAt DateTime @default(now())
-  archivedAt DateTime?
-
-  // Relations
-  author  User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  replies InquiryReply[]
-
-  @@index([authorId])
-  @@index([archivedAt])
-}
-
-// ============================================
-// 문의 답변 모델
-// ============================================
-model InquiryReply {
-  id         Int      @id @default(autoincrement())
-  inquiryId  Int
-  authorId   Int
-  content    String
-  createdAt  DateTime @default(now())
-
-  // Relations
-  inquiry Inquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
-  author  User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
 }
 
 // ============================================

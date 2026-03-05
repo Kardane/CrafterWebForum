@@ -9,9 +9,7 @@ export interface AdminStats {
 	users: number;
 	posts: number;
 	comments: number;
-	inquiries: number;
 	pendingUsers: number;
-	pendingInquiries: number;
 	coreTrend: AdminCoreTrendPoint[];
 }
 
@@ -34,16 +32,6 @@ export interface AdminPostRow {
 	title: string;
 	createdAt: string;
 	deletedAt: string | null;
-	authorId: number;
-	authorName: string;
-}
-
-export interface AdminInquiryRow {
-	id: number;
-	title: string;
-	status: string;
-	createdAt: string;
-	archivedAt: string | null;
 	authorId: number;
 	authorName: string;
 }

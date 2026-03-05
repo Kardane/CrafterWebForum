@@ -5,7 +5,8 @@ import { buildCommentTree } from "@/lib/comments";
 import type { Comment as TreeComment } from "@/lib/comment-tree-ops";
 import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
-import { type PostBoardType, parsePostTagMetadata } from "@/lib/post-board";
+import { parsePostTagMetadata } from "@/lib/post-board";
+import { fetchCommentSubtreeRowsByRootIds } from "@/lib/comment-subtree-query";
 
 const POST_DETAIL_CACHE_VERSION = "v1";
 const POST_DETAIL_REVALIDATE_SECONDS = 30;
@@ -42,8 +43,6 @@ export interface GetPostDetailResult {
 		author_id: number;
 		author_name: string;
 		author_uuid: string | null;
-		board: PostBoardType;
-		serverAddress: string | null;
 		user_liked: boolean;
 	};
 	comments: TreeComment[];
@@ -108,33 +107,10 @@ async function loadInitialDetailCommentThreads(input: {
 			? selectedRoots[selectedRoots.length - 1].id
 			: null;
 
-	const commentsById = new Map<number, (typeof selectedRoots)[number]>();
-	for (const root of selectedRoots) {
-		commentsById.set(root.id, root);
-	}
-
-	let frontierIds = selectedRoots.map((comment) => comment.id);
-	while (frontierIds.length > 0) {
-		const children = await prisma.comment.findMany({
-			where: {
-				postId: input.postId,
-				parentId: { in: frontierIds },
-			},
-			include: commentIncludeWithAuthor,
-			orderBy: [{ id: "asc" }],
-		});
-		const nextFrontier: number[] = [];
-		for (const child of children) {
-			if (commentsById.has(child.id)) {
-				continue;
-			}
-			commentsById.set(child.id, child);
-			nextFrontier.push(child.id);
-		}
-		frontierIds = nextFrontier;
-	}
-
-	const pagedComments = Array.from(commentsById.values()).sort((a, b) => a.id - b.id);
+	const pagedComments = await fetchCommentSubtreeRowsByRootIds(
+		input.postId,
+		selectedRoots.map((root) => root.id)
+	);
 	const commentsWithPostAuthorFlag = pagedComments.map((comment) => ({
 		...comment,
 		isPostAuthor: comment.author.id === input.postAuthorId,
@@ -225,8 +201,6 @@ async function getPostDetailCoreUncached(
 		author_id: post.authorId,
 		author_name: post.author.nickname,
 		author_uuid: post.author.minecraftUuid,
-		board: postTagMetadata.board,
-		serverAddress: postTagMetadata.serverAddress,
 	};
 	const responseComments = commentsResult.comments;
 	const serializeMs = performance.now() - serializeStart;

@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimitAsync } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
 import {
 	MINECRAFT_AUTH_CODE_REGEX,
 	normalizeMinecraftAuthCode,
 } from "@/lib/minecraft-auth-code";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { text } from "@/lib/system-text";
+import { z } from "zod";
 
 const PASSWORD_REGEX = /^(?=.*[0-9!@#$%^&*])(?=.{8,})/;
 const CODE_TTL_MS = 10 * 60 * 1000;
+const forgotPasswordBodySchema = z.object({
+	code: z.string().trim().min(1),
+	newPassword: z.string().min(1),
+});
 
 /**
  * POST /api/auth/password/forgot
@@ -18,21 +24,15 @@ const CODE_TTL_MS = 10 * 60 * 1000;
  */
 export async function POST(req: NextRequest) {
 	try {
-		const rateLimitedResponse = enforceRateLimit(req, RATE_LIMIT_POLICIES.authPasswordForgot);
+		const rateLimitedResponse = await enforceRateLimitAsync(req, RATE_LIMIT_POLICIES.authPasswordForgot);
 		if (rateLimitedResponse) {
 			return rateLimitedResponse;
 		}
 
-		let body: {
-			code?: unknown;
-			newPassword?: unknown;
-		};
-		try {
-			body = (await req.json()) as {
-				code?: unknown;
-				newPassword?: unknown;
-			};
-		} catch {
+		const parsedBody = forgotPasswordBodySchema.safeParse(
+			await readJsonBody(req, { maxBytes: 128 * 1024 })
+		);
+		if (!parsedBody.success) {
 			return NextResponse.json(
 				{
 					error: "validation_error",
@@ -41,9 +41,8 @@ export async function POST(req: NextRequest) {
 				{ status: 400 }
 			);
 		}
-		const normalizedCode =
-			typeof body.code === "string" ? normalizeMinecraftAuthCode(body.code) : "";
-		const newPassword = typeof body.newPassword === "string" ? body.newPassword : "";
+		const normalizedCode = normalizeMinecraftAuthCode(parsedBody.data.code);
+		const newPassword = parsedBody.data.newPassword;
 
 		if (
 			!normalizedCode ||
@@ -125,6 +124,15 @@ export async function POST(req: NextRequest) {
 			message: text("passwordReset.successMessage"),
 		});
 	} catch (error: unknown) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json(
+				{
+					error: "validation_error",
+					message: text("passwordReset.errorInvalidRequest"),
+				},
+				{ status: 400 }
+			);
+		}
 		console.error("[Auth] POST /api/auth/password/forgot error:", error);
 		return NextResponse.json(
 			{

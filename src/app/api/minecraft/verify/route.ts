@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimitAsync } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
 import {
 	MINECRAFT_AUTH_CODE_REGEX,
 	normalizeMinecraftAuthCode,
 } from "@/lib/minecraft-auth-code";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { z } from "zod";
 
 const verifyBodySchema = z.object({
@@ -33,12 +34,12 @@ const verifyBodySchema = z.object({
  */
 export async function POST(req: NextRequest) {
 	try {
-		const rateLimitedResponse = enforceRateLimit(req, RATE_LIMIT_POLICIES.minecraftVerify);
+		const rateLimitedResponse = await enforceRateLimitAsync(req, RATE_LIMIT_POLICIES.minecraftVerify);
 		if (rateLimitedResponse) {
 			return rateLimitedResponse;
 		}
 
-		const body = await req.json().catch(() => null);
+		const body = await readJsonBody(req, { maxBytes: 128 * 1024 });
 		const parsed = verifyBodySchema.safeParse(body);
 		if (!parsed.success) {
 			return NextResponse.json(
@@ -86,6 +87,12 @@ export async function POST(req: NextRequest) {
 			message: "verified",
 		});
 	} catch (error) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json(
+				{ error: "missing_params" },
+				{ status: 400 }
+			);
+		}
 		console.error("[Minecraft] Verify error:", error);
 		return NextResponse.json(
 			{ error: "db_error" },

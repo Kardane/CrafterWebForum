@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimitAsync } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
 import { buildLinkPreview, isBlockedLinkPreviewHost } from "@/lib/link-preview/providers";
 import { getCachedLinkPreview, setCachedLinkPreview } from "@/lib/link-preview/cache";
 import { createServerTimingHeader } from "@/lib/server-timing";
+import { assertSafeHttpUrl } from "@/lib/network-guard";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
 	try {
 		const requestStart = performance.now();
-		const rateLimitedResponse = enforceRateLimit(request, RATE_LIMIT_POLICIES.linkPreview);
+		const rateLimitedResponse = await enforceRateLimitAsync(request, RATE_LIMIT_POLICIES.linkPreview);
 		if (rateLimitedResponse) {
 			return rateLimitedResponse;
 		}
@@ -32,6 +33,11 @@ export async function GET(request: NextRequest) {
 		}
 
 		if (isBlockedLinkPreviewHost(parsedUrl.hostname)) {
+			return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+		}
+		try {
+			await assertSafeHttpUrl(parsedUrl);
+		} catch {
 			return NextResponse.json({ error: "invalid_request" }, { status: 400 });
 		}
 

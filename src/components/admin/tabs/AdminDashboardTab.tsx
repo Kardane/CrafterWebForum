@@ -88,9 +88,7 @@ export default function AdminDashboardTab() {
 							["유저", stats.users],
 							["포스트", stats.posts],
 							["댓글", stats.comments],
-							["문의", stats.inquiries],
 							["승인대기 유저", stats.pendingUsers],
-							["미응답 문의", stats.pendingInquiries],
 						].map(([label, value]) => (
 							<div key={label} className="rounded-lg border border-border bg-bg-tertiary/40 p-4">
 								<p className="text-sm text-text-muted">{label}</p>

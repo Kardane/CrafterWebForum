@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { getPostListCacheTags } from "@/lib/cache-tags";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
-import { OMBUDSMAN_BOARD_MARKER, type PostBoardType, parsePostTagMetadata } from "@/lib/post-board";
+import { type PostBoardType, parsePostTagMetadata } from "@/lib/post-board";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 12;
@@ -136,7 +136,7 @@ function normalizeListPostsInput(input: ListPostsInput): NormalizedListPostsInpu
 	const page = normalizePositiveInt(input.page, DEFAULT_PAGE);
 	const limit = normalizePositiveInt(input.limit, DEFAULT_LIMIT, MAX_LIMIT);
 	const tag = input.tag?.trim() || null;
-	const board = input.board === "ombudsman" ? "ombudsman" : "forum";
+	const board = "forum";
 	const search = input.search?.trim() ?? "";
 	const sort = input.sort ?? "activity";
 	return {
@@ -186,7 +186,6 @@ async function listPostsCoreUncached(
 	const page = input.page;
 	const limit = input.limit;
 	const tag = input.tag;
-	const board = input.board;
 	const search = input.search;
 	const skip = (page - 1) * limit;
 	const andConditions: Prisma.PostWhereInput[] = [{ deletedAt: null }];
@@ -199,17 +198,9 @@ async function listPostsCoreUncached(
 		});
 	}
 
-	if (board === "ombudsman") {
-		andConditions.push({
-			tags: {
-				contains: `"${OMBUDSMAN_BOARD_MARKER}"`,
-			},
-		});
-	} else {
-		andConditions.push({
-			tags: { not: { contains: `"${OMBUDSMAN_BOARD_MARKER}"` } },
-		});
-	}
+	andConditions.push({
+		tags: { not: { contains: "\"__sys:board:ombudsman\"" } },
+	});
 
 	if (search.length > 0) {
 		const searchConditions: Prisma.PostWhereInput[] = [
@@ -325,7 +316,7 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 	let readCountByPostId = new Map<number, number>();
 	const shouldLoadUserOverlay = normalizedInput.includeUserOverlay;
 	const shouldLoadLikeOverlay = shouldLoadUserOverlay && Boolean(sessionUserId) && postIds.length > 0;
-	const shouldLoadReadOverlay = shouldLoadLikeOverlay && normalizedInput.board !== "ombudsman";
+	const shouldLoadReadOverlay = shouldLoadLikeOverlay;
 
 	if (shouldLoadLikeOverlay && sessionUserId) {
 		const queryAuxStart = performance.now();
@@ -367,7 +358,7 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 		let unreadCount = 0;
 		if (shouldLoadReadOverlay) {
 			unreadCount = Math.max(post.commentCount - lastReadCommentCount, 0);
-		} else if (normalizedInput.board === "forum" && normalizedInput.includeUserOverlay) {
+		} else if (normalizedInput.includeUserOverlay) {
 			unreadCount = post.commentCount;
 		}
 		return {

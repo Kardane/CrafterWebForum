@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { isSessionUserApproved, toSessionUserId } from "@/lib/session-user";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 import { createServerTimingHeader } from "@/lib/server-timing";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
-import { isReservedPostTag, parsePostTagMetadata, toStoredTags } from "@/lib/post-board";
+import { isReservedPostTag, toStoredTags } from "@/lib/post-board";
+import { resolveActiveUserFromSession } from "@/lib/active-user";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
+import { z } from "zod";
 
 export const preferredRegion = "icn1";
 
@@ -19,6 +21,12 @@ function normalizeTags(value: unknown) {
 		.filter((tag) => tag.length > 0 && !isReservedPostTag(tag));
 }
 
+const postUpdateBodySchema = z.object({
+	title: z.string().trim().min(1),
+	content: z.string().trim().min(1),
+	tags: z.array(z.string()).optional().default([]),
+});
+
 export async function GET(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
@@ -30,17 +38,12 @@ export async function GET(
 
 		const authStart = performance.now();
 		const session = await auth();
-		if (!session?.user) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-		}
-		if (!isSessionUserApproved(session.user.isApproved)) {
-			return NextResponse.json({ error: "pending_approval" }, { status: 403 });
+		const activeUser = await resolveActiveUserFromSession(session);
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
 
-		const sessionUserId = toSessionUserId(session.user.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-		}
+		const sessionUserId = activeUser.context.userId;
 		const authMs = performance.now() - authStart;
 
 		const postId = Number.parseInt(id, 10);
@@ -87,26 +90,25 @@ export async function PATCH(
 	try {
 		const { id } = await params;
 		const session = await auth();
-		if (!session?.user) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session);
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
 
-		const sessionUserId = toSessionUserId(session.user.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-		}
+		const sessionUserId = activeUser.context.userId;
 
 		const postId = Number.parseInt(id, 10);
 		if (Number.isNaN(postId)) {
 			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
-		const body = await request.json();
-		const { title, content, tags } = body;
-
-		if (!title || !content) {
+		const parsedBody = postUpdateBodySchema.safeParse(
+			await readJsonBody(request, { maxBytes: 256 * 1024 })
+		);
+		if (!parsedBody.success) {
 			return NextResponse.json({ error: "Title and content are required" }, { status: 400 });
 		}
+		const { title, content, tags } = parsedBody.data;
 
 		const post = await prisma.post.findFirst({
 			where: {
@@ -119,14 +121,10 @@ export async function PATCH(
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
-		if (post.authorId !== sessionUserId) {
+		if (post.authorId !== sessionUserId && activeUser.context.role !== "admin") {
 			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
 		const previousTags = parsePostTags(post.tags);
-		const metadata = parsePostTagMetadata(post.tags);
-		if (metadata.board === "ombudsman") {
-			return NextResponse.json({ error: "ombudsman_post_edit_disabled" }, { status: 403 });
-		}
 		const nextTags = normalizeTags(tags);
 
 		await prisma.post.update({
@@ -134,7 +132,7 @@ export async function PATCH(
 			data: {
 				title,
 				content,
-				tags: toStoredTags({ board: metadata.board, tags: nextTags, serverAddress: metadata.serverAddress }),
+				tags: toStoredTags({ tags: nextTags }),
 				updatedAt: new Date(),
 			},
 		});
@@ -147,6 +145,9 @@ export async function PATCH(
 
 		return NextResponse.json({ success: true, message: "Post updated successfully" });
 	} catch (error) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json({ error: error.code }, { status: error.status });
+		}
 		console.error("[API] PATCH /api/posts/[id] error:", error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
@@ -160,14 +161,12 @@ export async function DELETE(
 	try {
 		const { id } = await params;
 		const session = await auth();
-		if (!session?.user) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session);
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
 
-		const sessionUserId = toSessionUserId(session.user.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-		}
+		const sessionUserId = activeUser.context.userId;
 
 		const postId = Number.parseInt(id, 10);
 		if (Number.isNaN(postId)) {
@@ -185,7 +184,7 @@ export async function DELETE(
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
-		if (post.authorId !== sessionUserId && session.user.role !== "admin") {
+		if (post.authorId !== sessionUserId && activeUser.context.role !== "admin") {
 			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
 		const previousTags = parsePostTags(post.tags);

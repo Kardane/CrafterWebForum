@@ -1,18 +1,15 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { buildCommentTree } from "@/lib/comments";
-import { isSessionUserApproved, toSessionUserId } from "@/lib/session-user";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
 import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
-import { extractMentionNicknames } from "@/lib/mentions";
-import { buildDeliveryDedupeKey } from "@/lib/push";
-
-type MentionTarget = {
-	id: number;
-	nickname: string;
-};
+import { queueMentionNotificationsAndDeliveries } from "@/lib/comment-mention-notifications";
+import { resolveActiveUserFromSession } from "@/lib/active-user";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
+import { fetchCommentSubtreeRowsByRootIds } from "@/lib/comment-subtree-query";
+import { z } from "zod";
 
 const DEFAULT_COMMENT_ROOT_LIMIT = 20;
 const MAX_COMMENT_ROOT_LIMIT = 50;
@@ -30,108 +27,21 @@ const commentIncludeWithAuthor = {
 	},
 } as const;
 
-async function queueMentionNotificationsAndDeliveries(params: {
-	content: string;
-	actorUserId: number;
-	actorNickname: string;
-	postId: number;
-	commentId: number;
-}): Promise<MentionTarget[]> {
-	const mentionNicknames = extractMentionNicknames(params.content);
-	if (mentionNicknames.length === 0) {
-		return [];
-	}
+const commentCreateBodySchema = z.object({
+	content: z.string().trim().min(1),
+	parentId: z
+		.preprocess((value) => {
+			if (value === null || value === undefined) {
+				return null;
+			}
+			if (typeof value === "string" && value.trim().length === 0) {
+				return Number.NaN;
+			}
+			return Number(value);
+		}, z.number().int().positive().nullable())
+		.optional(),
+});
 
-	const mentionTargets = await prisma.user.findMany({
-		where: {
-			nickname: { in: mentionNicknames },
-			deletedAt: null,
-		},
-		select: {
-			id: true,
-			nickname: true,
-		},
-	});
-
-	const targets = mentionTargets.filter((target) => target.id !== params.actorUserId);
-	if (targets.length === 0) {
-		return [];
-	}
-
-	await prisma.notification.createMany({
-		data: targets.map((target) => ({
-			userId: target.id,
-			actorId: params.actorUserId,
-			type: "mention_comment",
-			message: `${params.actorNickname}님이 회원님을 멘션했음`,
-			postId: params.postId,
-			commentId: params.commentId,
-		})),
-	});
-
-	const createdNotifications = await prisma.notification.findMany({
-		where: {
-			userId: { in: targets.map((target) => target.id) },
-			actorId: params.actorUserId,
-			type: "mention_comment",
-			postId: params.postId,
-			commentId: params.commentId,
-		},
-		select: {
-			id: true,
-			userId: true,
-		},
-	});
-	if (createdNotifications.length === 0) {
-		return targets;
-	}
-
-	const subscriptions = await prisma.pushSubscription.findMany({
-		where: {
-			userId: { in: createdNotifications.map((item) => item.userId) },
-			isActive: 1,
-		},
-		select: {
-			id: true,
-			userId: true,
-		},
-	});
-	if (subscriptions.length === 0) {
-		return targets;
-	}
-
-	const notificationMap = new Map<number, number>();
-	for (const created of createdNotifications) {
-		notificationMap.set(created.userId, created.id);
-	}
-
-	const queuedAt = new Date();
-	const deliveries = subscriptions.flatMap((subscription) => {
-		const notificationId = notificationMap.get(subscription.userId);
-		if (!notificationId) {
-			return [];
-		}
-		return [
-			{
-				notificationId,
-				userId: subscription.userId,
-				subscriptionId: subscription.id,
-				channel: "web_push",
-				status: "queued",
-				nextAttemptAt: queuedAt,
-				dedupeKey: buildDeliveryDedupeKey(notificationId, "web_push", subscription.id),
-			},
-		];
-	});
-
-	if (deliveries.length > 0) {
-		await prisma.notificationDelivery.createMany({
-			data: deliveries,
-		});
-	}
-
-	return targets;
-}
 
 /**
  * GET /api/posts/[id]/comments
@@ -144,15 +54,9 @@ export async function GET(
 	try {
 		const { id } = await params;
 		const session = await auth();
-		if (!session?.user) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-		}
-		if (!isSessionUserApproved(session.user.isApproved)) {
-			return NextResponse.json({ error: "pending_approval" }, { status: 403 });
-		}
-		const sessionUserId = toSessionUserId(session.user.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session);
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
 
 		const postId = parseInt(id, 10);
@@ -225,33 +129,10 @@ export async function GET(
 				? selectedRoots[selectedRoots.length - 1].id
 				: null;
 
-		const commentsById = new Map<number, (typeof selectedRoots)[number]>();
-		for (const root of selectedRoots) {
-			commentsById.set(root.id, root);
-		}
-
-		let frontierIds = selectedRoots.map((comment) => comment.id);
-		while (frontierIds.length > 0) {
-			const children = await prisma.comment.findMany({
-				where: {
-					postId,
-					parentId: { in: frontierIds },
-				},
-				include: commentIncludeWithAuthor,
-				orderBy: [{ id: "asc" }],
-			});
-			const nextFrontier: number[] = [];
-			for (const child of children) {
-				if (commentsById.has(child.id)) {
-					continue;
-				}
-				commentsById.set(child.id, child);
-				nextFrontier.push(child.id);
-			}
-			frontierIds = nextFrontier;
-		}
-
-		const pagedComments = Array.from(commentsById.values()).sort((a, b) => a.id - b.id);
+		const pagedComments = await fetchCommentSubtreeRowsByRootIds(
+			postId,
+			selectedRoots.map((root) => root.id)
+		);
 		const commentsWithPostAuthorFlag = pagedComments.map((comment) => ({
 			...comment,
 			isPostAuthor: comment.author.id === post.authorId,
@@ -282,41 +163,29 @@ export async function POST(
 	try {
 		const { id } = await params;
 		const session = await auth();
-		if (!session?.user) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session);
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
-		if (!isSessionUserApproved(session.user.isApproved)) {
-			return NextResponse.json({ error: "pending_approval" }, { status: 403 });
-		}
-		const sessionUserId = toSessionUserId(session.user.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-		}
+		const sessionUserId = activeUser.context.userId;
 
 		const postId = parseInt(id, 10);
 		if (Number.isNaN(postId)) {
 			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
-		const body = (await request.json()) as {
-			content?: unknown;
-			parentId?: unknown;
-		};
-		const content = typeof body.content === "string" ? body.content.trim() : "";
-		const normalizedParentId =
-			body.parentId === null || body.parentId === undefined
-				? null
-				: Number(body.parentId);
-
-		if (!content) {
-			return NextResponse.json({ error: "Content is required" }, { status: 400 });
+		const parsedBody = commentCreateBodySchema.safeParse(
+			await readJsonBody(request, { maxBytes: 256 * 1024 })
+		);
+		if (!parsedBody.success) {
+			const hasParentIdIssue = parsedBody.error.issues.some((issue) => issue.path[0] === "parentId");
+			return NextResponse.json(
+				{ error: hasParentIdIssue ? "Invalid parent comment ID" : "Content is required" },
+				{ status: 400 }
+			);
 		}
-		if (
-			normalizedParentId !== null &&
-			(!Number.isInteger(normalizedParentId) || normalizedParentId <= 0)
-		) {
-			return NextResponse.json({ error: "Invalid parent comment ID" }, { status: 400 });
-		}
+		const content = parsedBody.data.content;
+		const normalizedParentId = parsedBody.data.parentId ?? null;
 
 		const post = await prisma.post.findFirst({
 			where: {
@@ -392,7 +261,7 @@ export async function POST(
 			})
 		);
 
-		const actorNickname = session.user.nickname || "누군가";
+		const actorNickname = activeUser.context.nickname || "누군가";
 		const mentionTargets = await queueMentionNotificationsAndDeliveries({
 			content,
 			actorUserId: sessionUserId,
@@ -467,6 +336,9 @@ export async function POST(
 				},
 			});
 	} catch (error) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json({ error: error.code }, { status: error.status });
+		}
 		console.error("[API] POST /api/posts/[id]/comments error:", error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}

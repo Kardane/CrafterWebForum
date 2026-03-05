@@ -19,36 +19,6 @@ function parseTrendRange(range: string | null): AdminTrendRangeKey {
 	return DEFAULT_ADMIN_TREND_RANGE;
 }
 
-function isArchivedAtColumnMissing(error: unknown) {
-	return error instanceof Error && error.message.includes("archivedAt");
-}
-
-async function countActiveInquiries() {
-	try {
-		return await prisma.inquiry.count({ where: { archivedAt: null } });
-	} catch (error) {
-		if (!isArchivedAtColumnMissing(error)) {
-			throw error;
-		}
-		return prisma.inquiry.count();
-	}
-}
-
-async function countPendingInquiries() {
-	try {
-		return await prisma.inquiry.count({
-			where: { status: "pending", archivedAt: null },
-		});
-	} catch (error) {
-		if (!isArchivedAtColumnMissing(error)) {
-			throw error;
-		}
-		return prisma.inquiry.count({
-			where: { status: "pending" },
-		});
-	}
-}
-
 function getDateKey(date: Date) {
 	const year = date.getUTCFullYear();
 	const month = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -180,9 +150,7 @@ export async function GET(request: Request) {
 			users,
 			posts,
 			comments,
-			inquiries,
 			pendingUsers,
-			pendingInquiries,
 			userDailyBuckets,
 			postDailyBuckets,
 			commentDailyBuckets,
@@ -190,9 +158,7 @@ export async function GET(request: Request) {
 			prisma.user.count({ where: { deletedAt: null } }),
 			prisma.post.count({ where: { deletedAt: null } }),
 			prisma.comment.count(),
-			countActiveInquiries(),
 			prisma.user.count({ where: { deletedAt: null, isApproved: 0 } }),
-			countPendingInquiries(),
 			findUserDailyBuckets(rangeStart),
 			findPostDailyBuckets(rangeStart),
 			findCommentDailyBuckets(rangeStart),
@@ -217,9 +183,7 @@ export async function GET(request: Request) {
 				users,
 				posts,
 				comments,
-				inquiries,
 				pendingUsers,
-				pendingInquiries,
 				coreTrend,
 			},
 		});

@@ -1,4 +1,5 @@
 import webpush from "web-push";
+import { assertSafeHttpUrl } from "@/lib/network-guard";
 
 export interface PushSubscriptionPayload {
 	endpoint: string;
@@ -132,6 +133,19 @@ export function parsePushSubscriptionPayload(payload: unknown): PushSubscription
 		keys: { p256dh, auth },
 		expirationTime,
 	};
+}
+
+export async function parsePushSubscriptionPayloadAsync(payload: unknown): Promise<PushSubscriptionPayload | null> {
+	const parsed = parsePushSubscriptionPayload(payload);
+	if (!parsed) {
+		return null;
+	}
+	try {
+		await assertSafeHttpUrl(new URL(parsed.endpoint));
+		return parsed;
+	} catch {
+		return null;
+	}
 }
 
 export function buildDeliveryDedupeKey(notificationId: number, channel: string, subscriptionId: number | null): string {

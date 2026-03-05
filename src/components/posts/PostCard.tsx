@@ -7,7 +7,6 @@ import { MessageSquare } from "lucide-react";
 import LikeButton from "./LikeButton";
 import SafeImage from "@/components/ui/SafeImage";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
-import ServerAddressTag from "@/components/posts/ServerAddressTag";
 
 interface PostCardProps {
 	id: number;
@@ -23,8 +22,6 @@ interface PostCardProps {
 	likeCount: number;
 	commentCount: number;
 	tags: string[];
-	board?: "forum" | "ombudsman";
-	serverAddress?: string | null;
 	unreadCount?: number;
 	userLiked?: boolean;
 	onNavigate?: (postId: number) => void;
@@ -42,8 +39,6 @@ export default function PostCard({
 	likeCount,
 	commentCount,
 	tags,
-	board = "forum",
-	serverAddress,
 	unreadCount = 0,
 	userLiked,
 	onNavigate,
@@ -55,7 +50,7 @@ export default function PostCard({
 		addSuffix: true,
 		locale: ko,
 	});
-	const detailHref = board === "ombudsman" ? `/posts/${id}?board=ombudsman` : `/posts/${id}`;
+	const detailHref = `/posts/${id}`;
 
 	return (
 		<Link
@@ -70,20 +65,14 @@ export default function PostCard({
 				<div className="flex-1 flex flex-col min-w-0">
 					<div className="flex flex-col gap-1 mb-2">
 					<div className="flex flex-wrap gap-1.5 mb-1">
-							{board === "ombudsman" ? (
-								serverAddress ? (
-									<ServerAddressTag address={serverAddress} />
-								) : null
-							) : (
-								tags.map((tag) => (
+							{tags.map((tag) => (
 								<span
 									key={tag}
 									className="px-2 py-[2px] rounded text-[10px] font-medium bg-bg-tertiary text-text-secondary"
 								>
 									{tag}
 								</span>
-								))
-							)}
+							))}
 						</div>
 
 						<h3 className="text-base font-bold text-text-primary truncate">{title}</h3>

@@ -7,6 +7,8 @@ const likeCreateMock = vi.fn();
 const likeDeleteMock = vi.fn();
 const postUpdateMock = vi.fn();
 const postFindUniqueMock = vi.fn();
+const transactionMock = vi.fn();
+const resolveActiveUserFromSessionMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -17,14 +19,18 @@ vi.mock("@/lib/prisma", () => ({
 		post: {
 			findFirst: postFindFirstMock,
 			update: postUpdateMock,
-			findUnique: postFindUniqueMock,
 		},
 		like: {
-			findFirst: likeFindFirstMock,
+			findUnique: likeFindFirstMock,
 			create: likeCreateMock,
 			delete: likeDeleteMock,
 		},
+		$transaction: transactionMock,
 	},
+}));
+
+vi.mock("@/lib/active-user", () => ({
+	resolveActiveUserFromSession: resolveActiveUserFromSessionMock,
 }));
 
 describe("POST /api/posts/[id]/like", () => {
@@ -37,10 +43,29 @@ describe("POST /api/posts/[id]/like", () => {
 		likeDeleteMock.mockReset();
 		postUpdateMock.mockReset();
 		postFindUniqueMock.mockReset();
+		transactionMock.mockReset();
+		resolveActiveUserFromSessionMock.mockReset();
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: true,
+			context: { userId: 9, role: "user", nickname: "tester", isApproved: 1, isBanned: 0 },
+		});
+		transactionMock.mockImplementation(async (callback: (tx: unknown) => unknown) =>
+			callback({
+				like: {
+					findUnique: likeFindFirstMock,
+					create: likeCreateMock,
+					delete: likeDeleteMock,
+				},
+				post: {
+					update: postUpdateMock,
+				},
+			})
+		);
 	});
 
 	it("returns 401 when unauthenticated", async () => {
 		authMock.mockResolvedValue(null);
+		resolveActiveUserFromSessionMock.mockResolvedValue({ ok: false, status: 401, error: "unauthorized" });
 		const { POST } = await import("@/app/api/posts/[id]/like/route");
 		const req = new Request("http://localhost/api/posts/1/like", { method: "POST" });
 		const res = await POST(req as never, { params: Promise.resolve({ id: "1" }) });
@@ -52,8 +77,7 @@ describe("POST /api/posts/[id]/like", () => {
 		postFindFirstMock.mockResolvedValue({ id: 1 });
 		likeFindFirstMock.mockResolvedValue(null);
 		likeCreateMock.mockResolvedValue({ id: 100 });
-		postUpdateMock.mockResolvedValue({});
-		postFindUniqueMock.mockResolvedValue({ likes: 3 });
+		postUpdateMock.mockResolvedValue({ likes: 3 });
 
 		const { POST } = await import("@/app/api/posts/[id]/like/route");
 		const req = new Request("http://localhost/api/posts/1/like", { method: "POST" });

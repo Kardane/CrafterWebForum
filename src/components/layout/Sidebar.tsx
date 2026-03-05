@@ -5,13 +5,12 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import classNames from "classnames";
-import { Settings, HelpCircle, Shield, Bell } from "lucide-react";
+import { Settings, Shield, Bell } from "lucide-react";
 import SidebarSettingsModal from "../sidebar/SidebarSettingsModal";
 import SafeImage from "@/components/ui/SafeImage";
 import UserAvatar from "@/components/ui/UserAvatar";
 import { DEFAULT_SETTINGS, getSidebarSettings, normalizeSidebarUrl } from "@/lib/sidebar-settings";
 import { SidebarLink, DEFAULT_LINKS, compareSidebarLinks } from "@/lib/sidebar-links";
-import { usePendingInquiryCount } from "@/components/layout/usePendingInquiryCount";
 import { useNotifications } from "@/components/notifications/useNotifications";
 
 interface SidebarProps {
@@ -69,7 +68,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
 	const user = session?.user;
 	const canAccessAdmin = user ? user.role === "admin" : false;
-	const { inquiryCount } = usePendingInquiryCount(canAccessAdmin);
 	const { unreadCount } = useNotifications();
 
 	useEffect(() => {
@@ -205,19 +203,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 								{unreadCount > 0 && (
 									<span className="absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
 										{unreadCount > 99 ? "99+" : unreadCount}
-									</span>
-								)}
-							</Link>
-
-							<Link
-								href="/inquiries"
-								className="flex flex-1 items-center gap-1.5 rounded px-2.5 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-secondary hover:text-text-primary"
-							>
-								<HelpCircle size={16} />
-								<span>문의하기</span>
-								{canAccessAdmin && inquiryCount > 0 && (
-									<span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
-										{inquiryCount}
 									</span>
 								)}
 							</Link>

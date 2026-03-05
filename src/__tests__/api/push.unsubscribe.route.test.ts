@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 
 const authMock = vi.fn();
-const enforceRateLimitMock = vi.fn();
+const enforceRateLimitAsyncMock = vi.fn();
 const updateManyMock = vi.fn();
+const assertSafeHttpUrlMock = vi.fn();
+const resolveActiveUserFromSessionMock = vi.fn();
 
 vi.mock("@/auth", () => ({ auth: authMock }));
-vi.mock("@/lib/rate-limit", () => ({ enforceRateLimit: enforceRateLimitMock }));
+vi.mock("@/lib/rate-limit", () => ({ enforceRateLimitAsync: enforceRateLimitAsyncMock }));
 vi.mock("@/lib/prisma", () => ({
 	prisma: {
 		pushSubscription: {
@@ -14,17 +16,30 @@ vi.mock("@/lib/prisma", () => ({
 		},
 	},
 }));
+vi.mock("@/lib/network-guard", () => ({
+	assertSafeHttpUrl: assertSafeHttpUrlMock,
+}));
+vi.mock("@/lib/active-user", () => ({
+	resolveActiveUserFromSession: resolveActiveUserFromSessionMock,
+}));
 
 describe("POST /api/push/unsubscribe", () => {
 	beforeEach(() => {
 		authMock.mockReset();
-		enforceRateLimitMock.mockReset();
+		enforceRateLimitAsyncMock.mockReset();
 		updateManyMock.mockReset();
-		enforceRateLimitMock.mockReturnValue(null);
+		assertSafeHttpUrlMock.mockReset();
+		resolveActiveUserFromSessionMock.mockReset();
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: true,
+			context: { userId: 7, role: "user", nickname: "tester", isApproved: 1, isBanned: 0 },
+		});
+		assertSafeHttpUrlMock.mockResolvedValue(undefined);
+		enforceRateLimitAsyncMock.mockResolvedValue(null);
 	});
 
 	it("returns 429 when rate limited", async () => {
-		enforceRateLimitMock.mockReturnValue(NextResponse.json({ error: "rate_limited" }, { status: 429 }));
+		enforceRateLimitAsyncMock.mockResolvedValue(NextResponse.json({ error: "rate_limited" }, { status: 429 }));
 		const { POST } = await import("@/app/api/push/unsubscribe/route");
 		const req = new NextRequest("http://localhost/api/push/unsubscribe", {
 			method: "POST",
@@ -36,6 +51,7 @@ describe("POST /api/push/unsubscribe", () => {
 
 	it("returns 401 without session", async () => {
 		authMock.mockResolvedValue(null);
+		resolveActiveUserFromSessionMock.mockResolvedValue({ ok: false, status: 401, error: "unauthorized" });
 		const { POST } = await import("@/app/api/push/unsubscribe/route");
 		const req = new NextRequest("http://localhost/api/push/unsubscribe", {
 			method: "POST",

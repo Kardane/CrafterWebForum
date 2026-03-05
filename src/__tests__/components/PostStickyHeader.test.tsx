@@ -70,10 +70,10 @@ describe("PostStickyHeader", () => {
 				commentCount={0}
 				initialLikes={0}
 				initialLiked={false}
-				backHref="/ombudsman"
+				backHref="/"
 			/>
 		);
 
-		expect(screen.getAllByRole("link")[0]).toHaveAttribute("href", "/ombudsman");
+		expect(screen.getAllByRole("link")[0]).toHaveAttribute("href", "/");
 	});
 });

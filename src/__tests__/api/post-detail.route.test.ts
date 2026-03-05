@@ -7,6 +7,8 @@ const commentFindManyMock = vi.fn();
 const commentCountMock = vi.fn();
 const postReadFindUniqueMock = vi.fn();
 const postReadUpsertMock = vi.fn();
+const resolveActiveUserFromSessionMock = vi.fn();
+const fetchCommentSubtreeRowsByRootIdsMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -31,6 +33,14 @@ vi.mock("@/lib/prisma", () => ({
 		},
 }));
 
+vi.mock("@/lib/active-user", () => ({
+	resolveActiveUserFromSession: resolveActiveUserFromSessionMock,
+}));
+
+vi.mock("@/lib/comment-subtree-query", () => ({
+	fetchCommentSubtreeRowsByRootIds: fetchCommentSubtreeRowsByRootIdsMock,
+}));
+
 describe("GET /api/posts/[id]", () => {
 	beforeEach(() => {
 		authMock.mockReset();
@@ -40,10 +50,17 @@ describe("GET /api/posts/[id]", () => {
 		commentCountMock.mockReset();
 		postReadFindUniqueMock.mockReset();
 		postReadUpsertMock.mockReset();
+		resolveActiveUserFromSessionMock.mockReset();
+		fetchCommentSubtreeRowsByRootIdsMock.mockReset();
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: true,
+			context: { userId: 1, role: "user", nickname: "writer", isApproved: 1, isBanned: 0 },
+		});
 	});
 
 	it("returns 401 when unauthenticated", async () => {
 		authMock.mockResolvedValue(null);
+		resolveActiveUserFromSessionMock.mockResolvedValue({ ok: false, status: 401, error: "unauthorized" });
 
 		const { GET } = await import("@/app/api/posts/[id]/route");
 		const req = new Request("http://localhost/api/posts/1");
@@ -54,6 +71,7 @@ describe("GET /api/posts/[id]", () => {
 
 	it("returns 403 when user is pending approval", async () => {
 		authMock.mockResolvedValue({ user: { id: "1", isApproved: 0 } });
+		resolveActiveUserFromSessionMock.mockResolvedValue({ ok: false, status: 403, error: "pending_approval" });
 
 		const { GET } = await import("@/app/api/posts/[id]/route");
 		const req = new Request("http://localhost/api/posts/1");
@@ -84,8 +102,7 @@ describe("GET /api/posts/[id]", () => {
 		});
 		likeFindFirstMock.mockResolvedValue(null);
 		commentCountMock.mockResolvedValue(2);
-		commentFindManyMock
-			.mockResolvedValueOnce([
+		commentFindManyMock.mockResolvedValueOnce([
 			{
 				id: 100,
 				content: "parent",
@@ -100,24 +117,41 @@ describe("GET /api/posts/[id]", () => {
 					role: "user",
 				},
 			},
-		])
-			.mockResolvedValueOnce([
-				{
-					id: 101,
-					content: "child",
-					createdAt: new Date("2026-01-01T02:01:00.000Z"),
-					updatedAt: new Date("2026-01-01T02:01:00.000Z"),
-					isPinned: 0,
-					parentId: 100,
-					author: {
-						id: 1,
-						nickname: "writer",
-						minecraftUuid: "uuid-1",
-						role: "user",
-					},
+		]);
+		fetchCommentSubtreeRowsByRootIdsMock.mockResolvedValue([
+			{
+				id: 100,
+				postId: 10,
+				authorId: 2,
+				content: "parent",
+				createdAt: new Date("2026-01-01T02:00:00.000Z"),
+				updatedAt: new Date("2026-01-01T02:00:00.000Z"),
+				isPinned: 0,
+				parentId: null,
+				author: {
+					id: 2,
+					nickname: "alice",
+					minecraftUuid: null,
+					role: "user",
 				},
-			])
-			.mockResolvedValueOnce([]);
+			},
+			{
+				id: 101,
+				postId: 10,
+				authorId: 1,
+				content: "child",
+				createdAt: new Date("2026-01-01T02:01:00.000Z"),
+				updatedAt: new Date("2026-01-01T02:01:00.000Z"),
+				isPinned: 0,
+				parentId: 100,
+				author: {
+					id: 1,
+					nickname: "writer",
+					minecraftUuid: "uuid-1",
+					role: "user",
+				},
+			},
+		]);
 			postReadFindUniqueMock.mockResolvedValue({
 				lastReadCommentCount: 1,
 			});
@@ -178,8 +212,7 @@ describe("GET /api/posts/[id]", () => {
 		});
 		likeFindFirstMock.mockResolvedValue(null);
 		commentCountMock.mockResolvedValue(1);
-		commentFindManyMock
-			.mockResolvedValueOnce([
+		commentFindManyMock.mockResolvedValueOnce([
 			{
 				id: 100,
 				content: "parent",
@@ -194,8 +227,25 @@ describe("GET /api/posts/[id]", () => {
 					role: "user",
 				},
 			},
-			])
-			.mockResolvedValueOnce([]);
+		]);
+		fetchCommentSubtreeRowsByRootIdsMock.mockResolvedValue([
+			{
+				id: 100,
+				postId: 10,
+				authorId: 2,
+				content: "parent",
+				createdAt: new Date("2026-01-01T02:00:00.000Z"),
+				updatedAt: new Date("2026-01-01T02:00:00.000Z"),
+				isPinned: 0,
+				parentId: null,
+				author: {
+					id: 2,
+					nickname: "alice",
+					minecraftUuid: null,
+					role: "user",
+				},
+			},
+		]);
 		postReadFindUniqueMock.mockResolvedValue({
 			lastReadCommentCount: 1,
 		});

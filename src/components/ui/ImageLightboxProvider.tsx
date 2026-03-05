@@ -1,6 +1,15 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+	createContext,
+	type MouseEvent as ReactMouseEvent,
+	useCallback,
+	useContext,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { Modal } from "@/components/ui/Modal";
 import SafeImage from "@/components/ui/SafeImage";
 import { appendBoundedSample, percentile } from "@/lib/perf-metrics";
@@ -18,6 +27,31 @@ interface ImageLightboxContextValue {
 const ImageLightboxContext = createContext<ImageLightboxContextValue | null>(null);
 const PERF_SAMPLE_LIMIT = 120;
 const PERF_LOG_ENABLED = process.env.NODE_ENV !== "production";
+
+function isVisibleImageAreaClick(event: ReactMouseEvent<HTMLImageElement>) {
+	const imageElement = event.currentTarget;
+	const naturalWidth = imageElement.naturalWidth;
+	const naturalHeight = imageElement.naturalHeight;
+	if (naturalWidth <= 0 || naturalHeight <= 0) {
+		return true;
+	}
+
+	const bounds = imageElement.getBoundingClientRect();
+	const clickX = event.clientX - bounds.left;
+	const clickY = event.clientY - bounds.top;
+	const scale = Math.min(bounds.width / naturalWidth, bounds.height / naturalHeight);
+	const renderedWidth = naturalWidth * scale;
+	const renderedHeight = naturalHeight * scale;
+	const horizontalPadding = (bounds.width - renderedWidth) / 2;
+	const verticalPadding = (bounds.height - renderedHeight) / 2;
+
+	return (
+		clickX >= horizontalPadding &&
+		clickX <= horizontalPadding + renderedWidth &&
+		clickY >= verticalPadding &&
+		clickY <= verticalPadding + renderedHeight
+	);
+}
 
 export function ImageLightboxProvider({ children }: { children: React.ReactNode }) {
 	const [selectedImage, setSelectedImage] = useState<LightboxImage | null>(null);
@@ -159,7 +193,9 @@ export function ImageLightboxProvider({ children }: { children: React.ReactNode 
 							loading="eager"
 							onLoad={handleImageLoad}
 							onClick={(event) => {
-								event.stopPropagation();
+								if (isVisibleImageAreaClick(event)) {
+									event.stopPropagation();
+								}
 							}}
 							className="object-contain"
 						/>

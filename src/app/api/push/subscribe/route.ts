@@ -1,24 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { toSessionUserId } from "@/lib/session-user";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimitAsync } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
-import { parsePushSubscriptionPayload } from "@/lib/push";
+import { parsePushSubscriptionPayloadAsync } from "@/lib/push";
+import { resolveActiveUserFromSession } from "@/lib/active-user";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-	const rateLimited = enforceRateLimit(request, RATE_LIMIT_POLICIES.pushSubscribe);
-	if (rateLimited) {
-		return rateLimited;
-	}
-
 	try {
 		const session = await auth();
-		const sessionUserId = toSessionUserId(session?.user?.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
+		}
+		const sessionUserId = activeUser.context.userId;
+		const rateLimited = await enforceRateLimitAsync(request, RATE_LIMIT_POLICIES.pushSubscribe, `user:${sessionUserId}`);
+		if (rateLimited) {
+			return rateLimited;
 		}
 
 		const subscriptions = await prisma.pushSubscription.findMany({
@@ -43,19 +44,20 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-	const rateLimited = enforceRateLimit(request, RATE_LIMIT_POLICIES.pushSubscribe);
-	if (rateLimited) {
-		return rateLimited;
-	}
-
 	try {
 		const session = await auth();
-		const sessionUserId = toSessionUserId(session?.user?.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
+		}
+		const sessionUserId = activeUser.context.userId;
+		const rateLimited = await enforceRateLimitAsync(request, RATE_LIMIT_POLICIES.pushSubscribe, `user:${sessionUserId}`);
+		if (rateLimited) {
+			return rateLimited;
 		}
 
-		const payload = parsePushSubscriptionPayload(await request.json());
+		const rawBody = await readJsonBody(request, { maxBytes: 256 * 1024 });
+		const payload = await parsePushSubscriptionPayloadAsync(rawBody);
 		if (!payload) {
 			return NextResponse.json({ error: "invalid_subscription_payload" }, { status: 400 });
 		}
@@ -89,6 +91,9 @@ export async function POST(request: NextRequest) {
 
 		return NextResponse.json({ ok: true });
 	} catch (error) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json({ error: error.code }, { status: error.status });
+		}
 		console.error("[API] POST /api/push/subscribe error:", error);
 		return NextResponse.json({ error: "internal_server_error" }, { status: 500 });
 	}

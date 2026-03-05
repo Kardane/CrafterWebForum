@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimitAsync } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
 import {
 	generateMinecraftAuthCode,
@@ -16,7 +16,7 @@ import {
  */
 export async function POST(req: NextRequest) {
 	try {
-		const rateLimitedResponse = enforceRateLimit(req, RATE_LIMIT_POLICIES.minecraftCode);
+		const rateLimitedResponse = await enforceRateLimitAsync(req, RATE_LIMIT_POLICIES.minecraftCode);
 		if (rateLimitedResponse) {
 			return rateLimitedResponse;
 		}

@@ -1,39 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { toSessionUserId } from "@/lib/session-user";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimitAsync } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
+import { resolveActiveUserFromSession } from "@/lib/active-user";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
+import { assertSafeHttpUrl } from "@/lib/network-guard";
+import { z } from "zod";
 
 export const dynamic = "force-dynamic";
 
-function toEndpoint(value: unknown): string | null {
-	if (typeof value !== "string") {
-		return null;
-	}
-	const endpoint = value.trim();
-	if (!endpoint) {
-		return null;
-	}
-	return endpoint;
-}
+const unsubscribeBodySchema = z.object({
+	endpoint: z.string().trim().min(1),
+});
 
 export async function POST(request: NextRequest) {
-	const rateLimited = enforceRateLimit(request, RATE_LIMIT_POLICIES.pushUnsubscribe);
-	if (rateLimited) {
-		return rateLimited;
-	}
-
 	try {
 		const session = await auth();
-		const sessionUserId = toSessionUserId(session?.user?.id);
-		if (!sessionUserId) {
-			return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
+		}
+		const sessionUserId = activeUser.context.userId;
+		const rateLimited = await enforceRateLimitAsync(request, RATE_LIMIT_POLICIES.pushUnsubscribe, `user:${sessionUserId}`);
+		if (rateLimited) {
+			return rateLimited;
 		}
 
-		const body = (await request.json()) as { endpoint?: unknown };
-		const endpoint = toEndpoint(body.endpoint);
-		if (!endpoint) {
+		const parsedBody = unsubscribeBodySchema.safeParse(
+			await readJsonBody(request, { maxBytes: 64 * 1024 })
+		);
+		if (!parsedBody.success) {
+			return NextResponse.json({ error: "invalid_endpoint" }, { status: 400 });
+		}
+		const endpoint = parsedBody.data.endpoint;
+		try {
+			await assertSafeHttpUrl(new URL(endpoint));
+		} catch {
 			return NextResponse.json({ error: "invalid_endpoint" }, { status: 400 });
 		}
 
@@ -49,6 +52,9 @@ export async function POST(request: NextRequest) {
 
 		return NextResponse.json({ ok: true });
 	} catch (error) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json({ error: error.code }, { status: error.status });
+		}
 		console.error("[API] POST /api/push/unsubscribe error:", error);
 		return NextResponse.json({ error: "internal_server_error" }, { status: 500 });
 	}

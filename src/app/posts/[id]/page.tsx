@@ -8,10 +8,10 @@ import LikeButton from "@/components/posts/LikeButton";
 import CommentSection from "@/components/comments/CommentSection";
 import PostStickyHeader from "@/components/posts/PostStickyHeader";
 import { PostLikeStateProvider } from "@/components/posts/PostLikeStateProvider";
-import ServerAddressTag from "@/components/posts/ServerAddressTag";
-import { isSessionUserApproved, toSessionUserId } from "@/lib/session-user";
+import { toSessionUserId } from "@/lib/session-user";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 import { Suspense } from "react";
+import { resolveActiveUserFromSession } from "@/lib/active-user";
 
 export const preferredRegion = "icn1";
 
@@ -56,7 +56,6 @@ async function PostDetailContent({ postId, sessionUserId }: PostDetailContentPro
 	const { post, comments, commentsPage, readMarker } = data;
 	const totalCommentCount = readMarker.totalCommentCount;
 	const isOwner = sessionUserId === post.author_id;
-	const backHref = post.board === "ombudsman" ? "/ombudsman" : "/";
 
 	return (
 		<PostLikeStateProvider
@@ -73,7 +72,7 @@ async function PostDetailContent({ postId, sessionUserId }: PostDetailContentPro
 					initialLikes={post.likes}
 					initialLiked={post.user_liked}
 					commentCount={totalCommentCount}
-					backHref={backHref}
+					backHref="/"
 				/>
 				<div className="mt-4 mb-6 relative">
 					{isOwner && (
@@ -88,12 +87,6 @@ async function PostDetailContent({ postId, sessionUserId }: PostDetailContentPro
 						<h1 className="text-2xl md:text-[2rem] font-bold text-text-primary mb-4 leading-[1.3]">
 							{post.title}
 						</h1>
-
-						{post.board === "ombudsman" && post.serverAddress && (
-							<div className="flex flex-wrap gap-2 mb-4">
-								<ServerAddressTag address={post.serverAddress} className="bg-bg-secondary text-white hover:bg-bg-tertiary" />
-							</div>
-						)}
 
 						{post.tags && post.tags.length > 0 && (
 							<div className="flex flex-wrap gap-2 mb-4">
@@ -153,14 +146,15 @@ async function PostDetailContent({ postId, sessionUserId }: PostDetailContentPro
 export default async function PostDetailPage({ params }: PostDetailPageProps) {
 	const { id } = await params;
 	const session = await auth();
-	if (!session?.user) {
+	const activeUser = await resolveActiveUserFromSession(session);
+	if (!activeUser.ok) {
+		if (activeUser.error === "pending_approval") {
+			redirect("/pending");
+		}
 		redirect("/login");
 	}
-	if (!isSessionUserApproved(session.user.isApproved)) {
-		redirect("/pending");
-	}
 
-	const sessionUserId = toSessionUserId(session.user.id);
+	const sessionUserId = toSessionUserId(activeUser.context.userId);
 	if (!sessionUserId) {
 		redirect("/login");
 	}

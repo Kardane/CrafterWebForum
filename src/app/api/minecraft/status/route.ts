@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { enforceRateLimit } from "@/lib/rate-limit";
+import { enforceRateLimitAsync } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
 
 /**
@@ -12,7 +12,7 @@ import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
  */
 export async function GET(req: NextRequest) {
 	try {
-		const rateLimitedResponse = enforceRateLimit(req, RATE_LIMIT_POLICIES.minecraftStatus);
+		const rateLimitedResponse = await enforceRateLimitAsync(req, RATE_LIMIT_POLICIES.minecraftStatus);
 		if (rateLimitedResponse) {
 			return rateLimitedResponse;
 		}
@@ -47,4 +47,3 @@ export async function GET(req: NextRequest) {
 		);
 	}
 }
-

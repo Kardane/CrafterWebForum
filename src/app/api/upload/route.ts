@@ -3,8 +3,8 @@ import { put } from "@vercel/blob";
 import { handleUpload, type HandleUploadBody } from "@vercel/blob/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { toSessionUserId } from "@/lib/session-user";
-import { createThumbnail, optimizeImage } from "@/lib/image-optimizer";
+import { optimizeImage } from "@/lib/image-optimizer";
+import { enqueueImageThumbnailJob } from "@/lib/upload-postprocess-queue";
 import {
 	VIDEO_UPLOAD_MIME_TYPES,
 	IMAGE_UPLOAD_MIME_TYPES,
@@ -16,6 +16,8 @@ import {
 	validateUploadMetadata,
 } from "@/lib/upload";
 import { MAX_UPLOAD_BYTES } from "@/lib/upload-constants";
+import { resolveActiveUserFromSession } from "@/lib/active-user";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 
 
 export const runtime = "nodejs";
@@ -46,17 +48,18 @@ export async function POST(request: Request) {
 	const contentType = request.headers.get("content-type") ?? "";
 	if (contentType.includes("application/json")) {
 		try {
-			const body = (await request.json()) as HandleUploadBody;
+			const body = (await readJsonBody(request, { maxBytes: 256 * 1024 })) as HandleUploadBody;
 			const response = await handleUpload({
 				request,
 				body,
 				token: getBlobToken(),
 				onBeforeGenerateToken: async (_pathname, clientPayload) => {
 					const session = await auth();
-					const userId = toSessionUserId(session?.user?.id);
-					if (!session?.user || !userId) {
-						throw new Error("Unauthorized");
+					const activeUser = await resolveActiveUserFromSession(session);
+					if (!activeUser.ok) {
+						throw new Error(activeUser.error);
 					}
+					const userId = activeUser.context.userId;
 
 					const parsedPayload = (() => {
 						if (!clientPayload) {
@@ -125,19 +128,28 @@ export async function POST(request: Request) {
 			});
 			return NextResponse.json(response);
 		} catch (error) {
+			if (error instanceof JsonBodyError) {
+				return NextResponse.json({ error: error.code }, { status: error.status });
+			}
 			if (error instanceof UploadValidationError) {
 				return NextResponse.json({ error: error.message }, { status: error.status });
 			}
 			const message = error instanceof Error ? error.message : "Upload failed";
-			const status = message === "Unauthorized" ? 401 : 400;
+			const status =
+				message === "Unauthorized" || message === "unauthorized"
+					? 401
+					: message === "pending_approval" || message === "banned_user"
+						? 403
+						: 400;
 			return NextResponse.json({ error: message }, { status });
 		}
 	}
 
 	try {
 		const session = await auth();
-		if (!session?.user) {
-			return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+		const activeUser = await resolveActiveUserFromSession(session);
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
 
 		const formData = await request.formData();
@@ -159,40 +171,24 @@ export async function POST(request: Request) {
 			const mainFilename = isGif
 				? `${baseName}.${validated.extension}`
 				: `${baseName}.webp`;
-			const thumb150Filename = `${baseName}-150.webp`;
-			const thumb300Filename = `${baseName}-300.webp`;
 
 			const optimized = isGif ? null : await optimizeImage(inputBuffer);
 			const mainBuffer = optimized ? optimized.buffer : inputBuffer;
 			const mainMimeType = optimized ? optimized.mimeType : validated.mimeType;
 
-			const thumb150 = await createThumbnail(mainBuffer, 150);
-			const thumb300 = await createThumbnail(mainBuffer, 300);
-
 			const mainObjectPath = toBlobObjectPath(uploadRelativeDir, mainFilename);
-			const thumb150ObjectPath = toBlobObjectPath(uploadRelativeDir, thumb150Filename);
-			const thumb300ObjectPath = toBlobObjectPath(uploadRelativeDir, thumb300Filename);
-
-			const [mainBlob, thumb150Blob, thumb300Blob] = await Promise.all([
-				put(mainObjectPath, mainBuffer, {
-					access: "public",
-					addRandomSuffix: false,
-					contentType: mainMimeType,
-					token: blobToken,
-				}),
-				put(thumb150ObjectPath, thumb150, {
-					access: "public",
-					addRandomSuffix: false,
-					contentType: "image/webp",
-					token: blobToken,
-				}),
-				put(thumb300ObjectPath, thumb300, {
-					access: "public",
-					addRandomSuffix: false,
-					contentType: "image/webp",
-					token: blobToken,
-				}),
-			]);
+			const mainBlob = await put(mainObjectPath, mainBuffer, {
+				access: "public",
+				addRandomSuffix: false,
+				contentType: mainMimeType,
+				token: blobToken,
+			});
+			enqueueImageThumbnailJob({
+				uploadRelativeDir,
+				baseName,
+				mainBuffer,
+				blobToken,
+			});
 
 			await prisma.upload.create({
 				data: {
@@ -211,8 +207,6 @@ export async function POST(request: Request) {
 				originalName: validated.originalName,
 				mimeType: mainMimeType,
 				size: mainBuffer.byteLength,
-				thumb150Url: thumb150Blob.url,
-				thumb300Url: thumb300Blob.url,
 				width: optimized?.width,
 				height: optimized?.height,
 			};

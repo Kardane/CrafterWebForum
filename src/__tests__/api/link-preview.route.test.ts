@@ -3,11 +3,21 @@ import { NextRequest } from "next/server";
 import { resetRateLimitStore } from "@/lib/rate-limit";
 
 const fetchMock = vi.fn();
+const assertSafeHttpUrlMock = vi.fn();
+
+vi.mock("@/lib/network-guard", () => ({
+	assertSafeHttpUrl: assertSafeHttpUrlMock,
+	isBlockedHostname: (hostname: string) => hostname === "localhost" || hostname.endsWith(".local"),
+	isBlockedIpAddress: (ip: string) =>
+		ip.startsWith("127.") || ip.startsWith("10.") || ip.startsWith("192.168.") || ip.startsWith("172."),
+}));
 
 describe("GET /api/link-preview", () => {
 	beforeEach(() => {
 		resetRateLimitStore();
 		fetchMock.mockReset();
+		assertSafeHttpUrlMock.mockReset();
+		assertSafeHttpUrlMock.mockResolvedValue(undefined);
 		vi.stubGlobal("fetch", fetchMock);
 	});
 

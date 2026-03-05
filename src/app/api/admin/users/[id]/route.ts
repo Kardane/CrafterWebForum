@@ -3,11 +3,23 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
 import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
+import { JsonBodyError, readJsonBody } from "@/lib/http-body";
+import { z } from "zod";
 
 
 function makeIdentitySuffix(mode: "deleted" | "rejected", id: number) {
 	return `_${mode}_${id}_${Date.now()}`;
 }
+
+const adminUserPatchBodySchema = z.object({
+	role: z.enum(["admin", "user"]).optional(),
+	isBanned: z
+		.preprocess(
+			(value) => (typeof value === "string" ? Number.parseInt(value, 10) : value),
+			z.union([z.literal(0), z.literal(1)])
+		)
+		.optional(),
+});
 
 export async function PATCH(
 	request: NextRequest,
@@ -23,9 +35,18 @@ export async function PATCH(
 			return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
 		}
 
-		const body = (await request.json()) as { role?: string; isBanned?: number };
-		const hasRole = typeof body.role !== "undefined";
-		const hasBan = typeof body.isBanned !== "undefined";
+		const parsedBody = adminUserPatchBodySchema.safeParse(
+			await readJsonBody(request, { maxBytes: 64 * 1024 })
+		);
+		if (!parsedBody.success) {
+			const hasRoleIssue = parsedBody.error.issues.some((issue) => issue.path[0] === "role");
+			return NextResponse.json(
+				{ error: hasRoleIssue ? "Invalid role" : "Invalid ban value" },
+				{ status: 400 }
+			);
+		}
+		const hasRole = typeof parsedBody.data.role !== "undefined";
+		const hasBan = typeof parsedBody.data.isBanned !== "undefined";
 		if (!hasRole && !hasBan) {
 			return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 		}
@@ -37,10 +58,7 @@ export async function PATCH(
 
 		const data: { role?: string; isBanned?: number } = {};
 		if (hasRole) {
-			if (body.role !== "admin" && body.role !== "user") {
-				return NextResponse.json({ error: "Invalid role" }, { status: 400 });
-			}
-			if (target.role === "admin" && body.role === "user") {
+			if (target.role === "admin" && parsedBody.data.role === "user") {
 				const otherAdmins = await prisma.user.count({
 					where: {
 						role: "admin",
@@ -55,14 +73,11 @@ export async function PATCH(
 					);
 				}
 			}
-			data.role = body.role;
+			data.role = parsedBody.data.role;
 		}
 
 		if (hasBan) {
-			if (body.isBanned !== 0 && body.isBanned !== 1) {
-				return NextResponse.json({ error: "Invalid ban value" }, { status: 400 });
-			}
-			data.isBanned = body.isBanned;
+			data.isBanned = parsedBody.data.isBanned;
 		}
 
 		const updated = await prisma.user.update({
@@ -88,6 +103,9 @@ export async function PATCH(
 
 		return NextResponse.json({ success: true, user: updated });
 	} catch (error) {
+		if (error instanceof JsonBodyError) {
+			return NextResponse.json({ error: error.code }, { status: error.status });
+		}
 		console.error("[API] PATCH /api/admin/users/[id] error:", error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
