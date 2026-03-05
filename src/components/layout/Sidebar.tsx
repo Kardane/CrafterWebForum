@@ -7,6 +7,7 @@ import classNames from "classnames";
 import { Shield, Bell } from "lucide-react";
 import UserAvatar from "@/components/ui/UserAvatar";
 import SidebarTrackedPosts from "@/components/layout/SidebarTrackedPosts";
+import SidebarToolsBar from "@/components/layout/SidebarToolsBar";
 import { useNotifications } from "@/components/notifications/useNotifications";
 
 interface SidebarProps {
@@ -101,10 +102,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 								</div>
 							)}
 						</div>
+
+						<SidebarToolsBar />
 					</div>
 				) : (
 					<div className="border-t border-bg-tertiary bg-bg-tertiary p-3">
-						<button onClick={() => router.push("/login")} className="btn btn-primary w-full">
+						<SidebarToolsBar />
+						<button onClick={() => router.push("/login")} className="btn btn-primary mt-2 w-full">
 							로그인
 						</button>
 					</div>

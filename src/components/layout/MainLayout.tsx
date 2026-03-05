@@ -4,7 +4,6 @@ import { useState } from "react";
 import { usePathname } from "next/navigation";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
-import ToolsDock from "./ToolsDock";
 import classNames from "classnames";
 
 interface MainLayoutProps {
@@ -36,7 +35,6 @@ export default function MainLayout({ children }: MainLayoutProps) {
 					onClose={() => setIsSidebarOpen(false)}
 				/>
 			)}
-			<ToolsDock isVisible={showSidebar} />
 
 			<div className={classNames(
 				"flex-1 flex flex-col min-w-0 transition-all duration-300",
