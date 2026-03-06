@@ -109,66 +109,65 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 	return (
 		<>
 			<div className="fixed inset-y-0 right-0 z-[90] hidden md:block">
-				{isDesktopOpen ? (
-					<>
-						<button
-							type="button"
-							onClick={() => setIsDesktopOpen(false)}
-							className="absolute inset-0 w-screen -translate-x-full bg-black/20 backdrop-blur-[1px]"
-							aria-label="도구 모음 닫기"
-						/>
-						<aside className="absolute right-0 top-1/2 flex w-[18.5rem] -translate-y-1/2 overflow-hidden rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-secondary/95 shadow-[0_12px_36px_rgba(0,0,0,0.36)] backdrop-blur">
-							<button
-								type="button"
-								onClick={() => setIsDesktopOpen(false)}
-								className="flex w-11 shrink-0 flex-col items-center justify-center gap-2 border-r border-bg-tertiary bg-bg-primary/70 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-								title="도구 모음 닫기"
-							>
-								<PanelRightClose size={16} />
-								<span className="[writing-mode:vertical-rl] text-[11px] tracking-[0.2em]">도구</span>
-							</button>
-							<div className="flex min-h-[18rem] flex-1 flex-col">
-								<div className="flex items-center justify-between border-b border-bg-tertiary px-3 py-2">
-									<div>
-										<div className="text-xs font-semibold tracking-wide text-text-muted">도구 모음</div>
-										<div className="text-[11px] text-text-muted/80">자주 쓰는 링크 빠른 열기</div>
-									</div>
-									<div className="flex items-center gap-1">
-										<button
-											type="button"
-											onClick={() => setIsSettingsModalOpen(true)}
-											className="inline-flex h-8 w-8 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-											title="도구 링크 설정"
-										>
-											<Settings size={14} />
-										</button>
-										<button
-											type="button"
-											onClick={() => setIsDesktopOpen(false)}
-											className="inline-flex h-8 w-8 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-											title="도구 모음 닫기"
-										>
-											<X size={14} />
-										</button>
-									</div>
-								</div>
-								<nav className="custom-scrollbar max-h-[70vh] overflow-y-auto p-2">
-									{links.map((link) => renderToolLink(link))}
-								</nav>
-							</div>
-						</aside>
-					</>
-				) : (
+				<button
+					type="button"
+					onClick={() => setIsDesktopOpen(false)}
+					className={classNames(
+						"absolute inset-0 w-screen -translate-x-full bg-black/20 backdrop-blur-[1px] transition-opacity duration-200",
+						isDesktopOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+					)}
+					aria-label="도구 모음 닫기"
+				/>
+				<aside
+					className="absolute right-0 top-1/2 flex w-[18.5rem] -translate-y-1/2 overflow-hidden rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-secondary/95 shadow-[0_12px_36px_rgba(0,0,0,0.36)] backdrop-blur transition-transform duration-300 ease-out"
+					style={{
+						transform: `translateY(-50%) translateX(${isDesktopOpen ? "0" : "calc(100% - 3rem)"})`,
+					}}
+				>
 					<button
 						type="button"
-						onClick={() => setIsDesktopOpen(true)}
-						className="absolute right-0 top-1/2 flex h-28 w-12 -translate-y-1/2 flex-col items-center justify-center gap-2 rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-secondary/95 text-text-primary shadow-[0_10px_30px_rgba(0,0,0,0.34)] transition-colors hover:bg-bg-tertiary"
-						title="도구 모음 열기"
+						onClick={() => setIsDesktopOpen((previous) => !previous)}
+						className="flex w-12 shrink-0 flex-col items-center justify-center gap-2 border-r border-bg-tertiary bg-bg-primary/70 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+						title={isDesktopOpen ? "도구 모음 닫기" : "도구 모음 열기"}
 					>
-						<PanelRightOpen size={16} />
-						<span className="[writing-mode:vertical-rl] text-[11px] tracking-[0.24em]">도구</span>
+						{isDesktopOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+						<span className="[writing-mode:vertical-rl] text-[11px] tracking-[0.22em]">도구</span>
 					</button>
-				)}
+					<div
+						className={classNames(
+							"flex min-h-[18rem] flex-1 flex-col transition-opacity duration-200",
+							isDesktopOpen ? "opacity-100" : "pointer-events-none opacity-0"
+						)}
+					>
+						<div className="flex items-center justify-between border-b border-bg-tertiary px-3 py-2">
+							<div>
+								<div className="text-xs font-semibold tracking-wide text-text-muted">도구 모음</div>
+								<div className="text-[11px] text-text-muted/80">자주 쓰는 링크 빠른 열기</div>
+							</div>
+							<div className="flex items-center gap-1">
+								<button
+									type="button"
+									onClick={() => setIsSettingsModalOpen(true)}
+									className="inline-flex h-8 w-8 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+									title="도구 링크 설정"
+								>
+									<Settings size={14} />
+								</button>
+								<button
+									type="button"
+									onClick={() => setIsDesktopOpen(false)}
+									className="inline-flex h-8 w-8 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+									title="도구 모음 닫기"
+								>
+									<X size={14} />
+								</button>
+							</div>
+						</div>
+						<nav className="custom-scrollbar max-h-[70vh] overflow-y-auto p-2">
+							{links.map((link) => renderToolLink(link))}
+						</nav>
+					</div>
+				</aside>
 			</div>
 
 			<button

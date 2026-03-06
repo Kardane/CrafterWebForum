@@ -62,6 +62,7 @@ describe("SidebarTrackedPosts", () => {
 		vi.unstubAllGlobals();
 		vi.restoreAllMocks();
 		showToastMock.mockReset();
+		window.localStorage.clear();
 	});
 
 	it("구독을 끄면 작성한 글이어도 서버 재조회 후 목록에서 제거해야 함", async () => {
@@ -151,5 +152,54 @@ describe("SidebarTrackedPosts", () => {
 			expect(screen.queryByText("alpha")).toBeNull();
 		});
 		expect(fetchMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("fallback 로컬 구독 목록은 새로 마운트해도 유지해야 함", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					items: [],
+					page: { nextCursor: null, hasMore: false },
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			)
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
+		const firstView = render(<SidebarTrackedPosts />);
+
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledWith(
+				"/api/sidebar/tracked-posts?limit=30",
+				expect.objectContaining({ cache: "no-store" })
+			);
+		});
+
+		window.dispatchEvent(
+			new CustomEvent("sidebarTrackedPostsFallbackChanged", {
+				detail: {
+					postId: 1,
+					enabled: true,
+					item: {
+						title: "alpha",
+						href: "/posts/1",
+						author: { nickname: "alice", minecraftUuid: null },
+						commentCount: 3,
+						latestCommentId: null,
+					},
+				},
+			})
+		);
+
+		await screen.findByText("alpha");
+		firstView.unmount();
+
+		render(<SidebarTrackedPosts />);
+
+		await waitFor(() => {
+			expect(screen.getByText("alpha")).toBeTruthy();
+		});
+		expect(JSON.parse(window.localStorage.getItem("sidebarTrackedPostsFallback:7") ?? "[]")).toHaveLength(1);
 	});
 });
