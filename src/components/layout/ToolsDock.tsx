@@ -63,7 +63,7 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 	const [links, setLinks] = useState<SidebarLink[]>(() => buildSidebarToolLinks(DEFAULT_SETTINGS));
 	const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
 	const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
-	const [isDesktopOpen, setIsDesktopOpen] = useState(true);
+	const [isDesktopOpen, setIsDesktopOpen] = useState(false);
 
 	useEffect(() => {
 		const refreshLinks = () => {
@@ -127,7 +127,7 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 					<button
 						type="button"
 						onClick={() => setIsDesktopOpen((previous) => !previous)}
-						className="flex w-12 shrink-0 flex-col items-center justify-center gap-2 border-r border-bg-tertiary bg-bg-primary/70 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+						className="my-3 flex h-24 w-12 shrink-0 self-center flex-col items-center justify-center gap-2 rounded-l-2xl border border-r border-bg-tertiary bg-bg-primary/80 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
 						title={isDesktopOpen ? "도구 모음 닫기" : "도구 모음 열기"}
 					>
 						{isDesktopOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
