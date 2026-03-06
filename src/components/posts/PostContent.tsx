@@ -161,6 +161,8 @@ export default function PostContent({ content }: PostContentProps) {
 			return;
 		}
 		let isDisposed = false;
+		let hydrationQueued = false;
+		let hydrationInFlight = false;
 		const controller = new AbortController();
 		const waitForNextFrame = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 		const renderCardsIncrementally = async (
@@ -181,145 +183,176 @@ export default function PostContent({ content }: PostContentProps) {
 				}
 			}
 		};
+		const hydrateExternalCards = async () => {
+			const { cardsByPostId, cardsByPreviewUrl } = collectExternalLinkCards(root);
+			const postMetaFallback = ["카테고리: 내부링크", "메타데이터 조회 실패"];
+			const uncachedPostIds: string[] = [];
 
-		const { cardsByPostId, cardsByPreviewUrl } = collectExternalLinkCards(root);
+			cardsByPostId.forEach((cards, postId) => {
+				const cached = postCardMetaCacheRef.current.get(postId);
+				if (cached) {
+					cards.forEach((card) => renderMeta(card, cached));
+					return;
+				}
+				uncachedPostIds.push(postId);
+			});
 
-		const postMetaFallback = ["카테고리: 내부링크", "메타데이터 조회 실패"];
-		const uncachedPostIds: string[] = [];
-		cardsByPostId.forEach((cards, postId) => {
-			const cached = postCardMetaCacheRef.current.get(postId);
-			if (cached) {
-				cards.forEach((card) => renderMeta(card, cached));
-				return;
-			}
-			uncachedPostIds.push(postId);
-		});
-
-		if (uncachedPostIds.length > 0) {
-			void (async () => {
+			if (uncachedPostIds.length > 0) {
 				try {
 					const queryKey = buildPostMetaQueryKey(uncachedPostIds);
-					if (!queryKey) {
-						return;
-					}
-					const endpoint = `/api/posts/meta?ids=${encodeURIComponent(queryKey)}`;
-					const requestHeaders = new Headers();
-					const knownEtag = postMetaEtagByQueryKey.get(queryKey);
-					if (knownEtag) {
-						requestHeaders.set("If-None-Match", knownEtag);
-					}
+					if (queryKey) {
+						const endpoint = `/api/posts/meta?ids=${encodeURIComponent(queryKey)}`;
+						const requestHeaders = new Headers();
+						const knownEtag = postMetaEtagByQueryKey.get(queryKey);
+						if (knownEtag) {
+							requestHeaders.set("If-None-Match", knownEtag);
+						}
 
-					let items: PostMetaItemPayload[];
-					const response = await fetch(endpoint, {
-						cache: "force-cache",
-						signal: controller.signal,
-						headers: requestHeaders,
-					});
-					if (response.status === 304) {
-						const cachedItems = postMetaPayloadByQueryKey.get(queryKey);
-						if (cachedItems) {
-							items = cachedItems;
+						let items: PostMetaItemPayload[];
+						const response = await fetch(endpoint, {
+							cache: "force-cache",
+							signal: controller.signal,
+							headers: requestHeaders,
+						});
+						if (response.status === 304) {
+							const cachedItems = postMetaPayloadByQueryKey.get(queryKey);
+							if (cachedItems) {
+								items = cachedItems;
+							} else {
+								const retry = await fetch(endpoint, {
+									cache: "force-cache",
+									signal: controller.signal,
+								});
+								if (!retry.ok) {
+									throw new Error(`Failed to load post metadata: ${retry.status}`);
+								}
+								const retryPayload = (await retry.json()) as { items?: PostMetaItemPayload[] };
+								items = retryPayload.items ?? [];
+								setQueryCacheEntry(postMetaPayloadByQueryKey, queryKey, items);
+								const retryEtag = retry.headers.get("etag");
+								if (retryEtag) {
+									setQueryCacheEntry(postMetaEtagByQueryKey, queryKey, retryEtag);
+								}
+							}
 						} else {
-							const retry = await fetch(endpoint, {
-								cache: "force-cache",
-								signal: controller.signal,
-							});
-							if (!retry.ok) {
-								throw new Error(`Failed to load post metadata: ${retry.status}`);
+							if (!response.ok) {
+								throw new Error(`Failed to load post metadata: ${response.status}`);
 							}
-							const retryPayload = (await retry.json()) as { items?: PostMetaItemPayload[] };
-							items = retryPayload.items ?? [];
+							const payload = (await response.json()) as { items?: PostMetaItemPayload[] };
+							items = payload.items ?? [];
 							setQueryCacheEntry(postMetaPayloadByQueryKey, queryKey, items);
-							const retryEtag = retry.headers.get("etag");
-							if (retryEtag) {
-								setQueryCacheEntry(postMetaEtagByQueryKey, queryKey, retryEtag);
+							const responseEtag = response.headers.get("etag");
+							if (responseEtag) {
+								setQueryCacheEntry(postMetaEtagByQueryKey, queryKey, responseEtag);
 							}
 						}
-					} else {
-						if (!response.ok) {
-							throw new Error(`Failed to load post metadata: ${response.status}`);
-						}
-						const payload = (await response.json()) as { items?: PostMetaItemPayload[] };
-						items = payload.items ?? [];
-						setQueryCacheEntry(postMetaPayloadByQueryKey, queryKey, items);
-						const responseEtag = response.headers.get("etag");
-						if (responseEtag) {
-							setQueryCacheEntry(postMetaEtagByQueryKey, queryKey, responseEtag);
-						}
-					}
 
-					const itemById = new Map(items.map((item) => [String(item.id), item] as const));
-					if (isDisposed) {
-						return;
-					}
-
-					for (const postId of uncachedPostIds) {
-						const cards = cardsByPostId.get(postId) ?? [];
-						const item = itemById.get(postId);
-						const chips = item ? buildPostMetaChips(item) : postMetaFallback;
-						postCardMetaCacheRef.current.set(postId, chips);
-						await renderCardsIncrementally(cards, (card) => renderMeta(card, chips));
+						const itemById = new Map(items.map((item) => [String(item.id), item] as const));
+						if (!isDisposed) {
+							for (const postId of uncachedPostIds) {
+								const cards = cardsByPostId.get(postId) ?? [];
+								const item = itemById.get(postId);
+								const chips = item ? buildPostMetaChips(item) : postMetaFallback;
+								postCardMetaCacheRef.current.set(postId, chips);
+								await renderCardsIncrementally(cards, (card) => renderMeta(card, chips));
+							}
+						}
 					}
 				} catch (error) {
 					const fetchError = error as { name?: string };
-					if (fetchError.name === "AbortError") {
-						return;
+					if (fetchError.name !== "AbortError") {
+						console.error("Failed to hydrate post card metadata:", error);
 					}
-					console.error("Failed to hydrate post card metadata:", error);
-					if (isDisposed) {
-						return;
-					}
-					for (const postId of uncachedPostIds) {
-						const cards = cardsByPostId.get(postId) ?? [];
-						postCardMetaCacheRef.current.set(postId, postMetaFallback);
-						await renderCardsIncrementally(cards, (card) => renderMeta(card, postMetaFallback));
+					if (!isDisposed && fetchError.name !== "AbortError") {
+						for (const postId of uncachedPostIds) {
+							const cards = cardsByPostId.get(postId) ?? [];
+							postCardMetaCacheRef.current.set(postId, postMetaFallback);
+							await renderCardsIncrementally(cards, (card) => renderMeta(card, postMetaFallback));
+						}
 					}
 				}
-			})();
-		}
+			}
 
-		const uncachedPreviewEntries: Array<[string, HTMLAnchorElement[]]> = [];
-		cardsByPreviewUrl.forEach((cards, previewUrl) => {
-			const localCached = externalCardMetaCacheRef.current.get(previewUrl);
-			if (localCached) {
-				cards.forEach((card) => renderPreviewCard(card, localCached));
+			const uncachedPreviewEntries: Array<[string, HTMLAnchorElement[]]> = [];
+			cardsByPreviewUrl.forEach((cards, previewUrl) => {
+				const localCached = externalCardMetaCacheRef.current.get(previewUrl);
+				if (localCached) {
+					cards.forEach((card) => renderPreviewCard(card, localCached));
+					return;
+				}
+				const sharedCached = externalPreviewPayloadByUrl.get(previewUrl);
+				if (sharedCached) {
+					externalCardMetaCacheRef.current.set(previewUrl, sharedCached);
+					cards.forEach((card) => renderPreviewCard(card, sharedCached));
+					return;
+				}
+				uncachedPreviewEntries.push([previewUrl, cards]);
+			});
+
+			if (uncachedPreviewEntries.length === 0) {
 				return;
 			}
-			const sharedCached = externalPreviewPayloadByUrl.get(previewUrl);
-			if (sharedCached) {
-				externalCardMetaCacheRef.current.set(previewUrl, sharedCached);
-				cards.forEach((card) => renderPreviewCard(card, sharedCached));
-				return;
-			}
-			uncachedPreviewEntries.push([previewUrl, cards]);
-		});
 
-		if (uncachedPreviewEntries.length > 0) {
-			void (async () => {
-				await Promise.all(
-					uncachedPreviewEntries.map(async ([previewUrl, cards]) => {
-						try {
-							const preview = await fetchExternalPreview(previewUrl);
-							if (isDisposed) {
-								return;
-							}
-							externalCardMetaCacheRef.current.set(previewUrl, preview);
-							await renderCardsIncrementally(cards, (card) => renderPreviewCard(card, preview));
-						} catch (error) {
-							console.error("Failed to hydrate external link metadata:", error);
-							if (isDisposed) {
-								return;
-							}
-							const fallback: LinkPreviewPayload = {
-								chips: ["메타데이터 조회 실패"],
-							};
-							externalCardMetaCacheRef.current.set(previewUrl, fallback);
-							await renderCardsIncrementally(cards, (card) => renderPreviewCard(card, fallback));
+			await Promise.all(
+				uncachedPreviewEntries.map(async ([previewUrl, cards]) => {
+					try {
+						const preview = await fetchExternalPreview(previewUrl);
+						if (isDisposed) {
+							return;
 						}
-					})
-				);
-			})();
-		}
+						externalCardMetaCacheRef.current.set(previewUrl, preview);
+						await renderCardsIncrementally(cards, (card) => renderPreviewCard(card, preview));
+					} catch (error) {
+						console.error("Failed to hydrate external link metadata:", error);
+						if (isDisposed) {
+							return;
+						}
+						const fallback: LinkPreviewPayload = {
+							chips: ["메타데이터 조회 실패"],
+						};
+						externalCardMetaCacheRef.current.set(previewUrl, fallback);
+						await renderCardsIncrementally(cards, (card) => renderPreviewCard(card, fallback));
+					}
+				})
+			);
+		};
+
+		const scheduleHydration = () => {
+			if (isDisposed || hydrationQueued) {
+				return;
+			}
+			hydrationQueued = true;
+			window.requestAnimationFrame(() => {
+				hydrationQueued = false;
+				if (isDisposed || hydrationInFlight) {
+					return;
+				}
+				hydrationInFlight = true;
+				void hydrateExternalCards().finally(() => {
+					hydrationInFlight = false;
+				});
+			});
+		};
+
+		const hasExternalCardNode = (node: Node) => {
+			if (!(node instanceof Element)) {
+				return false;
+			}
+			return node.matches(".external-link-card") || Boolean(node.querySelector(".external-link-card"));
+		};
+
+		scheduleHydration();
+		const observer = new MutationObserver((mutations) => {
+			if (
+				mutations.some((mutation) =>
+					Array.from(mutation.addedNodes).some(hasExternalCardNode) ||
+					Array.from(mutation.removedNodes).some(hasExternalCardNode)
+				)
+			) {
+				scheduleHydration();
+			}
+		});
+		observer.observe(root, { childList: true, subtree: true });
 
 		const handleImageError = (event: Event) => {
 			const target = event.target;
@@ -377,6 +410,7 @@ export default function PostContent({ content }: PostContentProps) {
 		return () => {
 			isDisposed = true;
 			controller.abort();
+			observer.disconnect();
 			root.removeEventListener("error", handleImageError, true);
 		};
 	}, [html]);

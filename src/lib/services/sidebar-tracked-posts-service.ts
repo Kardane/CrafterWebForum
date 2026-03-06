@@ -25,6 +25,7 @@ interface ActivityRow {
 	id: number;
 	title: string;
 	updatedAt: Date;
+	authorId: number;
 	authorNickname: string;
 	authorMinecraftUuid: string | null;
 	commentCount: number;
@@ -100,16 +101,6 @@ export async function listSidebarTrackedPosts(
 	const limit = normalizeLimit(input.limit);
 	const parsedCursor = parseCursor(input.cursor);
 
-	const authoredRows = await prisma.post.findMany({
-		where: {
-			authorId: input.userId,
-			deletedAt: null,
-		},
-		select: {
-			id: true,
-		},
-	});
-
 	let subscribedRows: Array<{ postId: number }> = [];
 	try {
 		subscribedRows = await prisma.postSubscription.findMany({
@@ -125,28 +116,23 @@ export async function listSidebarTrackedPosts(
 		});
 	} catch (error) {
 		if (isMissingPostSubscriptionTableError(error)) {
-			console.warn("[sidebar-tracked-posts] post subscription table missing; using authored-only list");
+			console.warn("[sidebar-tracked-posts] post subscription table missing; returning empty subscription list");
 		} else {
 			throw error;
 		}
 	}
 
-	const authoredSet = new Set(authoredRows.map((row) => row.id));
 	const subscribedSet = new Set(subscribedRows.map((row) => row.postId));
-	const mergedPostIds = new Set<number>([
-		...authoredRows.map((row) => row.id),
-		...subscribedRows.map((row) => row.postId),
-	]);
-	const mergedPostIdList = Array.from(mergedPostIds);
+	const subscribedPostIdList = Array.from(subscribedSet);
 
-	if (mergedPostIdList.length === 0) {
+	if (subscribedPostIdList.length === 0) {
 		return emptyResult(limit);
 	}
 
 	const activityRows = await prisma.post.findMany({
 		where: {
 			id: {
-				in: mergedPostIdList,
+				in: subscribedPostIdList,
 			},
 			deletedAt: null,
 		},
@@ -155,6 +141,7 @@ export async function listSidebarTrackedPosts(
 			title: true,
 			updatedAt: true,
 			commentCount: true,
+			authorId: true,
 			author: {
 				select: {
 					nickname: true,
@@ -172,6 +159,7 @@ export async function listSidebarTrackedPosts(
 		id: row.id,
 		title: row.title,
 		updatedAt: row.updatedAt,
+		authorId: row.authorId,
 		authorNickname: row.author.nickname,
 		authorMinecraftUuid: row.author.minecraftUuid,
 		commentCount: row.commentCount,
@@ -250,10 +238,10 @@ export async function listSidebarTrackedPosts(
 			minecraftUuid: row.authorMinecraftUuid,
 		},
 		sourceFlags: {
-			authored: authoredSet.has(row.id),
-			subscribed: subscribedSet.has(row.id),
+			authored: row.authorId === input.userId,
+			subscribed: true,
 		},
-		isSubscribed: subscribedSet.has(row.id),
+		isSubscribed: true,
 		commentCount: row.commentCount,
 		newCommentCount: newCommentCountByPostId.get(row.id) ?? 0,
 		latestCommentId: latestCommentIdByPostId.get(row.id) ?? null,

@@ -62,6 +62,8 @@ describe("embed utils", () => {
 		const embed = createStreamableEmbed("abc123");
 		expect(embed).toContain("streamable.com/e/abc123");
 		expect(embed).toContain("<iframe");
+		expect(embed).toContain("embed-container--streamable");
+		expect(embed).toContain("embed-container__iframe--streamable");
 	});
 
 	it("converts markdown youtube links into iframe embeds", () => {

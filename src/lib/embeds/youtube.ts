@@ -57,6 +57,7 @@ export function extractStreamableIdFromUrl(rawUrl: string): string | null {
 export function createYouTubeEmbed(videoId: string): string {
 	return `<div class="embed-container">
 		<iframe 
+			class="embed-container__iframe embed-container__iframe--youtube"
 			width="560" 
 			height="315" 
 			src="https://www.youtube.com/embed/${videoId}" 
@@ -73,8 +74,9 @@ export function createYouTubeEmbed(videoId: string): string {
  * Streamable 임베드 HTML 생성
  */
 export function createStreamableEmbed(videoId: string): string {
-	return `<div class="embed-container">
+	return `<div class="embed-container embed-container--streamable" data-embed-provider="streamable">
 		<iframe 
+			class="embed-container__iframe embed-container__iframe--streamable"
 			width="560" 
 			height="315" 
 			src="https://streamable.com/e/${videoId}" 

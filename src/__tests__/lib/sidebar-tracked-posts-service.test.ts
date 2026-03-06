@@ -24,7 +24,7 @@ vi.mock("@/lib/prisma", () => ({
 	},
 }));
 
-	describe("listSidebarTrackedPosts", () => {
+describe("listSidebarTrackedPosts", () => {
 	beforeEach(() => {
 		vi.resetModules();
 		postFindManyMock.mockReset();
@@ -34,13 +34,14 @@ vi.mock("@/lib/prisma", () => ({
 		commentGroupByMock.mockReset();
 	});
 
-	it("merges authored/subscribed posts and sorts by activity", async () => {
+	it("returns subscribed posts only and sorts by activity", async () => {
 		const activityRows = [
 			{
 				id: 1,
 				title: "alpha",
 				updatedAt: new Date("2026-03-03T10:00:00.000Z"),
 				commentCount: 5,
+				authorId: 7,
 				author: { nickname: "author-a", minecraftUuid: "uuid-a" },
 			},
 			{
@@ -48,16 +49,12 @@ vi.mock("@/lib/prisma", () => ({
 				title: "gamma",
 				updatedAt: new Date("2026-03-01T10:00:00.000Z"),
 				commentCount: 1,
+				authorId: 11,
 				author: { nickname: "author-c", minecraftUuid: null },
 			},
 		];
-		postFindManyMock.mockImplementation(async (args: { select?: { id?: boolean; title?: boolean } }) => {
-			if (args.select?.title) {
-				return activityRows;
-			}
-			return [{ id: 1 }];
-		});
-		postSubscriptionFindManyMock.mockResolvedValue([{ postId: 3 }]);
+		postFindManyMock.mockResolvedValue(activityRows);
+		postSubscriptionFindManyMock.mockResolvedValue([{ postId: 1 }, { postId: 3 }]);
 		postReadFindManyMock.mockResolvedValue([{ postId: 1, updatedAt: new Date("2026-03-03T09:30:00.000Z") }]);
 		commentGroupByMock.mockResolvedValue([
 			{ postId: 1, _max: { id: 1001 } },
@@ -71,12 +68,45 @@ vi.mock("@/lib/prisma", () => ({
 		const { listSidebarTrackedPosts } = await import("@/lib/services/sidebar-tracked-posts-service");
 		const result = await listSidebarTrackedPosts({ userId: 7, limit: 30 });
 
+		expect(postSubscriptionFindManyMock).toHaveBeenCalledWith({
+			where: {
+				userId: 7,
+				post: {
+					deletedAt: null,
+				},
+			},
+			select: {
+				postId: true,
+			},
+		});
+		expect(postFindManyMock).toHaveBeenCalledWith({
+			where: {
+				id: {
+					in: [1, 3],
+				},
+				deletedAt: null,
+			},
+			select: {
+				id: true,
+				title: true,
+				updatedAt: true,
+				commentCount: true,
+				authorId: true,
+				author: {
+					select: {
+						nickname: true,
+						minecraftUuid: true,
+					},
+				},
+			},
+		});
+
 		expect(result.items.map((item) => item.postId)).toEqual([1, 3]);
 		expect(result.items[0]).toMatchObject({
 			postId: 1,
 			author: { nickname: "author-a", minecraftUuid: "uuid-a" },
-			sourceFlags: { authored: true, subscribed: false },
-			isSubscribed: false,
+			sourceFlags: { authored: true, subscribed: true },
+			isSubscribed: true,
 			commentCount: 5,
 			newCommentCount: 2,
 			latestCommentId: 1001,
@@ -100,6 +130,7 @@ vi.mock("@/lib/prisma", () => ({
 				title: "first",
 				updatedAt: new Date("2026-03-03T12:00:00.000Z"),
 				commentCount: 4,
+				authorId: 5,
 				author: { nickname: "u11", minecraftUuid: null },
 			},
 			{
@@ -107,6 +138,7 @@ vi.mock("@/lib/prisma", () => ({
 				title: "second",
 				updatedAt: new Date("2026-03-02T12:00:00.000Z"),
 				commentCount: 2,
+				authorId: 7,
 				author: { nickname: "u10", minecraftUuid: null },
 			},
 			{
@@ -114,15 +146,11 @@ vi.mock("@/lib/prisma", () => ({
 				title: "third",
 				updatedAt: new Date("2026-03-01T12:00:00.000Z"),
 				commentCount: 0,
+				authorId: 8,
 				author: { nickname: "u9", minecraftUuid: null },
 			},
 		];
-		postFindManyMock.mockImplementation(async (args: { select?: { id?: boolean; title?: boolean } }) => {
-			if (args.select?.title) {
-				return activityRows;
-			}
-			return [];
-		});
+		postFindManyMock.mockResolvedValue(activityRows);
 		postSubscriptionFindManyMock.mockResolvedValue([{ postId: 11 }, { postId: 10 }, { postId: 9 }]);
 		postReadFindManyMock.mockResolvedValue([]);
 		commentGroupByMock.mockResolvedValue([
@@ -147,37 +175,20 @@ vi.mock("@/lib/prisma", () => ({
 		expect(secondPage.page.hasMore).toBe(true);
 	});
 
-	it("falls back to authored posts when PostSubscription table is missing", async () => {
-		const activityRows = [
-			{
-				id: 5,
-				title: "authored-only",
-				updatedAt: new Date("2026-03-03T12:00:00.000Z"),
-				commentCount: 2,
-				author: { nickname: "u5", minecraftUuid: null },
-			},
-		];
-		postFindManyMock.mockImplementation(async (args: { select?: { id?: boolean; title?: boolean } }) => {
-			if (args.select?.title) {
-				return activityRows;
-			}
-			return [{ id: 5 }];
-		});
+	it("returns empty list when PostSubscription table is missing", async () => {
 		postSubscriptionFindManyMock.mockRejectedValue(
 			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.PostSubscription")
 		);
-		postReadFindManyMock.mockResolvedValue([]);
-		commentGroupByMock.mockResolvedValue([{ postId: 5, _max: { id: 55 } }]);
-		commentCountMock.mockResolvedValue(0);
 
 		const { listSidebarTrackedPosts } = await import("@/lib/services/sidebar-tracked-posts-service");
 		const result = await listSidebarTrackedPosts({ userId: 7, limit: 30 });
 
-		expect(result.items).toHaveLength(1);
-		expect(result.items[0]).toMatchObject({
-			postId: 5,
-			sourceFlags: { authored: true, subscribed: false },
-			isSubscribed: false,
+		expect(result.items).toHaveLength(0);
+		expect(result.page).toEqual({
+			limit: 30,
+			nextCursor: null,
+			hasMore: false,
 		});
+		expect(postFindManyMock).not.toHaveBeenCalled();
 	});
 });

@@ -565,6 +565,17 @@ export default function CommentItem({
 					min-height: 0;
 				}
 
+				.comment-body :global(.embed-container--streamable) {
+					width: min(100%, 820px);
+					max-width: 100%;
+					min-height: min(52vw, 320px);
+				}
+
+				.comment-body :global(.embed-container__iframe--streamable) {
+					width: min(100%, 820px);
+					min-height: min(52vw, 320px);
+				}
+
 				.comment-hover-time {
 					font-size: 0.7rem;
 					color: rgba(255, 255, 255, 0.4);

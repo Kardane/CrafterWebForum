@@ -42,6 +42,10 @@ interface SidebarTrackedPostsFallbackChangeDetail {
 	item?: SidebarTrackedPostsFallbackItem;
 }
 
+interface PostSubscriptionToggleResponse {
+	fallbackLocalOnly?: boolean;
+}
+
 function buildFallbackTrackedPost(postId: number, item: SidebarTrackedPostsFallbackItem): SidebarTrackedPost {
 	return {
 		postId,
@@ -93,6 +97,10 @@ function mergeTrackedPosts(existing: SidebarTrackedPost[], incoming: SidebarTrac
 	return sortTrackedPosts(Array.from(map.values()));
 }
 
+function normalizeVisibleTrackedPosts(rows: SidebarTrackedPost[]): SidebarTrackedPost[] {
+	return sortTrackedPosts(rows.filter((item) => item.isSubscribed && item.sourceFlags.subscribed));
+}
+
 export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsProps) {
 	const pathname = usePathname();
 	const { data: session } = useSession();
@@ -107,6 +115,11 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 	const [isLoadingMore, setIsLoadingMore] = useState(false);
 	const [pendingTogglePostIds, setPendingTogglePostIds] = useState<number[]>([]);
 	const hasShownFetchErrorToastRef = useRef(false);
+	const fallbackLocalItemsRef = useRef<SidebarTrackedPost[]>([]);
+
+	useEffect(() => {
+		fallbackLocalItemsRef.current = fallbackLocalItems;
+	}, [fallbackLocalItems]);
 
 	const refreshTrackedPosts = useCallback(async () => {
 		if (!sessionUserId) {
@@ -127,12 +140,13 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			}
 			const payload = (await response.json()) as SidebarTrackedPostsResponse;
 			const rows = Array.isArray(payload.items) ? payload.items : [];
-			setItems(mergeTrackedPosts(rows, fallbackLocalItems));
+			setItems(normalizeVisibleTrackedPosts(rows));
 			setNextCursor(payload.page?.nextCursor ?? null);
 			setHasMore(Boolean(payload.page?.hasMore));
 			hasShownFetchErrorToastRef.current = false;
 		} catch (error) {
 			console.error("[sidebar] failed to refresh tracked posts", error);
+			setItems(normalizeVisibleTrackedPosts(fallbackLocalItemsRef.current));
 			if (!hasShownFetchErrorToastRef.current) {
 				hasShownFetchErrorToastRef.current = true;
 				showToast({ type: "error", message: "사이드바 포스트 목록을 불러오지 못했음" });
@@ -140,7 +154,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 		} finally {
 			setIsInitialLoading(false);
 		}
-	}, [fallbackLocalItems, sessionUserId, showToast]);
+	}, [sessionUserId, showToast]);
 
 	const loadMoreTrackedPosts = useCallback(async () => {
 		if (!sessionUserId || !hasMore || !nextCursor || isLoadingMore) {
@@ -158,7 +172,10 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			}
 			const payload = (await response.json()) as SidebarTrackedPostsResponse;
 			const rows = Array.isArray(payload.items) ? payload.items : [];
-			setItems((previous) => mergeTrackedPosts(previous, rows));
+			setItems((previous) => {
+				const mergedRows = mergeTrackedPosts(previous, rows);
+				return normalizeVisibleTrackedPosts(mergedRows);
+			});
 			setNextCursor(payload.page?.nextCursor ?? null);
 			setHasMore(Boolean(payload.page?.hasMore));
 			hasShownFetchErrorToastRef.current = false;
@@ -202,48 +219,55 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 				if (!response.ok) {
 					throw new Error(`failed_to_toggle:${response.status}`);
 				}
-				const payload = (await response.json()) as { fallbackLocalOnly?: boolean };
-				setItems((previous) => {
-					const updated = previous
-						.map((item) => {
-							if (item.postId !== postId) {
-								return item;
-							}
-							return {
-								...item,
-								isSubscribed: enabled,
-								sourceFlags: {
-									...item.sourceFlags,
-									subscribed: enabled,
-								},
-							};
-						})
-						.filter((item) => item.sourceFlags.authored || item.sourceFlags.subscribed);
-					return sortTrackedPosts(updated);
-				});
+				const payload = (await response.json()) as PostSubscriptionToggleResponse;
+				setFallbackLocalItems((previous) => {
+					if (!payload.fallbackLocalOnly) {
+						return previous.filter((item) => item.postId !== postId);
+					}
+					if (!enabled) {
+						return previous.filter((item) => item.postId !== postId);
+					}
 
-				if (payload.fallbackLocalOnly) {
-					if (enabled) {
-						const existingItem = items.find((item) => item.postId === postId);
-						if (!existingItem) {
-							return;
-						}
-						const ensuredExistingItem: SidebarTrackedPost = existingItem;
-						setFallbackLocalItems((previous) => {
-							const fallback: SidebarTrackedPost = {
-								...ensuredExistingItem,
+					const baseItem =
+						previous.find((item) => item.postId === postId) ??
+						items.find((item) => item.postId === postId);
+					if (!baseItem) {
+						return previous;
+					}
+
+					return normalizeVisibleTrackedPosts(
+						mergeTrackedPosts(previous, [
+							{
+								...baseItem,
 								lastActivityAt: new Date().toISOString(),
 								sourceFlags: {
-									authored: false,
+									...baseItem.sourceFlags,
 									subscribed: true,
 								},
 								isSubscribed: true,
-							};
-							return mergeTrackedPosts(previous, [fallback]);
-						});
-					} else {
-						setFallbackLocalItems((previous) => previous.filter((item) => item.postId !== postId));
-					}
+							},
+						])
+					);
+				});
+				setItems((previous) => {
+					const updated = previous.map((item) => {
+						if (item.postId !== postId) {
+							return item;
+						}
+						return {
+							...item,
+							isSubscribed: enabled,
+							sourceFlags: {
+								...item.sourceFlags,
+								subscribed: enabled,
+							},
+						};
+					});
+					return normalizeVisibleTrackedPosts(updated);
+				});
+
+				if (!payload.fallbackLocalOnly) {
+					void refreshTrackedPosts();
 				}
 				showToast({
 					type: "success",
@@ -256,7 +280,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 				setTogglePending(postId, false);
 			}
 		},
-		[items, sessionUserId, setTogglePending, showToast]
+		[items, refreshTrackedPosts, sessionUserId, setTogglePending, showToast]
 	);
 
 	useEffect(() => {
@@ -282,17 +306,13 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 					return;
 				}
 				const fallbackItem = buildFallbackTrackedPost(detail.postId, detail.item);
-				setFallbackLocalItems((previous) => mergeTrackedPosts(previous, [fallbackItem]));
-				setItems((previous) => mergeTrackedPosts(previous, [fallbackItem]));
+				setFallbackLocalItems((previous) => normalizeVisibleTrackedPosts(mergeTrackedPosts(previous, [fallbackItem])));
+				setItems((previous) => normalizeVisibleTrackedPosts(mergeTrackedPosts(previous, [fallbackItem])));
 				return;
 			}
 
 			setFallbackLocalItems((previous) => previous.filter((item) => item.postId !== detail.postId));
-			setItems((previous) =>
-				sortTrackedPosts(
-					previous.filter((item) => item.postId !== detail.postId || item.sourceFlags.authored)
-				)
-			);
+			setItems((previous) => normalizeVisibleTrackedPosts(previous.filter((item) => item.postId !== detail.postId)));
 		};
 
 		window.addEventListener("sidebarTrackedPostsChanged", handleTrackedPostsChanged);
@@ -383,14 +403,14 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 
 	return (
 		<div className="flex h-full flex-col">
-			<div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-text-muted">내 포스트 활동</div>
+			<div className="mb-2 px-2 text-[11px] font-semibold tracking-wide text-text-muted">구독 중 포스트</div>
 
 			{isInitialLoading && items.length === 0 ? (
 				<div className="px-2 py-4 text-xs text-text-muted">목록 불러오는 중...</div>
 			) : null}
 
 			{!isInitialLoading && items.length === 0 ? (
-				<div className="px-2 py-4 text-xs text-text-muted">작성/알림 포스트가 아직 없음</div>
+				<div className="px-2 py-4 text-xs text-text-muted">구독 중인 포스트가 아직 없음</div>
 			) : null}
 
 			<div className="space-y-1 overflow-y-auto pr-1">
