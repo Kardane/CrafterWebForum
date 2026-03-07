@@ -12,7 +12,7 @@ interface HeaderProps {
  * - 사용자 메뉴는 사이드바 푸터로 이동됨
  */
 export default function Header({ onMenuClick }: HeaderProps) {
-	const forumTitle = "스티브 갤러리 개발 포럼 Beta v0.2";
+	const forumTitle = "스티브 갤러리 개발 포럼 Beta v0.3";
 
 	return (
 		<header className="h-header bg-bg-primary border-b border-bg-tertiary flex items-center px-4 sticky top-0 z-header">

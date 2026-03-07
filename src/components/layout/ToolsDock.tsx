@@ -119,7 +119,7 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 					aria-label="도구 모음 닫기"
 				/>
 				<aside
-					className="absolute right-0 top-1/2 flex w-[18.5rem] -translate-y-1/2 overflow-hidden rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-secondary/95 shadow-[0_12px_36px_rgba(0,0,0,0.36)] backdrop-blur transition-transform duration-300 ease-out"
+					className="absolute right-0 top-[54%] flex w-[18.5rem] -translate-y-1/2 overflow-hidden rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-secondary/95 shadow-[0_12px_36px_rgba(0,0,0,0.36)] backdrop-blur transition-transform duration-300 ease-out"
 					style={{
 						transform: `translateY(-50%) translateX(${isDesktopOpen ? "0" : "calc(100% - 3rem)"})`,
 					}}

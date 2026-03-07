@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import classNames from "classnames";
+import { useSession } from "next-auth/react";
 import { Bell, BellOff, Loader2 } from "lucide-react";
+import {
+	hasPostSubscriptionFallback,
+	removePostSubscriptionFallback,
+	upsertPostSubscriptionFallback,
+} from "@/lib/post-subscription-fallback";
+import { toSessionUserId } from "@/lib/session-user";
 
 interface SidebarFallbackPostItem {
 	title: string;
@@ -32,12 +39,15 @@ export default function PostSubscriptionButton({
 	onChange,
 	sidebarFallbackItem,
 }: PostSubscriptionButtonProps) {
+	const { data: session } = useSession();
+	const sessionUserId = toSessionUserId(session?.user?.id);
 	const [isSubscribed, setIsSubscribed] = useState(initialSubscribed);
 	const [isPending, setIsPending] = useState(false);
 
 	useEffect(() => {
-		setIsSubscribed(initialSubscribed);
-	}, [initialSubscribed, postId]);
+		const fallbackSubscribed = sessionUserId ? hasPostSubscriptionFallback(sessionUserId, postId) : false;
+		setIsSubscribed(initialSubscribed || fallbackSubscribed);
+	}, [initialSubscribed, postId, sessionUserId]);
 
 	const toggleSubscription = async () => {
 		if (isPending) {
@@ -64,6 +74,30 @@ export default function PostSubscriptionButton({
 			onChange?.(nextSubscribed);
 
 			if (payload.fallbackLocalOnly) {
+				if (sessionUserId && sidebarFallbackItem) {
+					if (nextSubscribed) {
+						upsertPostSubscriptionFallback(sessionUserId, {
+							postId,
+							title: sidebarFallbackItem.title,
+							href: sidebarFallbackItem.href,
+							lastActivityAt: new Date().toISOString(),
+							author: {
+								nickname: sidebarFallbackItem.author.nickname,
+								minecraftUuid: sidebarFallbackItem.author.minecraftUuid,
+							},
+							sourceFlags: {
+								authored: false,
+								subscribed: true,
+							},
+							isSubscribed: true,
+							commentCount: sidebarFallbackItem.commentCount,
+							newCommentCount: 0,
+							latestCommentId: sidebarFallbackItem.latestCommentId,
+						});
+					} else {
+						removePostSubscriptionFallback(sessionUserId, postId);
+					}
+				}
 				window.dispatchEvent(
 					new CustomEvent("sidebarTrackedPostsFallbackChanged", {
 						detail: {
@@ -74,6 +108,9 @@ export default function PostSubscriptionButton({
 					})
 				);
 			} else {
+				if (sessionUserId) {
+					removePostSubscriptionFallback(sessionUserId, postId);
+				}
 				window.dispatchEvent(new CustomEvent("sidebarTrackedPostsChanged"));
 			}
 		} catch (error) {

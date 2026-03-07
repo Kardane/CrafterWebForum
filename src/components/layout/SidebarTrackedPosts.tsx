@@ -9,6 +9,11 @@ import { Bell, BellOff, Loader2, MessageSquare } from "lucide-react";
 import { useToast } from "@/components/ui/useToast";
 import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
+import {
+	normalizeFallbackTrackedPosts,
+	readPostSubscriptionFallback,
+	writePostSubscriptionFallback,
+} from "@/lib/post-subscription-fallback";
 import type { SidebarTrackedPost } from "@/types/sidebar";
 
 interface SidebarTrackedPostsProps {
@@ -45,8 +50,6 @@ interface SidebarTrackedPostsFallbackChangeDetail {
 interface PostSubscriptionToggleResponse {
 	fallbackLocalOnly?: boolean;
 }
-
-const FALLBACK_STORAGE_KEY_PREFIX = "sidebarTrackedPostsFallback";
 
 function buildFallbackTrackedPost(postId: number, item: SidebarTrackedPostsFallbackItem): SidebarTrackedPost {
 	return {
@@ -103,52 +106,6 @@ function normalizeVisibleTrackedPosts(rows: SidebarTrackedPost[]): SidebarTracke
 	return sortTrackedPosts(rows.filter((item) => item.isSubscribed && item.sourceFlags.subscribed));
 }
 
-function buildFallbackStorageKey(userId: number) {
-	return `${FALLBACK_STORAGE_KEY_PREFIX}:${userId}`;
-}
-
-function readPersistedFallbackTrackedPosts(userId: number): SidebarTrackedPost[] {
-	if (typeof window === "undefined" || !Number.isInteger(userId) || userId <= 0) {
-		return [];
-	}
-
-	try {
-		const raw = window.localStorage.getItem(buildFallbackStorageKey(userId));
-		if (!raw) {
-			return [];
-		}
-
-		const parsed = JSON.parse(raw);
-		if (!Array.isArray(parsed)) {
-			return [];
-		}
-
-		return normalizeVisibleTrackedPosts(
-			parsed.filter((item): item is SidebarTrackedPost => {
-				if (!item || typeof item !== "object") {
-					return false;
-				}
-				const candidate = item as Partial<SidebarTrackedPost>;
-				return (
-					Number.isInteger(candidate.postId) &&
-					typeof candidate.title === "string" &&
-					typeof candidate.href === "string" &&
-					typeof candidate.lastActivityAt === "string" &&
-					typeof candidate.commentCount === "number" &&
-					typeof candidate.newCommentCount === "number" &&
-					typeof candidate.isSubscribed === "boolean" &&
-					typeof candidate.author?.nickname === "string" &&
-					typeof candidate.sourceFlags?.subscribed === "boolean" &&
-					typeof candidate.sourceFlags?.authored === "boolean"
-				);
-			})
-		);
-	} catch (error) {
-		console.error("[sidebar] failed to read fallback tracked posts", error);
-		return [];
-	}
-}
-
 export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsProps) {
 	const pathname = usePathname();
 	const { data: session } = useSession();
@@ -176,7 +133,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			return;
 		}
 
-		const restoredItems = readPersistedFallbackTrackedPosts(sessionUserId);
+		const restoredItems = readPostSubscriptionFallback(sessionUserId);
 		fallbackLocalItemsRef.current = restoredItems;
 		setFallbackLocalItems(restoredItems);
 		setItems(normalizeVisibleTrackedPosts(restoredItems));
@@ -188,12 +145,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 		}
 
 		try {
-			const storageKey = buildFallbackStorageKey(sessionUserId);
-			if (fallbackLocalItems.length === 0) {
-				window.localStorage.removeItem(storageKey);
-				return;
-			}
-			window.localStorage.setItem(storageKey, JSON.stringify(normalizeVisibleTrackedPosts(fallbackLocalItems)));
+			writePostSubscriptionFallback(sessionUserId, normalizeFallbackTrackedPosts(fallbackLocalItems));
 		} catch (error) {
 			console.error("[sidebar] failed to persist fallback tracked posts", error);
 		}
