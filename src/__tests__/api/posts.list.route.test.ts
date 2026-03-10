@@ -214,7 +214,12 @@ describe("GET /api/posts", () => {
 				where: expect.objectContaining({
 					AND: expect.arrayContaining([
 						expect.objectContaining({
-							OR: expect.arrayContaining([{ board: "develope" }, { board: null }]),
+							NOT: expect.objectContaining({
+								OR: expect.arrayContaining([
+									{ board: "sinmungo" },
+									{ tags: { contains: '"__sys:board:ombudsman"' } },
+								]),
+							}),
 						}),
 					]),
 				}),
@@ -258,7 +263,42 @@ describe("GET /api/posts", () => {
 		expect(postFindManyMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				where: expect.objectContaining({
-					AND: expect.arrayContaining([{ board: "sinmungo" }]),
+					AND: expect.arrayContaining([
+						expect.objectContaining({
+							OR: expect.arrayContaining([
+								{ board: "sinmungo" },
+								{ tags: { contains: '"__sys:board:ombudsman"' } },
+							]),
+						}),
+					]),
+				}),
+			})
+		);
+	});
+
+	it("keeps develope feed visible by excluding only explicit sinmungo posts", async () => {
+		authMock.mockResolvedValue(null);
+		postFindManyMock.mockResolvedValue([]);
+		postCountMock.mockResolvedValue(0);
+
+		const { GET } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts?board=develope");
+
+		const res = await GET(req as never);
+		expect(res.status).toBe(200);
+		expect(postFindManyMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					AND: expect.arrayContaining([
+						expect.objectContaining({
+							NOT: expect.objectContaining({
+								OR: expect.arrayContaining([
+									{ board: "sinmungo" },
+									{ tags: { contains: '"__sys:board:ombudsman"' } },
+								]),
+							}),
+						}),
+					]),
 				}),
 			})
 		);

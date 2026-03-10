@@ -3,7 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { getPostListCacheTags } from "@/lib/cache-tags";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
-import { type PostBoardType, normalizeBoardType, parsePostTagMetadata } from "@/lib/post-board";
+import {
+	OMBUDSMAN_BOARD_MARKER,
+	type PostBoardType,
+	normalizeBoardType,
+	parsePostTagMetadata,
+} from "@/lib/post-board";
 import { isMissingPostBoardMetadataColumnError, isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 
 const DEFAULT_PAGE = 1;
@@ -193,10 +198,14 @@ async function listPostsCoreUncached(
 	const andConditions: Prisma.PostWhereInput[] = [{ deletedAt: null }];
 
 	if (input.board === "sinmungo") {
-		andConditions.push({ board: "sinmungo" });
+		andConditions.push({
+			OR: [{ board: "sinmungo" }, { tags: { contains: `\"${OMBUDSMAN_BOARD_MARKER}\"` } }],
+		});
 	} else {
 		andConditions.push({
-			OR: [{ board: "develope" }, { board: null }],
+			NOT: {
+				OR: [{ board: "sinmungo" }, { tags: { contains: `\"${OMBUDSMAN_BOARD_MARKER}\"` } }],
+			},
 		});
 	}
 
@@ -271,10 +280,10 @@ async function listPostsCoreUncached(
 		const legacyWhereCondition =
 			input.board === "sinmungo"
 				? {
-					AND: [whereCondition, { tags: { contains: `\"${"__sys:board:ombudsman"}\"` } }],
+					AND: [whereCondition, { tags: { contains: `\"${OMBUDSMAN_BOARD_MARKER}\"` } }],
 				}
 				: {
-					AND: [whereCondition, { OR: [{ tags: null }, { tags: { not: { contains: `\"${"__sys:board:ombudsman"}\"` } } }] }],
+					AND: [whereCondition, { OR: [{ tags: null }, { tags: { not: { contains: `\"${OMBUDSMAN_BOARD_MARKER}\"` } } }] }],
 				};
 		posts = (await prisma.post.findMany({
 			where: legacyWhereCondition,
