@@ -14,7 +14,7 @@ import { isMissingPostBoardMetadataColumnError, isMissingPostSubscriptionTableEr
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 12;
 const MAX_LIMIT = 50;
-const POSTS_LIST_CACHE_VERSION = "v1";
+const POSTS_LIST_CACHE_VERSION = "v2";
 const POSTS_LIST_REVALIDATE_SECONDS = 30;
 
 export interface ListPostsInput {
