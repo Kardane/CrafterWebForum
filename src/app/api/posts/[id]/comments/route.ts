@@ -55,7 +55,7 @@ export async function GET(
 	try {
 		const { id } = await params;
 		const session = await auth();
-		const activeUser = await resolveActiveUserFromSession(session);
+		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
 		if (!activeUser.ok) {
 			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
@@ -74,6 +74,9 @@ export async function GET(
 
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
+		}
+		if (post.board !== "sinmungo" && activeUser.context.isApproved !== 1) {
+			return NextResponse.json({ error: "pending_approval" }, { status: 403 });
 		}
 
 		const searchParams = new URL(request.url).searchParams;
@@ -164,7 +167,7 @@ export async function POST(
 	try {
 		const { id } = await params;
 		const session = await auth();
-		const activeUser = await resolveActiveUserFromSession(session);
+		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
 		if (!activeUser.ok) {
 			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
@@ -197,6 +200,9 @@ export async function POST(
 
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
+		}
+		if (post.board !== "sinmungo" && activeUser.context.isApproved !== 1) {
+			return NextResponse.json({ error: "pending_approval" }, { status: 403 });
 		}
 
 		if (normalizedParentId !== null) {

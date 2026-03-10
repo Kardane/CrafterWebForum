@@ -182,6 +182,30 @@ describe("POST /api/posts/[id]/comments", () => {
 		expect(commentCreateMock).not.toHaveBeenCalled();
 	});
 
+	it("allows pending users to comment on sinmungo posts", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 0, nickname: "actor" } });
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: true,
+			context: { userId: 10, role: "user", nickname: "actor", isApproved: 0, isBanned: 0 },
+		});
+		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null, tags: null, board: "sinmungo" });
+		commentCreateMock.mockResolvedValue(
+			buildCommentRow({ id: 150, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "hello" })
+		);
+		postUpdateMock.mockResolvedValue({ commentCount: 2 });
+
+		const { POST } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "hello" }),
+		});
+
+		const res = await POST(req as never, { params: Promise.resolve({ id: "12" }) });
+		expect(res.status).toBe(200);
+		expect(commentCreateMock).toHaveBeenCalled();
+	});
+
 	it("batches mention notification delivery queue writes", async () => {
 		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1, nickname: "actor" } });
 		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null, tags: null });
