@@ -1,5 +1,6 @@
 import { compare, hash } from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { normalizeBoardType } from "@/lib/post-board";
 
 export interface UserProfileResult {
 	user: {
@@ -13,6 +14,8 @@ export interface UserProfileResult {
 	};
 	stats: {
 		posts: number;
+		developePosts: number;
+		sinmungoPosts: number;
 		comments: number;
 		likesReceived: number;
 	};
@@ -36,8 +39,11 @@ export async function getUserProfile(userId: number): Promise<UserProfileResult 
 		return null;
 	}
 
-	const [postCount, commentCount, likesAggregate] = await Promise.all([
-		prisma.post.count({ where: { authorId: user.id, deletedAt: null } }),
+	const [posts, commentCount, likesAggregate] = await Promise.all([
+		prisma.post.findMany({
+			where: { authorId: user.id, deletedAt: null },
+			select: { board: true },
+		}),
 		prisma.comment.count({ where: { authorId: user.id } }),
 		prisma.post.aggregate({
 			where: { authorId: user.id, deletedAt: null },
@@ -45,10 +51,15 @@ export async function getUserProfile(userId: number): Promise<UserProfileResult 
 		}),
 	]);
 
+	const developePosts = posts.filter((post) => normalizeBoardType(post.board) === "develope").length;
+	const sinmungoPosts = posts.filter((post) => normalizeBoardType(post.board) === "sinmungo").length;
+
 	return {
 		user,
 		stats: {
-			posts: postCount,
+			posts: posts.length,
+			developePosts,
+			sinmungoPosts,
 			comments: commentCount,
 			likesReceived: likesAggregate._sum.likes ?? 0,
 		},

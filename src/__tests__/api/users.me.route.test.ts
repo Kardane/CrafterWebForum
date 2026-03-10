@@ -41,6 +41,8 @@ describe("GET /api/users/me", () => {
 			},
 			stats: {
 				posts: 2,
+				developePosts: 1,
+				sinmungoPosts: 1,
 				comments: 4,
 				likesReceived: 11,
 			},
@@ -50,9 +52,13 @@ describe("GET /api/users/me", () => {
 		const { GET } = await import("@/app/api/users/me/route");
 		const req = new Request("http://localhost/api/users/me");
 		const res = await GET(req as never);
-		const body = (await res.json()) as { stats: { likesReceived: number } };
+		const body = (await res.json()) as {
+			stats: { likesReceived: number; developePosts: number; sinmungoPosts: number };
+		};
 
 		expect(res.status).toBe(200);
 		expect(body.stats.likesReceived).toBe(11);
+		expect(body.stats.developePosts).toBe(1);
+		expect(body.stats.sinmungoPosts).toBe(1);
 	});
 });

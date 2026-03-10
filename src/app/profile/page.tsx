@@ -18,6 +18,8 @@ interface ProfileUser {
 
 interface ProfileStats {
 	posts: number;
+	developePosts: number;
+	sinmungoPosts: number;
 	comments: number;
 	likesReceived: number;
 }
@@ -113,7 +115,7 @@ export default function ProfilePage() {
 		<div className="max-w-2xl mx-auto p-6 space-y-6">
 			<header className="mb-6">
 				<div className="flex items-center gap-2">
-					<Link href="/" className="btn btn-secondary btn-sm">
+					<Link href="/develope" className="btn btn-secondary btn-sm">
 						← 메인
 					</Link>
 					<h1 className="flex items-center gap-2 text-2xl font-bold">
