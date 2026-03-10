@@ -52,6 +52,8 @@ model Post {
   title     String
   content   String
   authorId  Int
+  board     String?   @default("develope")
+  serverAddress String?
   tags      String? // JSON 문자열로 저장
   commentCount Int    @default(0)
   likes     Int       @default(0)
@@ -68,6 +70,7 @@ model Post {
   subscriptions PostSubscription[]
 
   @@index([authorId])
+  @@index([board, deletedAt, updatedAt])
   @@index([deletedAt, updatedAt])
 }
 

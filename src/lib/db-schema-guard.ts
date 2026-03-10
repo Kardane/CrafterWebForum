@@ -19,6 +19,17 @@ function hasMissingTablePattern(message: string, tableName: string): boolean {
 	);
 }
 
+function hasMissingColumnPattern(message: string, tableName: string, columnName: string): boolean {
+	return (
+		message.includes(`no such column: ${tableName}.${columnName}`) ||
+		message.includes(`no such column: main.${tableName}.${columnName}`) ||
+		message.includes(`column \"${columnName}\" does not exist`) ||
+		message.includes(`unknown column '${columnName}'`) ||
+		(message.includes(tableName) && message.includes(columnName) && message.includes("no such column")) ||
+		(message.includes(tableName) && message.includes(columnName) && message.includes("does not exist"))
+	);
+}
+
 export function isMissingPostSubscriptionTableError(error: unknown): boolean {
 	const message = toErrorMessage(error).toLowerCase();
 	return hasMissingTablePattern(message, "postsubscription");
@@ -27,4 +38,18 @@ export function isMissingPostSubscriptionTableError(error: unknown): boolean {
 export function isMissingNotificationDeliveryTableError(error: unknown): boolean {
 	const message = toErrorMessage(error).toLowerCase();
 	return hasMissingTablePattern(message, "notificationdelivery");
+}
+
+export function isMissingPostBoardColumnError(error: unknown): boolean {
+	const message = toErrorMessage(error).toLowerCase();
+	return hasMissingColumnPattern(message, "post", "board");
+}
+
+export function isMissingPostServerAddressColumnError(error: unknown): boolean {
+	const message = toErrorMessage(error).toLowerCase();
+	return hasMissingColumnPattern(message, "post", "serveraddress");
+}
+
+export function isMissingPostBoardMetadataColumnError(error: unknown): boolean {
+	return isMissingPostBoardColumnError(error) || isMissingPostServerAddressColumnError(error);
 }
