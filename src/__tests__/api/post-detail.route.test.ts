@@ -318,6 +318,47 @@ describe("GET /api/posts/[id]", () => {
 		expect(body.post.user_subscribed).toBe(false);
 	});
 
+	it("falls back when Post.commentCount column is missing", async () => {
+		authMock.mockResolvedValue({ user: { id: "1" } });
+		postFindFirstMock
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: table Post has no column named commentCount"))
+			.mockResolvedValueOnce({
+				id: 55,
+				title: "legacy detail",
+				content: "content",
+				tags: '["__sys:server:mc.legacy.kr","__sys:board:ombudsman"]',
+				likes: 0,
+				views: 0,
+				createdAt: new Date("2026-01-01T00:00:00.000Z"),
+				updatedAt: new Date("2026-01-01T01:00:00.000Z"),
+				authorId: 1,
+				author: {
+					id: 1,
+					nickname: "writer",
+					minecraftUuid: "uuid-1",
+				},
+			});
+		likeFindFirstMock.mockResolvedValue(null);
+		postSubscriptionFindUniqueMock.mockResolvedValue(null);
+		commentCountMock.mockResolvedValue(4);
+		commentFindManyMock.mockResolvedValueOnce([]);
+		fetchCommentSubtreeRowsByRootIdsMock.mockResolvedValue([]);
+		postReadFindUniqueMock.mockResolvedValue(null);
+		postReadUpsertMock.mockResolvedValue({});
+
+		const { GET } = await import("@/app/api/posts/[id]/route");
+		const req = new Request("http://localhost/api/posts/55");
+		const res = await GET(req as never, { params: Promise.resolve({ id: "55" }) });
+		const body = (await res.json()) as { post: { board: string; serverAddress: string | null }; readMarker: { totalCommentCount: number } };
+
+		expect(res.status).toBe(200);
+		expect(body.post).toMatchObject({
+			board: "sinmungo",
+			serverAddress: "mc.legacy.kr",
+		});
+		expect(body.readMarker.totalCommentCount).toBe(4);
+	});
+
 	it("returns board and serverAddress metadata in detail response", async () => {
 		authMock.mockResolvedValue({ user: { id: "1" } });
 		postFindFirstMock.mockResolvedValue({

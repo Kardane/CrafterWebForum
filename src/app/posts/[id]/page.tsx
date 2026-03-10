@@ -8,6 +8,7 @@ import LikeButton from "@/components/posts/LikeButton";
 import CommentSection from "@/components/comments/CommentSection";
 import PostStickyHeader from "@/components/posts/PostStickyHeader";
 import { PostLikeStateProvider } from "@/components/posts/PostLikeStateProvider";
+import ServerAddressCopyButton from "@/components/posts/ServerAddressCopyButton";
 import { toSessionUserId } from "@/lib/session-user";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 import { Suspense } from "react";
@@ -91,15 +92,7 @@ async function PostDetailContent({ data, sessionUserId }: PostDetailContentProps
 
 					{post.board === "sinmungo" && post.serverAddress ? (
 						<div className="mb-4 flex flex-wrap gap-2">
-							<button
-								type="button"
-								onClick={() => {
-									void navigator.clipboard?.writeText(post.serverAddress ?? "");
-								}}
-								className="inline-flex items-center rounded border border-border bg-bg-tertiary px-3 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-primary hover:text-text-primary"
-							>
-								서버 주소 복사: {post.serverAddress}
-							</button>
+							<ServerAddressCopyButton serverAddress={post.serverAddress} />
 						</div>
 					) : post.tags && post.tags.length > 0 && (
 						<div className="flex flex-wrap gap-2 mb-4">

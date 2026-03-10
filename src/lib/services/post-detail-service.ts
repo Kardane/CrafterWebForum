@@ -7,7 +7,11 @@ import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 import { type PostBoardType, normalizeBoardType, parsePostTagMetadata } from "@/lib/post-board";
 import { fetchCommentSubtreeRowsByRootIds } from "@/lib/comment-subtree-query";
-import { isMissingPostBoardMetadataColumnError, isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
+import {
+	isMissingPostBoardMetadataColumnError,
+	isMissingPostCommentCountColumnError,
+	isMissingPostSubscriptionTableError,
+} from "@/lib/db-schema-guard";
 
 const POST_DETAIL_CACHE_VERSION = "v1";
 const POST_DETAIL_REVALIDATE_SECONDS = 30;
@@ -80,6 +84,28 @@ interface CachedPostDetailCoreResult {
 		queryCommentsMs: number;
 		serializeMs: number;
 	};
+}
+
+interface DetailPostAuthor {
+	id: number;
+	nickname: string;
+	minecraftUuid: string | null;
+}
+
+interface DetailPostRecord {
+	id: number;
+	title: string;
+	content: string;
+	tags: string | null;
+	board: string | null;
+	serverAddress: string | null;
+	commentCount: number;
+	likes: number;
+	views: number;
+	createdAt: Date;
+	updatedAt: Date;
+	authorId: number;
+	author: DetailPostAuthor;
 }
 
 async function loadInitialDetailCommentThreads(input: {
@@ -158,18 +184,72 @@ function buildPostDetailCacheKey(input: GetPostDetailInput) {
 	];
 }
 
+async function loadLegacyDetailPost(postId: number): Promise<DetailPostRecord | null> {
+	const legacyPost = await prisma.post.findFirst({
+		where: {
+			id: postId,
+			deletedAt: null,
+		},
+		select: {
+			id: true,
+			title: true,
+			content: true,
+			tags: true,
+			likes: true,
+			views: true,
+			createdAt: true,
+			updatedAt: true,
+			authorId: true,
+			author: {
+				select: {
+					id: true,
+					nickname: true,
+					minecraftUuid: true,
+				},
+			},
+		},
+	});
+
+	if (!legacyPost) {
+		return null;
+	}
+
+	return {
+		...legacyPost,
+		board: null,
+		serverAddress: null,
+		commentCount: await prisma.comment.count({
+			where: {
+				postId: legacyPost.id,
+			},
+		}),
+	};
+}
+
 async function getPostDetailCoreUncached(
 	input: Pick<GetPostDetailInput, "postId">
 ): Promise<CachedPostDetailCoreResult | null> {
 	const queryPostStart = performance.now();
-	let post;
+	let post: DetailPostRecord | null;
 	try {
 		post = await prisma.post.findFirst({
 			where: {
 				id: input.postId,
 				deletedAt: null,
 			},
-			include: {
+			select: {
+				id: true,
+				title: true,
+				content: true,
+				tags: true,
+				board: true,
+				serverAddress: true,
+				commentCount: true,
+				likes: true,
+				views: true,
+				createdAt: true,
+				updatedAt: true,
+				authorId: true,
 				author: {
 					select: {
 						id: true,
@@ -180,25 +260,11 @@ async function getPostDetailCoreUncached(
 			},
 		});
 	} catch (error) {
-		if (!isMissingPostBoardMetadataColumnError(error)) {
+		if (!isMissingPostBoardMetadataColumnError(error) && !isMissingPostCommentCountColumnError(error)) {
 			throw error;
 		}
-		console.warn("[post-detail] post board columns missing; using legacy tag metadata fallback");
-		post = await prisma.post.findFirst({
-			where: {
-				id: input.postId,
-				deletedAt: null,
-			},
-			include: {
-				author: {
-					select: {
-						id: true,
-						nickname: true,
-						minecraftUuid: true,
-					},
-				},
-			},
-		});
+		console.warn("[post-detail] legacy post columns missing; using tag/comment fallback");
+		post = await loadLegacyDetailPost(input.postId);
 	}
 	const queryPostMs = performance.now() - queryPostStart;
 
