@@ -244,8 +244,9 @@ export default function NewPostPage() {
 
 	return (
 		<ComposerPageLayout
-			title="새 포스트 작성"
+			title="개발 포스트 작성"
 			description="드래그 앤 드롭 또는 첨부 버튼으로 파일을 올리고 마크다운으로 내용을 작성"
+			backHref="/develope"
 		>
 			<form
 				onSubmit={handleSubmit}
@@ -344,7 +345,7 @@ export default function NewPostPage() {
 				<div className="mt-1 flex items-center justify-end gap-2 border-t border-border pt-4">
 					<button
 						type="button"
-						onClick={() => router.push("/")}
+						onClick={() => router.push("/develope")}
 						className="btn btn-secondary"
 					>
 						취소
