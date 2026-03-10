@@ -14,6 +14,7 @@ import {
 	readPostSubscriptionFallback,
 	writePostSubscriptionFallback,
 } from "@/lib/post-subscription-fallback";
+import { getBoardLabel } from "@/lib/post-board";
 import type { SidebarTrackedPost } from "@/types/sidebar";
 
 interface SidebarTrackedPostsProps {
@@ -33,6 +34,8 @@ const DEFAULT_FETCH_LIMIT = 30;
 interface SidebarTrackedPostsFallbackItem {
 	title: string;
 	href: string;
+	board: "develope" | "sinmungo";
+	serverAddress: string | null;
 	author: {
 		nickname: string;
 		minecraftUuid: string | null;
@@ -56,6 +59,8 @@ function buildFallbackTrackedPost(postId: number, item: SidebarTrackedPostsFallb
 		postId,
 		title: item.title,
 		href: item.href,
+		board: item.board,
+		serverAddress: item.serverAddress,
 		lastActivityAt: new Date().toISOString(),
 		author: {
 			nickname: item.author.nickname,
@@ -462,9 +467,15 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 							>
 								<div className="flex items-start gap-2">
 									<div className="min-w-0 flex-1">
-										<div className="truncate text-sm text-text-primary">{item.title}</div>
-										<div className="mt-0.5 truncate text-[11px] text-text-muted">{item.author.nickname}</div>
+									<div className="truncate text-sm text-text-primary">{item.title}</div>
+									<div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-text-muted">
+										<span>{item.author.nickname}</span>
+										<span className="rounded bg-bg-secondary px-1.5 py-0.5 text-[10px] text-text-secondary">
+											{getBoardLabel(item.board)}
+										</span>
+										{item.board === "sinmungo" && item.serverAddress && <span className="truncate">{item.serverAddress}</span>}
 									</div>
+								</div>
 								</div>
 								<div className="mt-1 flex flex-wrap items-center gap-1.5">
 									{item.newCommentCount > 0 && (
