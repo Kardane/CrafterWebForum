@@ -14,6 +14,10 @@ function formatDate(date: string) {
 	return parsed.toLocaleString("ko-KR");
 }
 
+function formatBoardLabel(board: string | null) {
+	return board === "sinmungo" ? "서버 신문고" : "개발 포스트";
+}
+
 export default function AdminPostsTab() {
 	const [posts, setPosts] = useState<AdminPostRow[]>([]);
 	const [archivedPosts, setArchivedPosts] = useState<AdminPostRow[]>([]);
@@ -78,6 +82,7 @@ export default function AdminPostsTab() {
 						<tr className="border-b border-border text-left">
 							<th className="py-2 pr-3">ID</th>
 							<th className="py-2 pr-3">제목</th>
+							<th className="py-2 pr-3">보드</th>
 							<th className="py-2 pr-3">작성자</th>
 							<th className="py-2 pr-3">작성일</th>
 							<th className="py-2 pr-3">작업</th>
@@ -86,7 +91,7 @@ export default function AdminPostsTab() {
 					<tbody>
 						{posts.length === 0 && (
 							<tr>
-								<td colSpan={5} className="py-6 text-center text-text-muted">
+								<td colSpan={6} className="py-6 text-center text-text-muted">
 									표시할 포스트가 없습니다
 								</td>
 							</tr>
@@ -95,6 +100,10 @@ export default function AdminPostsTab() {
 							<tr key={post.id} className="border-b border-border/60">
 								<td className="py-2 pr-3">{post.id}</td>
 								<td className="py-2 pr-3">{post.title}</td>
+								<td className="py-2 pr-3">
+									<div className="text-sm font-medium">{formatBoardLabel(post.board)}</div>
+									{post.serverAddress && <div className="text-xs text-text-muted">{post.serverAddress}</div>}
+								</td>
 								<td className="py-2 pr-3">{post.authorName}</td>
 								<td className="py-2 pr-3">{formatDate(post.createdAt)}</td>
 								<td className="py-2 pr-3">
@@ -135,8 +144,9 @@ export default function AdminPostsTab() {
 						<thead>
 							<tr className="border-b border-border text-left">
 								<th className="py-2 pr-3">ID</th>
-								<th className="py-2 pr-3">제목</th>
-								<th className="py-2 pr-3">작성자</th>
+							<th className="py-2 pr-3">제목</th>
+							<th className="py-2 pr-3">보드</th>
+							<th className="py-2 pr-3">작성자</th>
 								<th className="py-2 pr-3">아카이브일</th>
 								<th className="py-2 pr-3">작업</th>
 							</tr>
@@ -144,16 +154,20 @@ export default function AdminPostsTab() {
 						<tbody>
 							{archivedPosts.length === 0 && (
 								<tr>
-									<td colSpan={5} className="py-6 text-center text-text-muted">
-										아카이브된 포스트가 없습니다
+								<td colSpan={6} className="py-6 text-center text-text-muted">
+									아카이브된 포스트가 없습니다
 									</td>
 								</tr>
 							)}
 							{archivedPosts.map((post) => (
 								<tr key={post.id} className="border-b border-border/60">
 									<td className="py-2 pr-3">{post.id}</td>
-									<td className="py-2 pr-3">{post.title}</td>
-									<td className="py-2 pr-3">{post.authorName}</td>
+								<td className="py-2 pr-3">{post.title}</td>
+								<td className="py-2 pr-3">
+									<div className="text-sm font-medium">{formatBoardLabel(post.board)}</div>
+									{post.serverAddress && <div className="text-xs text-text-muted">{post.serverAddress}</div>}
+								</td>
+								<td className="py-2 pr-3">{post.authorName}</td>
 									<td className="py-2 pr-3">{formatDate(post.deletedAt ?? "")}</td>
 									<td className="py-2 pr-3">
 										<div className="flex flex-wrap gap-1">

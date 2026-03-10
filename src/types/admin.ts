@@ -30,6 +30,8 @@ export interface AdminUserRow {
 export interface AdminPostRow {
 	id: number;
 	title: string;
+	board: string | null;
+	serverAddress: string | null;
 	createdAt: string;
 	deletedAt: string | null;
 	authorId: number;

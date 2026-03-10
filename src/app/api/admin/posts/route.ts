@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/admin-auth";
+import { normalizeBoardType, parsePostTagMetadata } from "@/lib/post-board";
+import { isMissingPostBoardMetadataColumnError } from "@/lib/db-schema-guard";
 
 function parseArchivedFlag(value: string | null) {
 	return value === "true";
@@ -25,22 +27,50 @@ export async function GET(request: Request) {
 		const skip = (page - 1) * limit;
 
 		const where = isArchived ? { deletedAt: { not: null } } : { deletedAt: null };
-		const [posts, total] = await Promise.all([
-			prisma.post.findMany({
-				where,
-				orderBy: { createdAt: "desc" },
-				skip,
-				take: limit,
-				select: {
-					id: true,
-					title: true,
-					createdAt: true,
-					deletedAt: true,
-					authorId: true,
-				},
-			}),
-			prisma.post.count({ where }),
-		]);
+		let posts;
+		let total;
+		try {
+			[posts, total] = await Promise.all([
+				prisma.post.findMany({
+					where,
+					orderBy: { createdAt: "desc" },
+					skip,
+					take: limit,
+					select: {
+						id: true,
+						title: true,
+						board: true,
+						serverAddress: true,
+						createdAt: true,
+						deletedAt: true,
+						authorId: true,
+					},
+				}),
+				prisma.post.count({ where }),
+			]);
+		} catch (error) {
+			if (!isMissingPostBoardMetadataColumnError(error)) {
+				throw error;
+			}
+			console.warn("[API] GET /api/admin/posts post board columns missing; using legacy tag metadata fallback");
+			[posts, total] = await Promise.all([
+				prisma.post.findMany({
+					where,
+					orderBy: { createdAt: "desc" },
+					skip,
+					take: limit,
+					select: {
+						id: true,
+						title: true,
+						tags: true,
+						createdAt: true,
+						deletedAt: true,
+						authorId: true,
+					},
+				}),
+				prisma.post.count({ where }),
+			]);
+		}
 		const uniqueAuthorIds = Array.from(new Set(posts.map((post) => post.authorId)));
 		const authors = uniqueAuthorIds.length
 			? await prisma.user.findMany({
@@ -53,14 +83,19 @@ export async function GET(request: Request) {
 		);
 
 		return NextResponse.json({
-			posts: posts.map((post) => ({
-				id: post.id,
-				title: post.title,
-				createdAt: post.createdAt,
-				deletedAt: post.deletedAt,
-				authorId: post.authorId,
-				authorName: authorNameMap.get(post.authorId) ?? "알 수 없음",
-			})),
+			posts: posts.map((post) => {
+				const metadata = parsePostTagMetadata("tags" in post ? post.tags : null, "board" in post ? post.board : null, "serverAddress" in post ? post.serverAddress : null);
+				return {
+					id: post.id,
+					title: post.title,
+					board: normalizeBoardType(metadata.board),
+					serverAddress: metadata.serverAddress,
+					createdAt: post.createdAt,
+					deletedAt: post.deletedAt,
+					authorId: post.authorId,
+					authorName: authorNameMap.get(post.authorId) ?? "알 수 없음",
+				};
+			}),
 			page: {
 				page,
 				limit,

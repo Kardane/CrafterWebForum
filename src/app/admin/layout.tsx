@@ -14,7 +14,7 @@ export default async function AdminLayout({
 		<div className="max-w-7xl mx-auto p-4 md:p-6">
 			<div className="mb-6 flex flex-wrap items-center justify-between gap-3">
 				<div className="flex items-center gap-2">
-					<Link href="/" className="btn btn-secondary btn-sm">
+					<Link href="/develope" className="btn btn-secondary btn-sm">
 						← 메인
 					</Link>
 					<div>
