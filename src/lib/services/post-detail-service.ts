@@ -5,9 +5,9 @@ import { buildCommentTree } from "@/lib/comments";
 import type { Comment as TreeComment } from "@/lib/comment-tree-ops";
 import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
-import { parsePostTagMetadata } from "@/lib/post-board";
+import { type PostBoardType, normalizeBoardType, parsePostTagMetadata } from "@/lib/post-board";
 import { fetchCommentSubtreeRowsByRootIds } from "@/lib/comment-subtree-query";
-import { isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
+import { isMissingPostBoardMetadataColumnError, isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 
 const POST_DETAIL_CACHE_VERSION = "v1";
 const POST_DETAIL_REVALIDATE_SECONDS = 30;
@@ -36,6 +36,8 @@ export interface GetPostDetailResult {
 		id: number;
 		title: string;
 		content: string;
+		board: PostBoardType;
+		serverAddress: string | null;
 		tags: string[];
 		likes: number;
 		views: number;
@@ -160,21 +162,44 @@ async function getPostDetailCoreUncached(
 	input: Pick<GetPostDetailInput, "postId">
 ): Promise<CachedPostDetailCoreResult | null> {
 	const queryPostStart = performance.now();
-	const post = await prisma.post.findFirst({
-		where: {
-			id: input.postId,
-			deletedAt: null,
-		},
-		include: {
-			author: {
-				select: {
-					id: true,
-					nickname: true,
-					minecraftUuid: true,
+	let post;
+	try {
+		post = await prisma.post.findFirst({
+			where: {
+				id: input.postId,
+				deletedAt: null,
+			},
+			include: {
+				author: {
+					select: {
+						id: true,
+						nickname: true,
+						minecraftUuid: true,
+					},
 				},
 			},
-		},
-	});
+		});
+	} catch (error) {
+		if (!isMissingPostBoardMetadataColumnError(error)) {
+			throw error;
+		}
+		console.warn("[post-detail] post board columns missing; using legacy tag metadata fallback");
+		post = await prisma.post.findFirst({
+			where: {
+				id: input.postId,
+				deletedAt: null,
+			},
+			include: {
+				author: {
+					select: {
+						id: true,
+						nickname: true,
+						minecraftUuid: true,
+					},
+				},
+			},
+		});
+	}
 	const queryPostMs = performance.now() - queryPostStart;
 
 	if (!post) {
@@ -188,13 +213,15 @@ async function getPostDetailCoreUncached(
 		rootLimit: INITIAL_DETAIL_ROOT_LIMIT,
 	});
 	const queryCommentsMs = commentsResult.queryCommentsMs;
-	const postTagMetadata = parsePostTagMetadata(post.tags);
+	const postTagMetadata = parsePostTagMetadata(post.tags, post.board, post.serverAddress);
 
 	const serializeStart = performance.now();
 	const responsePost = {
 		id: post.id,
 		title: post.title,
 		content: post.content,
+		board: normalizeBoardType(post.board ?? postTagMetadata.board),
+		serverAddress: post.serverAddress ?? postTagMetadata.serverAddress,
 		tags: postTagMetadata.tags,
 		likes: post.likes,
 		views: post.views,

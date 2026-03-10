@@ -12,6 +12,7 @@ import { toSessionUserId } from "@/lib/session-user";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 import { Suspense } from "react";
 import { resolveActiveUserFromSession } from "@/lib/active-user";
+import { getBoardPath } from "@/lib/post-board";
 
 export const preferredRegion = "icn1";
 
@@ -20,7 +21,7 @@ interface PostDetailPageProps {
 }
 
 interface PostDetailContentProps {
-	postId: number;
+	data: NonNullable<Awaited<ReturnType<typeof getPostDetail>>>;
 	sessionUserId: number;
 }
 
@@ -29,7 +30,7 @@ function renderNotFound() {
 		<div className="flex flex-col items-center justify-center min-h-[400px] text-center">
 			<h2 className="text-2xl font-bold mb-4">게시글을 찾을 수 없습니다</h2>
 			<p className="text-text-secondary mb-6">삭제되었거나 존재하지 않는 게시글입니다</p>
-			<Link href="/" className="btn btn-primary">
+			<Link href="/develope" className="btn btn-primary">
 				목록으로 돌아가기
 			</Link>
 		</div>
@@ -47,15 +48,11 @@ function PostDetailFallback() {
 	);
 }
 
-async function PostDetailContent({ postId, sessionUserId }: PostDetailContentProps) {
-	const data = await getPostDetail({ postId, sessionUserId });
-	if (!data?.post) {
-		return renderNotFound();
-	}
-
+async function PostDetailContent({ data, sessionUserId }: PostDetailContentProps) {
 	const { post, comments, commentsPage, readMarker } = data;
 	const totalCommentCount = readMarker.totalCommentCount;
 	const isOwner = sessionUserId === post.author_id;
+	const backHref = getBoardPath(post.board);
 
 	return (
 		<PostLikeStateProvider
@@ -69,12 +66,14 @@ async function PostDetailContent({ postId, sessionUserId }: PostDetailContentPro
 					title={post.title}
 					authorName={post.author_name}
 					authorMinecraftUuid={post.author_uuid}
+					board={post.board}
+					serverAddress={post.serverAddress}
 					createdAt={post.createdAt}
 					initialLikes={post.likes}
 					initialLiked={post.user_liked}
 					initialSubscribed={post.user_subscribed}
 					commentCount={totalCommentCount}
-					backHref="/"
+					backHref={backHref}
 				/>
 				<div className="mt-4 mb-6 relative">
 					{isOwner && (
@@ -90,8 +89,20 @@ async function PostDetailContent({ postId, sessionUserId }: PostDetailContentPro
 							{post.title}
 						</h1>
 
-						{post.tags && post.tags.length > 0 && (
-							<div className="flex flex-wrap gap-2 mb-4">
+					{post.board === "sinmungo" && post.serverAddress ? (
+						<div className="mb-4 flex flex-wrap gap-2">
+							<button
+								type="button"
+								onClick={() => {
+									void navigator.clipboard?.writeText(post.serverAddress ?? "");
+								}}
+								className="inline-flex items-center rounded border border-border bg-bg-tertiary px-3 py-1 text-xs font-semibold text-text-secondary hover:bg-bg-primary hover:text-text-primary"
+							>
+								서버 주소 복사: {post.serverAddress}
+							</button>
+						</div>
+					) : post.tags && post.tags.length > 0 && (
+						<div className="flex flex-wrap gap-2 mb-4">
 								{post.tags.map((tag: string) => (
 									<span
 										key={tag}
@@ -148,7 +159,7 @@ async function PostDetailContent({ postId, sessionUserId }: PostDetailContentPro
 export default async function PostDetailPage({ params }: PostDetailPageProps) {
 	const { id } = await params;
 	const session = await auth();
-	const activeUser = await resolveActiveUserFromSession(session);
+	const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
 	if (!activeUser.ok) {
 		if (activeUser.error === "pending_approval") {
 			redirect("/pending");
@@ -165,10 +176,17 @@ export default async function PostDetailPage({ params }: PostDetailPageProps) {
 	if (!Number.isInteger(postId)) {
 		return renderNotFound();
 	}
+	const previewDetail = await getPostDetail({ postId, sessionUserId });
+	if (!previewDetail) {
+		return renderNotFound();
+	}
+	if (previewDetail.post.board === "develope" && activeUser.context.isApproved !== 1) {
+		redirect("/pending");
+	}
 
 	return (
 		<Suspense fallback={<PostDetailFallback />}>
-			<PostDetailContent postId={postId} sessionUserId={sessionUserId} />
+			<PostDetailContent data={previewDetail} sessionUserId={sessionUserId} />
 		</Suspense>
 	);
 }
