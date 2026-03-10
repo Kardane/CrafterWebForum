@@ -51,6 +51,8 @@ describe("PostSubscriptionButton", () => {
 				sidebarFallbackItem={{
 					title: "alpha",
 					href: "/posts/11",
+					board: "develope",
+					serverAddress: null,
 					author: { nickname: "alice", minecraftUuid: null },
 					commentCount: 3,
 					latestCommentId: null,
@@ -104,6 +106,8 @@ describe("PostSubscriptionButton", () => {
 				sidebarFallbackItem={{
 					title: "alpha",
 					href: "/posts/11",
+					board: "develope",
+					serverAddress: null,
 					author: { nickname: "alice", minecraftUuid: null },
 					commentCount: 3,
 					latestCommentId: null,

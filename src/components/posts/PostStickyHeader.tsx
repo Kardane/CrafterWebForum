@@ -5,12 +5,15 @@ import { ArrowDown, ArrowLeft, ArrowUp, MessageCircle, Pin } from "lucide-react"
 import LikeButton from "./LikeButton";
 import PostSubscriptionButton from "./PostSubscriptionButton";
 import { OPEN_PINNED_COMMENTS_EVENT, SCROLL_COMMENT_FEED_BOTTOM_EVENT } from "@/constants/comments";
+import { type PostBoardType } from "@/lib/post-board";
 
 interface PostStickyHeaderProps {
 	postId: number;
 	title: string;
 	authorName: string;
 	authorMinecraftUuid?: string | null;
+	board?: PostBoardType;
+	serverAddress?: string | null;
 	createdAt: string | Date;
 	commentCount: number;
 	initialLikes: number;
@@ -37,6 +40,8 @@ export default function PostStickyHeader({
 	title,
 	authorName,
 	authorMinecraftUuid = null,
+	board = "develope",
+	serverAddress = null,
 	createdAt,
 	commentCount,
 	initialLikes,
@@ -81,6 +86,8 @@ export default function PostStickyHeader({
 						sidebarFallbackItem={{
 							title,
 							href: `/posts/${postId}`,
+							board,
+							serverAddress,
 							author: {
 								nickname: authorName,
 								minecraftUuid: authorMinecraftUuid,

@@ -14,6 +14,8 @@ import { toSessionUserId } from "@/lib/session-user";
 interface SidebarFallbackPostItem {
 	title: string;
 	href: string;
+	board: "develope" | "sinmungo";
+	serverAddress: string | null;
 	author: {
 		nickname: string;
 		minecraftUuid: string | null;
@@ -80,6 +82,8 @@ export default function PostSubscriptionButton({
 							postId,
 							title: sidebarFallbackItem.title,
 							href: sidebarFallbackItem.href,
+							board: sidebarFallbackItem.board,
+							serverAddress: sidebarFallbackItem.serverAddress,
 							lastActivityAt: new Date().toISOString(),
 							author: {
 								nickname: sidebarFallbackItem.author.nickname,

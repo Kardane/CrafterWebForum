@@ -5,6 +5,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import PostStickyHeader from "@/components/posts/PostStickyHeader";
 import { SCROLL_COMMENT_FEED_BOTTOM_EVENT } from "@/constants/comments";
 
+vi.mock("next-auth/react", () => ({
+	useSession: () => ({
+		data: {
+			user: {
+				id: "1",
+			},
+		},
+	}),
+}));
+
 vi.mock("next/link", () => ({
 	default: ({ children, href, className }: { children: ReactNode; href: string; className?: string }) => (
 		<a href={href} className={className}>
