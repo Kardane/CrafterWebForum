@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 import { createServerTimingHeader } from "@/lib/server-timing";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
-import { isReservedPostTag, toStoredTags } from "@/lib/post-board";
+import { isReservedPostTag, normalizeBoardType, toStoredTags } from "@/lib/post-board";
 import { resolveActiveUserFromSession } from "@/lib/active-user";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
+import { isMissingPostBoardMetadataColumnError } from "@/lib/db-schema-guard";
 import { z } from "zod";
 
 export const preferredRegion = "icn1";
@@ -24,6 +25,8 @@ function normalizeTags(value: unknown) {
 const postUpdateBodySchema = z.object({
 	title: z.string().trim().min(1),
 	content: z.string().trim().min(1),
+	board: z.string().optional(),
+	serverAddress: z.string().trim().optional().nullable(),
 	tags: z.array(z.string()).optional().default([]),
 });
 
@@ -38,7 +41,7 @@ export async function GET(
 
 		const authStart = performance.now();
 		const session = await auth();
-		const activeUser = await resolveActiveUserFromSession(session);
+		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
 		if (!activeUser.ok) {
 			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
@@ -54,6 +57,9 @@ export async function GET(
 		const detail = await getPostDetail({ postId, sessionUserId });
 		if (!detail) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
+		}
+		if (detail.post.board === "develope" && activeUser.context.isApproved !== 1) {
+			return NextResponse.json({ error: "pending_approval" }, { status: 403 });
 		}
 
 		const response = NextResponse.json({
@@ -124,18 +130,46 @@ export async function PATCH(
 		if (post.authorId !== sessionUserId && activeUser.context.role !== "admin") {
 			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 		}
+		const board = normalizeBoardType(parsedBody.data.board ?? post.board);
+		const serverAddress = parsedBody.data.serverAddress?.trim() || null;
+		if (board === "sinmungo" && !serverAddress) {
+			return NextResponse.json({ error: "server_address_required" }, { status: 400 });
+		}
 		const previousTags = parsePostTags(post.tags);
 		const nextTags = normalizeTags(tags);
 
-		await prisma.post.update({
-			where: { id: postId },
-			data: {
-				title,
-				content,
-				tags: toStoredTags({ tags: nextTags }),
-				updatedAt: new Date(),
-			},
+		const storedTags = toStoredTags({
+			tags: nextTags,
+			board,
+			serverAddress,
 		});
+		try {
+			await prisma.post.update({
+				where: { id: postId },
+				data: {
+					title,
+					content,
+					board,
+					serverAddress: board === "sinmungo" ? serverAddress : null,
+					tags: storedTags,
+					updatedAt: new Date(),
+				},
+			});
+		} catch (error) {
+			if (!isMissingPostBoardMetadataColumnError(error)) {
+				throw error;
+			}
+			console.warn("[API] PATCH /api/posts/[id] post board columns missing; storing board metadata in tags only");
+			await prisma.post.update({
+				where: { id: postId },
+				data: {
+					title,
+					content,
+					tags: storedTags,
+					updatedAt: new Date(),
+				},
+			});
+		}
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId,

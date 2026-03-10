@@ -93,6 +93,8 @@ describe("GET /api/posts/[id]", () => {
 			title: "title",
 			content: "content",
 			tags: "[]",
+			board: "sinmungo",
+			serverAddress: "mc.sin.kr",
 			commentCount: 2,
 			likes: 2,
 			views: 7,
@@ -215,6 +217,8 @@ describe("GET /api/posts/[id]", () => {
 			title: "title",
 			content: "content",
 			tags: "[]",
+			board: "develope",
+			serverAddress: null,
 			commentCount: 1,
 			likes: 2,
 			views: 7,
@@ -283,6 +287,8 @@ describe("GET /api/posts/[id]", () => {
 			title: "title",
 			content: "content",
 			tags: "[]",
+			board: "develope",
+			serverAddress: null,
 			commentCount: 0,
 			likes: 2,
 			views: 7,
@@ -310,5 +316,45 @@ describe("GET /api/posts/[id]", () => {
 		expect(res.status).toBe(200);
 		const body = (await res.json()) as { post: { user_subscribed: boolean } };
 		expect(body.post.user_subscribed).toBe(false);
+	});
+
+	it("returns board and serverAddress metadata in detail response", async () => {
+		authMock.mockResolvedValue({ user: { id: "1" } });
+		postFindFirstMock.mockResolvedValue({
+			id: 55,
+			title: "sinmungo title",
+			content: "content",
+			tags: "[]",
+			board: "sinmungo",
+			serverAddress: "mc.sinmungo.kr",
+			commentCount: 0,
+			likes: 0,
+			views: 0,
+			createdAt: new Date("2026-01-01T00:00:00.000Z"),
+			updatedAt: new Date("2026-01-01T01:00:00.000Z"),
+			authorId: 1,
+			author: {
+				id: 1,
+				nickname: "writer",
+				minecraftUuid: "uuid-1",
+			},
+		});
+		likeFindFirstMock.mockResolvedValue(null);
+		postSubscriptionFindUniqueMock.mockResolvedValue(null);
+		commentCountMock.mockResolvedValue(0);
+		commentFindManyMock.mockResolvedValueOnce([]);
+		fetchCommentSubtreeRowsByRootIdsMock.mockResolvedValue([]);
+		postReadFindUniqueMock.mockResolvedValue(null);
+
+		const { GET } = await import("@/app/api/posts/[id]/route");
+		const req = new Request("http://localhost/api/posts/55");
+		const res = await GET(req as never, { params: Promise.resolve({ id: "55" }) });
+		const body = (await res.json()) as { post: { board: string; serverAddress: string | null } };
+
+		expect(res.status).toBe(200);
+		expect(body.post).toMatchObject({
+			board: "sinmungo",
+			serverAddress: "mc.sinmungo.kr",
+		});
 	});
 	});
