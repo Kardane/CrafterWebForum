@@ -3,8 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { unstable_cache } from "next/cache";
 import { getPostListCacheTags } from "@/lib/cache-tags";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
-import { type PostBoardType, parsePostTagMetadata } from "@/lib/post-board";
-import { isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
+import { type PostBoardType, normalizeBoardType, parsePostTagMetadata } from "@/lib/post-board";
+import { isMissingPostBoardMetadataColumnError, isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 12;
@@ -138,7 +138,7 @@ function normalizeListPostsInput(input: ListPostsInput): NormalizedListPostsInpu
 	const page = normalizePositiveInt(input.page, DEFAULT_PAGE);
 	const limit = normalizePositiveInt(input.limit, DEFAULT_LIMIT, MAX_LIMIT);
 	const tag = input.tag?.trim() || null;
-	const board = "forum";
+	const board = normalizeBoardType(input.board);
 	const search = input.search?.trim() ?? "";
 	const sort = input.sort ?? "activity";
 	return {
@@ -192,6 +192,14 @@ async function listPostsCoreUncached(
 	const skip = (page - 1) * limit;
 	const andConditions: Prisma.PostWhereInput[] = [{ deletedAt: null }];
 
+	if (input.board === "sinmungo") {
+		andConditions.push({ board: "sinmungo" });
+	} else {
+		andConditions.push({
+			OR: [{ board: "develope" }, { board: null }],
+		});
+	}
+
 	if (tag) {
 		andConditions.push({
 			tags: {
@@ -199,10 +207,6 @@ async function listPostsCoreUncached(
 			},
 		});
 	}
-
-	andConditions.push({
-		tags: { not: { contains: "\"__sys:board:ombudsman\"" } },
-	});
 
 	if (search.length > 0) {
 		const searchConditions: Prisma.PostWhereInput[] = [
@@ -223,40 +227,89 @@ async function listPostsCoreUncached(
 	const orderBy = resolveOrderBy(input.sort);
 
 	const queryMainStart = performance.now();
-	const posts = await prisma.post.findMany({
-		where: whereCondition,
-		take: limit,
-		skip,
-		orderBy,
-		include: {
-			author: {
-				select: {
-					nickname: true,
-					minecraftUuid: true,
+	let posts: Array<{
+		id: number;
+		title: string;
+		content: string;
+		tags: string | null;
+		board: string | null;
+		serverAddress: string | null;
+		likes: number;
+		views: number;
+		createdAt: Date;
+		updatedAt: Date;
+		commentCount: number;
+		author: { nickname: string; minecraftUuid: string | null };
+	}>;
+	let total: number;
+	try {
+		posts = await prisma.post.findMany({
+			where: whereCondition,
+			take: limit,
+			skip,
+			orderBy,
+			include: {
+				author: {
+					select: {
+						nickname: true,
+						minecraftUuid: true,
+					},
 				},
 			},
-		},
-	});
-	let total: number;
-	if (input.skipExactTotal) {
-		const hasMore = posts.length === limit;
-		total = hasMore ? page * limit + 1 : skip + posts.length;
-	} else {
-		total = await prisma.post.count({ where: whereCondition });
+		});
+		if (input.skipExactTotal) {
+			const hasMore = posts.length === limit;
+			total = hasMore ? page * limit + 1 : skip + posts.length;
+		} else {
+			total = await prisma.post.count({ where: whereCondition });
+		}
+	} catch (error) {
+		if (!isMissingPostBoardMetadataColumnError(error)) {
+			throw error;
+		}
+		console.warn("[posts-service] post board columns missing; using legacy tag metadata fallback");
+		const legacyWhereCondition =
+			input.board === "sinmungo"
+				? {
+					AND: [whereCondition, { tags: { contains: `\"${"__sys:board:ombudsman"}\"` } }],
+				}
+				: {
+					AND: [whereCondition, { OR: [{ tags: null }, { tags: { not: { contains: `\"${"__sys:board:ombudsman"}\"` } } }] }],
+				};
+		posts = (await prisma.post.findMany({
+			where: legacyWhereCondition,
+			take: limit,
+			skip,
+			orderBy,
+			include: {
+				author: {
+					select: {
+						nickname: true,
+						minecraftUuid: true,
+					},
+				},
+			},
+		})) as typeof posts;
+		if (input.skipExactTotal) {
+			const hasMore = posts.length === limit;
+			total = hasMore ? page * limit + 1 : skip + posts.length;
+		} else {
+			total = await prisma.post.count({ where: legacyWhereCondition });
+		}
 	}
 	const queryMainMs = performance.now() - queryMainStart;
 
 	const serializeStart = performance.now();
 	const formattedPosts = posts.map((post) => {
-		const metadata = parsePostTagMetadata(post.tags);
+		const metadata = parsePostTagMetadata(post.tags, post.board, post.serverAddress);
 		return {
 			id: post.id,
 			title: post.title,
 			preview: getPreviewText(post.content),
 			thumbnailUrl: extractFirstImage(post.content),
 			tags: metadata.tags,
-			board: metadata.board,
-			serverAddress: metadata.serverAddress,
+			board: normalizeBoardType(post.board ?? metadata.board),
+			serverAddress: post.serverAddress ?? metadata.serverAddress,
 			likes: post.likes,
 			views: post.views,
 			createdAt: post.createdAt.toISOString(),

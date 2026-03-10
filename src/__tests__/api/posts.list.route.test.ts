@@ -211,7 +211,55 @@ describe("GET /api/posts", () => {
 		expect(postSubscriptionFindManyMock).not.toHaveBeenCalled();
 		expect(postFindManyMock).toHaveBeenCalledWith(
 			expect.objectContaining({
+				where: expect.objectContaining({
+					AND: expect.arrayContaining([
+						expect.objectContaining({
+							OR: expect.arrayContaining([{ board: "develope" }, { board: null }]),
+						}),
+					]),
+				}),
 				orderBy: { updatedAt: "desc" },
+			})
+		);
+	});
+
+	it("filters sinmungo board and exposes serverAddress metadata", async () => {
+		authMock.mockResolvedValue(null);
+		postFindManyMock.mockResolvedValue([
+			{
+				id: 51,
+				title: "ombudsman",
+				content: "신고 내용",
+				tags: "[]",
+				board: "sinmungo",
+				serverAddress: "mc.sin.kr",
+				likes: 0,
+				views: 0,
+				createdAt: new Date("2026-02-09T00:00:00Z"),
+				updatedAt: new Date("2026-02-09T00:00:00Z"),
+				author: { nickname: "guest", minecraftUuid: null },
+				commentCount: 1,
+			},
+		]);
+		postCountMock.mockResolvedValue(1);
+
+		const { GET } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts?board=sinmungo");
+
+		const res = await GET(req as never);
+		expect(res.status).toBe(200);
+		const payload = (await res.json()) as {
+			posts: Array<{ board: string; serverAddress: string | null }>;
+		};
+		expect(payload.posts[0]).toMatchObject({
+			board: "sinmungo",
+			serverAddress: "mc.sin.kr",
+		});
+		expect(postFindManyMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					AND: expect.arrayContaining([{ board: "sinmungo" }]),
+				}),
 			})
 		);
 	});
