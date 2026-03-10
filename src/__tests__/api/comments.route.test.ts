@@ -5,6 +5,7 @@ const commentFindUniqueMock = vi.fn();
 const commentUpdateMock = vi.fn();
 const commentDeleteManyMock = vi.fn();
 const postUpdateMock = vi.fn();
+const postFindUniqueMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -18,6 +19,7 @@ vi.mock("@/lib/prisma", () => ({
 			deleteMany: commentDeleteManyMock,
 		},
 		post: {
+			findUnique: postFindUniqueMock,
 			update: postUpdateMock,
 		},
 	},
@@ -31,6 +33,7 @@ describe("PATCH /api/comments/[id]", () => {
 		commentUpdateMock.mockReset();
 		commentDeleteManyMock.mockReset();
 		postUpdateMock.mockReset();
+		postFindUniqueMock.mockReset();
 	});
 
 	it("returns 401 when unauthenticated", async () => {
@@ -89,6 +92,7 @@ describe("POST /api/comments/[id]/pin", () => {
 		commentUpdateMock.mockReset();
 		commentDeleteManyMock.mockReset();
 		postUpdateMock.mockReset();
+		postFindUniqueMock.mockReset();
 	});
 
 	it("returns 403 when caller is not admin", async () => {
@@ -127,6 +131,7 @@ describe("DELETE /api/comments/[id]", () => {
 		commentFindUniqueMock.mockReset();
 		commentDeleteManyMock.mockReset();
 		postUpdateMock.mockReset();
+		postFindUniqueMock.mockReset();
 	});
 
 	it("returns 401 when unauthenticated", async () => {
@@ -153,6 +158,7 @@ describe("DELETE /api/comments/[id]", () => {
 		authMock.mockResolvedValue({ user: { id: "5", role: "user" } });
 		commentFindUniqueMock.mockResolvedValue({ id: 1, authorId: 5, postId: 3 });
 		commentDeleteManyMock.mockResolvedValue({ count: 1 });
+		postFindUniqueMock.mockResolvedValue({ tags: null, commentCount: 4 });
 		postUpdateMock.mockResolvedValue({ id: 3 });
 
 		const { DELETE } = await import("@/app/api/comments/[id]/route");
@@ -167,6 +173,7 @@ describe("DELETE /api/comments/[id]", () => {
 		authMock.mockResolvedValue({ user: { id: "2", role: "admin" } });
 		commentFindUniqueMock.mockResolvedValue({ id: 1, authorId: 9, postId: 3 });
 		commentDeleteManyMock.mockResolvedValue({ count: 1 });
+		postFindUniqueMock.mockResolvedValue({ tags: null, commentCount: 4 });
 		postUpdateMock.mockResolvedValue({ id: 3 });
 
 		const { DELETE } = await import("@/app/api/comments/[id]/route");
@@ -175,5 +182,29 @@ describe("DELETE /api/comments/[id]", () => {
 
 		expect(res.status).toBe(200);
 		expect(commentDeleteManyMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps comment deletion working when Post.commentCount column is missing", async () => {
+		authMock.mockResolvedValue({ user: { id: "5", role: "user" } });
+		commentFindUniqueMock.mockResolvedValue({ id: 1, authorId: 5, postId: 3 });
+		commentDeleteManyMock.mockResolvedValue({ count: 2 });
+		postFindUniqueMock
+			.mockResolvedValueOnce({ tags: null })
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: table Post has no column named commentCount"));
+		postUpdateMock.mockResolvedValue({ id: 3 });
+
+		const { DELETE } = await import("@/app/api/comments/[id]/route");
+		const req = new Request("http://localhost/api/comments/1", { method: "DELETE" });
+		const res = await DELETE(req as never, { params: Promise.resolve({ id: "1" }) });
+
+		expect(res.status).toBe(200);
+		expect(postUpdateMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: {
+					updatedAt: expect.any(Date),
+				},
+				select: { id: true },
+			})
+		);
 	});
 });

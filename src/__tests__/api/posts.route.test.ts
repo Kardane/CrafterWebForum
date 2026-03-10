@@ -232,7 +232,7 @@ describe("POST /api/posts", () => {
 	it("falls back when Post.commentCount column is missing during sinmungo creation", async () => {
 		authMock.mockResolvedValue({ user: { id: "5" } });
 		postCreateMock
-			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.commentCount"))
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: table Post has no column named commentCount"))
 			.mockResolvedValueOnce({ id: 779 });
 		postSubscriptionUpsertMock.mockResolvedValue({ userId: 5, postId: 779 });
 

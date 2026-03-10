@@ -23,9 +23,13 @@ function hasMissingColumnPattern(message: string, tableName: string, columnName:
 	return (
 		message.includes(`no such column: ${tableName}.${columnName}`) ||
 		message.includes(`no such column: main.${tableName}.${columnName}`) ||
+		message.includes(`table ${tableName} has no column named ${columnName}`) ||
+		message.includes(`table '${tableName}' has no column named '${columnName}'`) ||
+		message.includes(`table \`${tableName}\` has no column named \`${columnName}\``) ||
 		message.includes(`column \"${columnName}\" does not exist`) ||
 		message.includes(`unknown column '${columnName}'`) ||
 		(message.includes(tableName) && message.includes(columnName) && message.includes("no such column")) ||
+		(message.includes(tableName) && message.includes(columnName) && message.includes("has no column named")) ||
 		(message.includes(tableName) && message.includes(columnName) && message.includes("does not exist"))
 	);
 }
