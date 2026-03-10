@@ -50,6 +50,15 @@ export function isMissingPostServerAddressColumnError(error: unknown): boolean {
 	return hasMissingColumnPattern(message, "post", "serveraddress");
 }
 
+export function isMissingPostCommentCountColumnError(error: unknown): boolean {
+	const message = toErrorMessage(error).toLowerCase();
+	return hasMissingColumnPattern(message, "post", "commentcount");
+}
+
 export function isMissingPostBoardMetadataColumnError(error: unknown): boolean {
 	return isMissingPostBoardColumnError(error) || isMissingPostServerAddressColumnError(error);
+}
+
+export function isMissingLegacyPostListColumnError(error: unknown): boolean {
+	return isMissingPostBoardMetadataColumnError(error) || isMissingPostCommentCountColumnError(error);
 }

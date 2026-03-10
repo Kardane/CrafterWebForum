@@ -304,6 +304,97 @@ describe("GET /api/posts", () => {
 		);
 	});
 
+	it("falls back when Post.commentCount column is missing", async () => {
+		authMock.mockResolvedValue(null);
+		postFindManyMock
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.commentCount"))
+			.mockResolvedValueOnce([
+				{
+					id: 71,
+					title: "legacy feed",
+					content: "legacy content",
+					tags: '["질문"]',
+					likes: 2,
+					views: 9,
+					createdAt: new Date("2026-02-12T00:00:00Z"),
+					updatedAt: new Date("2026-02-12T01:00:00Z"),
+					author: { nickname: "legacy-user", minecraftUuid: null },
+				},
+			]);
+		postCountMock.mockResolvedValue(1);
+		commentGroupByMock.mockResolvedValue([
+			{ postId: 71, _count: { _all: 3 } },
+		]);
+
+		const { GET } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts?board=develope");
+
+		const res = await GET(req as never);
+		expect(res.status).toBe(200);
+		const payload = (await res.json()) as {
+			posts: Array<{ id: number; commentCount: number; board: string; tags: string[] }>;
+		};
+		expect(payload.posts[0]).toMatchObject({
+			id: 71,
+			commentCount: 3,
+			board: "develope",
+			tags: ["질문"],
+		});
+		expect(postFindManyMock).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				select: expect.objectContaining({
+					id: true,
+					title: true,
+					tags: true,
+					likes: true,
+					views: true,
+					createdAt: true,
+					updatedAt: true,
+					author: expect.any(Object),
+				}),
+			})
+		);
+	});
+
+	it("falls back to legacy tag metadata when Post board columns are missing", async () => {
+		authMock.mockResolvedValue(null);
+		postFindManyMock
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.board"))
+			.mockResolvedValueOnce([
+				{
+					id: 81,
+					title: "legacy sinmungo",
+					content: "legacy report",
+					tags: '["__sys:server:mc.legacy.kr","__sys:board:ombudsman"]',
+					likes: 0,
+					views: 1,
+					createdAt: new Date("2026-02-12T00:00:00Z"),
+					updatedAt: new Date("2026-02-12T01:00:00Z"),
+					author: { nickname: "legacy-admin", minecraftUuid: null },
+				},
+			]);
+		postCountMock.mockResolvedValue(1);
+		commentGroupByMock.mockResolvedValue([
+			{ postId: 81, _count: { _all: 1 } },
+		]);
+
+		const { GET } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts?board=sinmungo");
+
+		const res = await GET(req as never);
+		expect(res.status).toBe(200);
+		const payload = (await res.json()) as {
+			posts: Array<{ id: number; board: string; serverAddress: string | null; commentCount: number }>;
+		};
+		expect(payload.posts[0]).toMatchObject({
+			id: 81,
+			board: "sinmungo",
+			serverAddress: "mc.legacy.kr",
+			commentCount: 1,
+		});
+	});
+
 	it("search query includes comment content condition when searchInComments=1", async () => {
 		authMock.mockResolvedValue(null);
 		postFindManyMock.mockResolvedValue([]);

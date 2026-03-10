@@ -9,7 +9,7 @@ import {
 	normalizeBoardType,
 	parsePostTagMetadata,
 } from "@/lib/post-board";
-import { isMissingPostBoardMetadataColumnError, isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
+import { isMissingLegacyPostListColumnError, isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 
 const DEFAULT_PAGE = 1;
 const DEFAULT_LIMIT = 12;
@@ -115,6 +115,18 @@ interface CachedListPostsCoreResult {
 	};
 }
 
+interface LegacyListPostRow {
+	id: number;
+	title: string;
+	content: string;
+	tags: string | null;
+	likes: number;
+	views: number;
+	createdAt: Date;
+	updatedAt: Date;
+	author: { nickname: string; minecraftUuid: string | null };
+}
+
 function normalizePositiveInt(value: number | undefined, fallback: number, max?: number) {
 	if (!Number.isInteger(value) || !value || value <= 0) {
 		return fallback;
@@ -133,6 +145,19 @@ function resolveOrderBy(sort: string | null | undefined) {
 			return [{ likes: "desc" }, { createdAt: "desc" }] satisfies Prisma.PostOrderByWithRelationInput[];
 		case "comments":
 			return { commentCount: "desc" } satisfies Prisma.PostOrderByWithRelationInput;
+		case "activity":
+		default:
+			return { updatedAt: "desc" } satisfies Prisma.PostOrderByWithRelationInput;
+	}
+}
+
+function resolveLegacyOrderBy(sort: string | null | undefined) {
+	switch (sort) {
+		case "oldest":
+			return { createdAt: "asc" } satisfies Prisma.PostOrderByWithRelationInput;
+		case "likes":
+			return [{ likes: "desc" }, { createdAt: "desc" }] satisfies Prisma.PostOrderByWithRelationInput[];
+		case "comments":
 		case "activity":
 		default:
 			return { updatedAt: "desc" } satisfies Prisma.PostOrderByWithRelationInput;
@@ -186,52 +211,180 @@ function buildListPostsCacheKey(input: NormalizedListPostsCoreInput) {
 	];
 }
 
-async function listPostsCoreUncached(
-	input: NormalizedListPostsCoreInput
-): Promise<CachedListPostsCoreResult> {
-	const totalStart = performance.now();
-	const page = input.page;
-	const limit = input.limit;
-	const tag = input.tag;
-	const search = input.search;
-	const skip = (page - 1) * limit;
+function buildBaseConditions(input: NormalizedListPostsCoreInput): Prisma.PostWhereInput[] {
 	const andConditions: Prisma.PostWhereInput[] = [{ deletedAt: null }];
 
-	if (input.board === "sinmungo") {
-		andConditions.push({
-			OR: [{ board: "sinmungo" }, { tags: { contains: `\"${OMBUDSMAN_BOARD_MARKER}\"` } }],
-		});
-	} else {
-		andConditions.push({
-			NOT: {
-				OR: [{ board: "sinmungo" }, { tags: { contains: `\"${OMBUDSMAN_BOARD_MARKER}\"` } }],
-			},
-		});
-	}
-
-	if (tag) {
+	if (input.tag) {
 		andConditions.push({
 			tags: {
-				contains: `"${tag}"`,
+				contains: `"${input.tag}"`,
 			},
 		});
 	}
 
-	if (search.length > 0) {
+	if (input.search.length > 0) {
 		const searchConditions: Prisma.PostWhereInput[] = [
-			{ title: { contains: search } },
-			{ content: { contains: search } },
+			{ title: { contains: input.search } },
+			{ content: { contains: input.search } },
 		];
 		if (input.searchInComments) {
-			searchConditions.push({ comments: { some: { content: { contains: search } } } });
+			searchConditions.push({ comments: { some: { content: { contains: input.search } } } });
 		}
 		andConditions.push({
 			OR: searchConditions,
 		});
 	}
 
-	const whereCondition: Prisma.PostWhereInput =
-		andConditions.length === 1 ? andConditions[0] : { AND: andConditions };
+	return andConditions;
+}
+
+function buildBoardCondition(board: PostBoardType): Prisma.PostWhereInput {
+	if (board === "sinmungo") {
+		return {
+			OR: [{ board: "sinmungo" }, { tags: { contains: `"${OMBUDSMAN_BOARD_MARKER}"` } }],
+		};
+	}
+
+	return {
+		NOT: {
+			OR: [{ board: "sinmungo" }, { tags: { contains: `"${OMBUDSMAN_BOARD_MARKER}"` } }],
+		},
+	};
+}
+
+function buildLegacyBoardCondition(board: PostBoardType): Prisma.PostWhereInput {
+	if (board === "sinmungo") {
+		return {
+			tags: { contains: `"${OMBUDSMAN_BOARD_MARKER}"` },
+		};
+	}
+
+	return {
+		OR: [{ tags: null }, { tags: { not: { contains: `"${OMBUDSMAN_BOARD_MARKER}"` } } }],
+	};
+}
+
+function composeWhereCondition(
+	baseConditions: Prisma.PostWhereInput[],
+	boardCondition: Prisma.PostWhereInput
+): Prisma.PostWhereInput {
+	const andConditions = [...baseConditions, boardCondition];
+	return andConditions.length === 1 ? andConditions[0] : { AND: andConditions };
+}
+
+async function loadCommentCountByPostId(postIds: number[]) {
+	if (postIds.length === 0) {
+		return new Map<number, number>();
+	}
+
+	const rows = await prisma.comment.groupBy({
+		by: ["postId"],
+		where: {
+			postId: {
+				in: postIds,
+			},
+		},
+		_count: {
+			_all: true,
+		},
+	});
+
+	return new Map(rows.map((row) => [row.postId, row._count._all]));
+}
+
+async function loadLegacyPostsCore(
+	input: NormalizedListPostsCoreInput,
+	whereCondition: Prisma.PostWhereInput,
+	skip: number,
+	limit: number
+) {
+	const orderBy = resolveLegacyOrderBy(input.sort);
+	let total: number;
+
+	if (input.sort === "comments") {
+		const allRows = await prisma.post.findMany({
+			where: whereCondition,
+			orderBy,
+			select: {
+				id: true,
+				title: true,
+				content: true,
+				tags: true,
+				likes: true,
+				views: true,
+				createdAt: true,
+				updatedAt: true,
+				author: {
+					select: {
+						nickname: true,
+						minecraftUuid: true,
+					},
+				},
+			},
+		});
+		const commentCountByPostId = await loadCommentCountByPostId(allRows.map((row) => row.id));
+		const sortedRows = [...allRows].sort((left, right) => {
+			const countDiff = (commentCountByPostId.get(right.id) ?? 0) - (commentCountByPostId.get(left.id) ?? 0);
+			if (countDiff !== 0) {
+				return countDiff;
+			}
+			return right.createdAt.getTime() - left.createdAt.getTime();
+		});
+
+		return {
+			rows: sortedRows.slice(skip, skip + limit),
+			total: allRows.length,
+			commentCountByPostId,
+		};
+	}
+
+	const rows: LegacyListPostRow[] = await prisma.post.findMany({
+		where: whereCondition,
+		take: limit,
+		skip,
+		orderBy,
+		select: {
+			id: true,
+			title: true,
+			content: true,
+			tags: true,
+			likes: true,
+			views: true,
+			createdAt: true,
+			updatedAt: true,
+			author: {
+				select: {
+					nickname: true,
+					minecraftUuid: true,
+				},
+			},
+		},
+	});
+
+	if (input.skipExactTotal) {
+		const hasMore = rows.length === limit;
+		total = hasMore ? input.page * limit + 1 : skip + rows.length;
+	} else {
+		total = await prisma.post.count({ where: whereCondition });
+	}
+
+	return {
+		rows,
+		total,
+		commentCountByPostId: await loadCommentCountByPostId(rows.map((row) => row.id)),
+	};
+}
+
+async function listPostsCoreUncached(
+	input: NormalizedListPostsCoreInput
+): Promise<CachedListPostsCoreResult> {
+	const totalStart = performance.now();
+	const page = input.page;
+	const limit = input.limit;
+	const skip = (page - 1) * limit;
+	const baseConditions = buildBaseConditions(input);
+	const whereCondition = composeWhereCondition(baseConditions, buildBoardCondition(input.board));
+	const legacyWhereCondition = composeWhereCondition(baseConditions, buildLegacyBoardCondition(input.board));
 
 	const orderBy = resolveOrderBy(input.sort);
 
@@ -257,7 +410,18 @@ async function listPostsCoreUncached(
 			take: limit,
 			skip,
 			orderBy,
-			include: {
+			select: {
+				id: true,
+				title: true,
+				content: true,
+				tags: true,
+				board: true,
+				serverAddress: true,
+				likes: true,
+				views: true,
+				createdAt: true,
+				updatedAt: true,
+				commentCount: true,
 				author: {
 					select: {
 						nickname: true,
@@ -273,38 +437,18 @@ async function listPostsCoreUncached(
 			total = await prisma.post.count({ where: whereCondition });
 		}
 	} catch (error) {
-		if (!isMissingPostBoardMetadataColumnError(error)) {
+		if (!isMissingLegacyPostListColumnError(error)) {
 			throw error;
 		}
-		console.warn("[posts-service] post board columns missing; using legacy tag metadata fallback");
-		const legacyWhereCondition =
-			input.board === "sinmungo"
-				? {
-					AND: [whereCondition, { tags: { contains: `\"${OMBUDSMAN_BOARD_MARKER}\"` } }],
-				}
-				: {
-					AND: [whereCondition, { OR: [{ tags: null }, { tags: { not: { contains: `\"${OMBUDSMAN_BOARD_MARKER}\"` } } }] }],
-				};
-		posts = (await prisma.post.findMany({
-			where: legacyWhereCondition,
-			take: limit,
-			skip,
-			orderBy,
-			include: {
-				author: {
-					select: {
-						nickname: true,
-						minecraftUuid: true,
-					},
-				},
-			},
-		})) as typeof posts;
-		if (input.skipExactTotal) {
-			const hasMore = posts.length === limit;
-			total = hasMore ? page * limit + 1 : skip + posts.length;
-		} else {
-			total = await prisma.post.count({ where: legacyWhereCondition });
-		}
+		console.warn("[posts-service] legacy post columns missing; using tag/comment fallback");
+		const legacyResult = await loadLegacyPostsCore(input, legacyWhereCondition, skip, limit);
+		posts = legacyResult.rows.map((row) => ({
+			...row,
+			board: null,
+			serverAddress: null,
+			commentCount: legacyResult.commentCountByPostId.get(row.id) ?? 0,
+		}));
+		total = legacyResult.total;
 	}
 	const queryMainMs = performance.now() - queryMainStart;
 
