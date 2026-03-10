@@ -5,9 +5,12 @@ import { toSessionUserId } from "@/lib/session-user";
 import { listPosts } from "@/lib/services/posts-service";
 import { createServerTimingHeader } from "@/lib/server-timing";
 import { getPostMutationTags, safeRevalidateTags } from "@/lib/cache-tags";
-import { toStoredTags } from "@/lib/post-board";
+import { normalizeBoardType, toStoredTags } from "@/lib/post-board";
 import { resolveActiveUserFromSession } from "@/lib/active-user";
-import { isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
+import {
+	isMissingPostBoardMetadataColumnError,
+	isMissingPostSubscriptionTableError,
+} from "@/lib/db-schema-guard";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { z } from "zod";
 
@@ -25,6 +28,8 @@ function parsePositiveInt(value: string | null, fallback: number) {
 const postCreateBodySchema = z.object({
 	title: z.string().trim().min(1),
 	content: z.string().trim().min(1),
+	board: z.string().optional(),
+	serverAddress: z.string().trim().optional().nullable(),
 	tags: z
 		.array(z.string())
 		.optional()
@@ -49,7 +54,7 @@ export async function GET(req: NextRequest) {
 			page,
 			limit: parsePositiveInt(searchParams.get("limit"), 12),
 			tag: searchParams.get("tag"),
-			board: "forum",
+			board: normalizeBoardType(searchParams.get("board")),
 			sort: searchParams.get("sort") ?? "activity",
 			search: searchParams.get("search") ?? "",
 			searchInComments: searchParams.get("searchInComments") === "1",
@@ -100,19 +105,45 @@ export async function POST(request: NextRequest) {
 		const title = parsedBody.data.title;
 		const content = parsedBody.data.content;
 		const tags = parsedBody.data.tags;
+		const board = normalizeBoardType(parsedBody.data.board);
+		const serverAddress = parsedBody.data.serverAddress?.trim() || null;
 		const storedTags = toStoredTags({
 			tags,
+			board,
+			serverAddress,
 		});
+		if (board === "sinmungo" && !serverAddress) {
+			return NextResponse.json({ error: "server_address_required" }, { status: 400 });
+		}
 
-		const post = await prisma.post.create({
-			data: {
-				title,
-				content,
-				tags: storedTags,
-				commentCount: 0,
-				authorId: sessionUserId,
-			},
-		});
+		let post;
+		try {
+			post = await prisma.post.create({
+				data: {
+					title,
+					content,
+					board,
+					serverAddress,
+					tags: storedTags,
+					commentCount: 0,
+					authorId: sessionUserId,
+				},
+			});
+		} catch (error) {
+			if (!isMissingPostBoardMetadataColumnError(error)) {
+				throw error;
+			}
+			console.warn("[API] POST /api/posts post board columns missing; storing board metadata in tags only");
+			post = await prisma.post.create({
+				data: {
+					title,
+					content,
+					tags: storedTags,
+					commentCount: 0,
+					authorId: sessionUserId,
+				},
+			});
+		}
 		try {
 			await prisma.postSubscription.upsert({
 				where: {

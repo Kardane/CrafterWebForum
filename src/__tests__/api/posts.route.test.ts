@@ -93,6 +93,8 @@ describe("POST /api/posts", () => {
 			data: {
 				title: "secure title",
 				content: "secure content",
+				board: "develope",
+				serverAddress: null,
 				tags: "[\"news\"]",
 				commentCount: 0,
 				authorId: 5,
@@ -113,6 +115,59 @@ describe("POST /api/posts", () => {
 				postId: 123,
 			},
 		});
+	});
+
+	it("creates sinmungo posts with serverAddress metadata", async () => {
+		authMock.mockResolvedValue({ user: { id: "5" } });
+		postCreateMock.mockResolvedValue({ id: 777 });
+		postSubscriptionUpsertMock.mockResolvedValue({ userId: 5, postId: 777 });
+
+		const { POST } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				title: "서버 신고",
+				content: "문제 있음",
+				board: "sinmungo",
+				serverAddress: "mc.example.com:25565",
+				tags: [],
+			}),
+		});
+
+		const res = await POST(req as never);
+		expect(res.status).toBe(200);
+		expect(postCreateMock).toHaveBeenCalledWith({
+			data: {
+				title: "서버 신고",
+				content: "문제 있음",
+				board: "sinmungo",
+				serverAddress: "mc.example.com:25565",
+				tags: '["__sys:server:mc.example.com:25565","__sys:board:ombudsman"]',
+				commentCount: 0,
+				authorId: 5,
+			},
+		});
+	});
+
+	it("rejects sinmungo posts without serverAddress", async () => {
+		authMock.mockResolvedValue({ user: { id: "5" } });
+
+		const { POST } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				title: "서버 신고",
+				content: "문제 있음",
+				board: "sinmungo",
+				tags: [],
+			}),
+		});
+
+		const res = await POST(req as never);
+		expect(res.status).toBe(400);
+		expect(postCreateMock).not.toHaveBeenCalled();
 	});
 
 });
