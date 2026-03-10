@@ -39,6 +39,8 @@ describe("listSidebarTrackedPosts", () => {
 			{
 				id: 1,
 				title: "alpha",
+				board: "develope",
+				serverAddress: null,
 				updatedAt: new Date("2026-03-03T10:00:00.000Z"),
 				commentCount: 5,
 				authorId: 7,
@@ -47,6 +49,8 @@ describe("listSidebarTrackedPosts", () => {
 			{
 				id: 3,
 				title: "gamma",
+				board: "sinmungo",
+				serverAddress: "mc.gamma.kr",
 				updatedAt: new Date("2026-03-01T10:00:00.000Z"),
 				commentCount: 1,
 				authorId: 11,
@@ -89,6 +93,8 @@ describe("listSidebarTrackedPosts", () => {
 			select: {
 				id: true,
 				title: true,
+				board: true,
+				serverAddress: true,
 				updatedAt: true,
 				commentCount: true,
 				authorId: true,
@@ -104,6 +110,8 @@ describe("listSidebarTrackedPosts", () => {
 		expect(result.items.map((item) => item.postId)).toEqual([1, 3]);
 		expect(result.items[0]).toMatchObject({
 			postId: 1,
+			board: "develope",
+			serverAddress: null,
 			author: { nickname: "author-a", minecraftUuid: "uuid-a" },
 			sourceFlags: { authored: true, subscribed: true },
 			isSubscribed: true,
@@ -113,6 +121,8 @@ describe("listSidebarTrackedPosts", () => {
 		});
 		expect(result.items[1]).toMatchObject({
 			postId: 3,
+			board: "sinmungo",
+			serverAddress: "mc.gamma.kr",
 			author: { nickname: "author-c", minecraftUuid: null },
 			sourceFlags: { authored: false, subscribed: true },
 			isSubscribed: true,
@@ -128,6 +138,8 @@ describe("listSidebarTrackedPosts", () => {
 			{
 				id: 11,
 				title: "first",
+				board: "develope",
+				serverAddress: null,
 				updatedAt: new Date("2026-03-03T12:00:00.000Z"),
 				commentCount: 4,
 				authorId: 5,
@@ -136,6 +148,8 @@ describe("listSidebarTrackedPosts", () => {
 			{
 				id: 10,
 				title: "second",
+				board: "develope",
+				serverAddress: null,
 				updatedAt: new Date("2026-03-02T12:00:00.000Z"),
 				commentCount: 2,
 				authorId: 7,
@@ -144,6 +158,8 @@ describe("listSidebarTrackedPosts", () => {
 			{
 				id: 9,
 				title: "third",
+				board: "sinmungo",
+				serverAddress: "mc.third.kr",
 				updatedAt: new Date("2026-03-01T12:00:00.000Z"),
 				commentCount: 0,
 				authorId: 8,

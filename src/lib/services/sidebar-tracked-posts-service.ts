@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
-import { isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
+import { isMissingPostBoardMetadataColumnError, isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 import type { SidebarTrackedPost, SidebarTrackedPostsPage } from "@/types/sidebar";
+import { normalizeBoardType, parsePostTagMetadata } from "@/lib/post-board";
 
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 50;
@@ -24,6 +25,8 @@ interface ParsedCursor {
 interface ActivityRow {
 	id: number;
 	title: string;
+	board: "develope" | "sinmungo";
+	serverAddress: string | null;
 	updatedAt: Date;
 	authorId: number;
 	authorNickname: string;
@@ -129,41 +132,86 @@ export async function listSidebarTrackedPosts(
 		return emptyResult(limit);
 	}
 
-	const activityRows = await prisma.post.findMany({
-		where: {
-			id: {
-				in: subscribedPostIdList,
+	let activityRows;
+	try {
+		activityRows = await prisma.post.findMany({
+			where: {
+				id: {
+					in: subscribedPostIdList,
+				},
+				deletedAt: null,
 			},
-			deletedAt: null,
-		},
-		select: {
-			id: true,
-			title: true,
-			updatedAt: true,
-			commentCount: true,
-			authorId: true,
-			author: {
-				select: {
-					nickname: true,
-					minecraftUuid: true,
+			select: {
+				id: true,
+				title: true,
+				board: true,
+				serverAddress: true,
+				updatedAt: true,
+				commentCount: true,
+				authorId: true,
+				author: {
+					select: {
+						nickname: true,
+						minecraftUuid: true,
+					},
 				},
 			},
-		},
-	});
+		});
+	} catch (error) {
+		if (!isMissingPostBoardMetadataColumnError(error)) {
+			throw error;
+		}
+		console.warn("[sidebar-tracked-posts] post board columns missing; using legacy tag metadata fallback");
+		activityRows = (await prisma.post.findMany({
+			where: {
+				id: {
+					in: subscribedPostIdList,
+				},
+				deletedAt: null,
+			},
+			select: {
+				id: true,
+				title: true,
+				updatedAt: true,
+				commentCount: true,
+				authorId: true,
+				tags: true,
+				author: {
+					select: {
+						nickname: true,
+						minecraftUuid: true,
+					},
+				},
+			},
+		})) as Array<{
+			id: number;
+			title: string;
+			updatedAt: Date;
+			commentCount: number;
+			authorId: number;
+			tags: string | null;
+			author: { nickname: string; minecraftUuid: string | null };
+		}>;
+	}
 
 	if (activityRows.length === 0) {
 		return emptyResult(limit);
 	}
 
-	const normalizedActivityRows: ActivityRow[] = activityRows.map((row) => ({
+	const normalizedActivityRows: ActivityRow[] = activityRows.map((row) => {
+		const metadata = parsePostTagMetadata("tags" in row ? row.tags : null, "board" in row ? row.board : null, "serverAddress" in row ? row.serverAddress : null);
+		return ({
 		id: row.id,
 		title: row.title,
+		board: metadata.board,
+		serverAddress: metadata.serverAddress,
 		updatedAt: row.updatedAt,
 		authorId: row.authorId,
 		authorNickname: row.author.nickname,
 		authorMinecraftUuid: row.author.minecraftUuid,
 		commentCount: row.commentCount,
-	}));
+		});
+	});
 
 	const sortedRows = [...normalizedActivityRows].sort(compareActivityDesc);
 	const cursorFilteredRows = parsedCursor ? sortedRows.filter((row) => isAfterCursor(row, parsedCursor)) : sortedRows;
@@ -232,6 +280,8 @@ export async function listSidebarTrackedPosts(
 		postId: row.id,
 		title: row.title,
 		href: `/posts/${row.id}`,
+		board: row.board,
+		serverAddress: row.serverAddress,
 		lastActivityAt: row.updatedAt.toISOString(),
 		author: {
 			nickname: row.authorNickname,

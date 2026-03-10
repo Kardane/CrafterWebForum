@@ -2,6 +2,8 @@ export interface SidebarTrackedPost {
 	postId: number;
 	title: string;
 	href: string;
+	board: "develope" | "sinmungo";
+	serverAddress: string | null;
 	lastActivityAt: string;
 	author: {
 		nickname: string;
