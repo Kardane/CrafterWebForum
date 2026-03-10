@@ -90,7 +90,7 @@ export async function GET(req: NextRequest) {
 export async function POST(request: NextRequest) {
 	try {
 		const session = await auth();
-		const activeUser = await resolveActiveUserFromSession(session);
+		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
 		if (!activeUser.ok) {
 			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
@@ -107,6 +107,9 @@ export async function POST(request: NextRequest) {
 		const tags = parsedBody.data.tags;
 		const board = normalizeBoardType(parsedBody.data.board);
 		const serverAddress = parsedBody.data.serverAddress?.trim() || null;
+		if (activeUser.context.role !== "admin" && activeUser.context.isApproved !== 1) {
+			return NextResponse.json({ error: "pending_approval" }, { status: 403 });
+		}
 		const storedTags = toStoredTags({
 			tags,
 			board,

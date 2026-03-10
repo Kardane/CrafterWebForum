@@ -196,4 +196,31 @@ describe("POST /api/posts", () => {
 		expect(postCreateMock).not.toHaveBeenCalled();
 	});
 
+	it("allows admin to create sinmungo posts even when approval flag is false", async () => {
+		authMock.mockResolvedValue({ user: { id: "1" } });
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: true,
+			context: { userId: 1, role: "admin", nickname: "admin", isApproved: 0, isBanned: 0 },
+		});
+		postCreateMock.mockResolvedValue({ id: 778 });
+		postSubscriptionUpsertMock.mockResolvedValue({ userId: 1, postId: 778 });
+
+		const { POST } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				title: "관리자 제보",
+				content: "관리자 제보 내용",
+				board: "sinmungo",
+				serverAddress: "mc.admin.kr",
+				tags: [],
+			}),
+		});
+
+		const res = await POST(req as never);
+		expect(res.status).toBe(200);
+		expect(postCreateMock).toHaveBeenCalled();
+	});
+
 });

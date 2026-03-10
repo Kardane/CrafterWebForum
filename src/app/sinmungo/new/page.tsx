@@ -34,13 +34,6 @@ interface UploadPayload {
 	const [isMarkdownHelpOpen, setIsMarkdownHelpOpen] = useState(false);
 
 	useEffect(() => {
-		if (session?.user && session.user.isApproved !== 1) {
-			showToast({ type: "error", message: "신문고 작성은 관리자 승인 후 가능함" });
-			router.replace("/?toast=approval-required");
-		}
-	}, [router, session, showToast]);
-
-	useEffect(() => {
 		const savedTitle = localStorage.getItem("draft_sinmungo_title");
 		const savedContent = localStorage.getItem("draft_sinmungo_content");
 		const savedServerAddress = localStorage.getItem("draft_sinmungo_server_address");
@@ -145,12 +138,6 @@ interface UploadPayload {
 			showToast({ type: "error", message: "로그인이 필요함" });
 			return;
 		}
-		if (session.user.isApproved !== 1) {
-			showToast({ type: "error", message: "신문고 작성은 관리자 승인 후 가능함" });
-			router.replace("/?toast=approval-required");
-			return;
-		}
-
 		setIsSubmitting(true);
 		try {
 			const response = await fetch("/api/posts", {
@@ -167,6 +154,11 @@ interface UploadPayload {
 
 			const data = (await response.json()) as { postId?: number; error?: string };
 			if (!response.ok || !data.postId) {
+				if (data.error === "pending_approval") {
+					showToast({ type: "error", message: "신문고 작성은 관리자 승인 후 가능함" });
+					router.replace("/?toast=approval-required");
+					return;
+				}
 				throw new Error(data.error || "신문고 작성 실패");
 			}
 
