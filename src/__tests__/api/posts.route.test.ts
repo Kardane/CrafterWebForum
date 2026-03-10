@@ -170,4 +170,30 @@ describe("POST /api/posts", () => {
 		expect(postCreateMock).not.toHaveBeenCalled();
 	});
 
+	it("keeps sinmungo creation restricted to approved users", async () => {
+		authMock.mockResolvedValue({ user: { id: "5" } });
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: false,
+			status: 403,
+			error: "pending_approval",
+		});
+
+		const { POST } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				title: "서버 신고",
+				content: "문제 있음",
+				board: "sinmungo",
+				serverAddress: "mc.example.com:25565",
+				tags: [],
+			}),
+		});
+
+		const res = await POST(req as never);
+		expect(res.status).toBe(403);
+		expect(postCreateMock).not.toHaveBeenCalled();
+	});
+
 });
