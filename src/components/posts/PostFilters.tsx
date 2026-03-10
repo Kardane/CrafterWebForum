@@ -7,6 +7,7 @@ import { POST_TAGS } from "@/constants/post-tags";
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { text } from "@/lib/system-text";
+import { DEFAULT_POST_BOARD, getBoardLabel, getBoardNewPostPath, type PostBoardType } from "@/lib/post-board";
 
 const SORT_OPTIONS = [
 	{ value: "activity", label: text("postFilters.sortActivity") },
@@ -18,9 +19,11 @@ const SORT_OPTIONS = [
 
 interface PostFiltersProps {
 	totalPosts?: number;
+	board?: PostBoardType;
+	canCreate?: boolean;
 }
 
-export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
+export default function PostFilters({ totalPosts = 0, board = DEFAULT_POST_BOARD, canCreate = true }: PostFiltersProps) {
 	const router = useRouter();
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
@@ -52,15 +55,33 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 		updateParams("search", searchTerm);
 	};
 
+	const isSinmungo = board === "sinmungo";
+	const createHref = getBoardNewPostPath(board);
+	const totalLabel = isSinmungo ? "신문고 글" : "포스트";
+	const createLabel = isSinmungo ? `${getBoardLabel(board)} 작성` : text("postFilters.newPost");
+	const sinmungoPrimaryClassName = "bg-violet-500 text-white hover:bg-violet-400";
+
 	return (
 		<div className="mb-3 flex flex-col gap-3">
 			<div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
 				{/* 좌측: 새 포스트 + 검색 */}
 				<div className="flex w-full min-w-0 flex-wrap items-center gap-2 lg:flex-1">
-					<Link href="/posts/new" className="btn btn-primary h-9 gap-2 px-3 whitespace-nowrap">
-						<Plus size={18} />
-						<span>{text("postFilters.newPost")}</span>
-					</Link>
+					{canCreate ? (
+						<Link
+							href={createHref}
+							className={classNames(
+								"h-9 gap-2 px-3 whitespace-nowrap inline-flex items-center rounded-md text-sm font-semibold transition-colors",
+								isSinmungo ? sinmungoPrimaryClassName : "btn btn-primary"
+							)}
+						>
+							<Plus size={18} />
+							<span>{createLabel}</span>
+						</Link>
+					) : (
+						<div className="inline-flex h-9 items-center rounded-md border border-border bg-bg-tertiary px-3 text-sm font-medium text-text-muted">
+							승인 후 작성 가능
+						</div>
+					)}
 
 					<form
 						onSubmit={handleSearch}
@@ -74,7 +95,10 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 						/>
 						<button
 							type="submit"
-							className="h-9 flex-shrink-0 rounded-l-none rounded-r-md bg-accent px-4 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+							className={classNames(
+								"h-9 flex-shrink-0 rounded-l-none rounded-r-md px-4 text-sm font-medium text-white transition-colors",
+								isSinmungo ? "bg-violet-500 hover:bg-violet-400" : "bg-accent hover:bg-accent-hover"
+							)}
 						>
 							{text("postFilters.searchButton")}
 						</button>
@@ -104,32 +128,35 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 							</div>
 						</div>
 
-						<button
-							onClick={() => setIsTagsOpen(!isTagsOpen)}
-							className={classNames(
-								"h-9 rounded-md border px-4 text-sm font-medium transition-colors flex items-center gap-2",
-								isTagsOpen
-									? "bg-bg-secondary border-text-muted text-text-primary"
-									: "bg-bg-tertiary border-border text-text-secondary hover:bg-bg-secondary"
-							)}
-						>
-							{text("postFilters.tagsButton")}
-							<span className="text-[10px]">{isTagsOpen ? "▲" : "▼"}</span>
-						</button>
+						{!isSinmungo && (
+							<button
+								onClick={() => setIsTagsOpen(!isTagsOpen)}
+								className={classNames(
+									"h-9 rounded-md border px-4 text-sm font-medium transition-colors flex items-center gap-2",
+									isTagsOpen
+										? "bg-bg-secondary border-text-muted text-text-primary"
+										: "bg-bg-tertiary border-border text-text-secondary hover:bg-bg-secondary"
+								)}
+							>
+								{text("postFilters.tagsButton")}
+								<span className="text-[10px]">{isTagsOpen ? "▲" : "▼"}</span>
+							</button>
+						)}
 					</div>
-					<div className="text-sm font-medium text-text-muted whitespace-nowrap">
-						{text("postFilters.totalPosts", { count: totalPosts.toLocaleString() })}
+					<div className={classNames("text-sm font-medium whitespace-nowrap", isSinmungo ? "text-violet-200" : "text-text-muted")}>
+						총 {totalPosts.toLocaleString()}개 {totalLabel}
 					</div>
 				</div>
 			</div>
 
 			{/* 태그 목록 */}
-			<div
-				className={classNames(
-					"flex flex-wrap gap-2 overflow-hidden transition-all duration-300",
-					isTagsOpen ? "opacity-100 max-h-40" : "opacity-0 max-h-0"
-				)}
-			>
+			{!isSinmungo && (
+				<div
+					className={classNames(
+						"flex flex-wrap gap-2 overflow-hidden transition-all duration-300",
+						isTagsOpen ? "opacity-100 max-h-40" : "opacity-0 max-h-0"
+					)}
+				>
 				<button
 					onClick={() => updateParams("tag", "")}
 					className={classNames(
@@ -154,8 +181,9 @@ export default function PostFilters({ totalPosts = 0 }: PostFiltersProps) {
 					>
 						{tag}
 					</button>
-				))}
-			</div>
+					))}
+				</div>
+			)}
 		</div>
 	);
 }

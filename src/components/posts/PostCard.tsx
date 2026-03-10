@@ -8,6 +8,7 @@ import LikeButton from "./LikeButton";
 import PostSubscriptionButton from "./PostSubscriptionButton";
 import SafeImage from "@/components/ui/SafeImage";
 import { extractFirstImage, getPreviewText } from "@/lib/utils";
+import { getBoardLabel, type PostBoardType } from "@/lib/post-board";
 
 interface PostCardProps {
 	id: number;
@@ -22,6 +23,8 @@ interface PostCardProps {
 	viewCount: number;
 	likeCount: number;
 	commentCount: number;
+	board: PostBoardType;
+	serverAddress?: string | null;
 	tags: string[];
 	unreadCount?: number;
 	userLiked?: boolean;
@@ -41,6 +44,8 @@ export default function PostCard({
 	updatedAt,
 	likeCount,
 	commentCount,
+	board,
+	serverAddress,
 	tags,
 	unreadCount = 0,
 	userLiked,
@@ -56,6 +61,9 @@ export default function PostCard({
 	});
 	const detailHref = `/posts/${id}`;
 
+	const isSinmungo = board === "sinmungo";
+	const boardLabel = getBoardLabel(board);
+
 	return (
 		<Link
 			href={detailHref}
@@ -68,8 +76,11 @@ export default function PostCard({
 
 				<div className="flex-1 flex flex-col min-w-0">
 					<div className="flex flex-col gap-1 mb-2">
-					<div className="flex flex-wrap gap-1.5 mb-1">
-							{tags.map((tag) => (
+					<div className="flex flex-wrap items-center gap-1.5 mb-1">
+							<span className="px-2 py-[2px] rounded text-[10px] font-semibold bg-accent/15 text-accent">
+								{boardLabel}
+							</span>
+							{!isSinmungo && tags.map((tag) => (
 								<span
 									key={tag}
 									className="px-2 py-[2px] rounded text-[10px] font-medium bg-bg-tertiary text-text-secondary"
@@ -77,6 +88,19 @@ export default function PostCard({
 									{tag}
 								</span>
 							))}
+							{isSinmungo && serverAddress && (
+								<button
+									type="button"
+									onClick={(event) => {
+										event.preventDefault();
+										event.stopPropagation();
+										void navigator.clipboard?.writeText(serverAddress);
+									}}
+									className="rounded border border-border bg-bg-tertiary px-2 py-[2px] text-[10px] font-medium text-text-secondary hover:bg-bg-primary hover:text-text-primary"
+								>
+									{serverAddress}
+								</button>
+							)}
 						</div>
 
 						<h3 className="text-base font-bold text-text-primary truncate">{title}</h3>
@@ -117,6 +141,8 @@ export default function PostCard({
 								sidebarFallbackItem={{
 									title,
 									href: `/posts/${id}`,
+									board,
+									serverAddress: serverAddress ?? null,
 									author: {
 										nickname: authorName,
 										minecraftUuid: authorUuid ?? null,

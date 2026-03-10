@@ -18,6 +18,8 @@ interface Post {
 	views: number;
 	likes: number;
 	commentCount: number;
+	board: "develope" | "sinmungo";
+	serverAddress: string | null;
 	tags: string[];
 	unreadCount?: number;
 	userLiked?: boolean;
@@ -278,6 +280,8 @@ export default function PostList({
 						viewCount={post.views}
 						likeCount={post.likes}
 						commentCount={post.commentCount}
+						board={post.board}
+						serverAddress={post.serverAddress}
 						tags={post.tags}
 						unreadCount={post.unreadCount}
 						userLiked={post.userLiked}
