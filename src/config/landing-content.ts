@@ -1,5 +1,4 @@
-export const LANDING_BACKGROUND_IMAGE_URL =
-	"https://i.namu.wiki/i/JSCXlcOdyQNZFb_D6XncRSZWuQMpBbl2UoJm97nhmtHdKsAQcm0JTgTNg3e9EP9jJ-V8wUsXkzkAV52tnzZ65jvbK6cJ4n79EeYTleOsaqfdQVBg8uYwHWvV2Pfa0ARGeJDaA-cNHSRAZXkhmZKfmQ.webp";
+export const LANDING_BACKGROUND_IMAGE_URL = "/img/background.png";
 
 export const LANDING_CONTENT = {
 	brandEyebrow: "Steve Gallery",
