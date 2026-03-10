@@ -108,20 +108,20 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 
 	return (
 		<>
-			<div className="fixed inset-y-0 right-0 z-[90] hidden md:block">
+			<div className="fixed right-0 top-1/2 z-[90] hidden -translate-y-1/2 md:block">
 				<button
 					type="button"
 					onClick={() => setIsDesktopOpen(false)}
 					className={classNames(
-						"absolute inset-0 w-screen -translate-x-full bg-black/20 backdrop-blur-[1px] transition-opacity duration-200",
+						"fixed inset-0 w-screen bg-black/20 backdrop-blur-[1px] transition-opacity duration-200",
 						isDesktopOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
 					)}
 					aria-label="도구 모음 닫기"
 				/>
 				<aside
-					className="absolute right-0 top-[54%] flex w-[18.5rem] -translate-y-1/2 overflow-hidden rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-secondary/95 shadow-[0_12px_36px_rgba(0,0,0,0.36)] backdrop-blur transition-transform duration-300 ease-out"
+					className="relative right-0 flex w-[18.5rem] overflow-hidden rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-secondary/95 shadow-[0_12px_36px_rgba(0,0,0,0.36)] backdrop-blur transition-transform duration-300 ease-out"
 					style={{
-						transform: `translateY(-50%) translateX(${isDesktopOpen ? "0" : "calc(100% - 3rem)"})`,
+						transform: `translateX(${isDesktopOpen ? "0" : "calc(100% - 3rem)"})`,
 					}}
 				>
 					<button
