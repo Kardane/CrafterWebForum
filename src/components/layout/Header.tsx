@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu } from "lucide-react";
+import { usePathname } from "next/navigation";
 
 interface HeaderProps {
 	onMenuClick: () => void;
@@ -12,7 +13,12 @@ interface HeaderProps {
  * - 사용자 메뉴는 사이드바 푸터로 이동됨
  */
 export default function Header({ onMenuClick }: HeaderProps) {
-	const forumTitle = "스티브 갤러리 개발 포럼 Beta v0.3";
+	const pathname = usePathname();
+	const forumTitle = pathname.startsWith("/sinmungo")
+		? "스티브 갤러리 서버 신문고 Beta v0.3"
+		: pathname.startsWith("/develope") || pathname.startsWith("/posts")
+			? "스티브 갤러리 개발 포럼 Beta v0.3"
+			: "스티브 갤러리 Beta v0.3";
 
 	return (
 		<header className="h-header bg-bg-primary border-b border-bg-tertiary flex items-center px-4 sticky top-0 z-header">

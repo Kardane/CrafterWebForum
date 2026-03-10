@@ -29,7 +29,7 @@ export default async function AuthErrorPage({ searchParams }: ErrorPageProps) {
 					<Link href="/login" className="btn btn-primary">
 						로그인 다시 시도
 					</Link>
-					<Link href="/" className="btn btn-secondary">
+					<Link href="/develope" className="btn btn-secondary">
 						홈으로 이동
 					</Link>
 				</div>

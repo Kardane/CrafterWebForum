@@ -60,7 +60,7 @@ export default function NotificationsPage() {
 	return (
 		<div className="mx-auto max-w-4xl p-6">
 			<header className="mb-6 flex items-center gap-3">
-				<Link href="/" className="btn btn-secondary btn-sm">
+				<Link href="/develope" className="btn btn-secondary btn-sm">
 					← 메인
 				</Link>
 				<h1 className="text-2xl font-bold">알림</h1>
