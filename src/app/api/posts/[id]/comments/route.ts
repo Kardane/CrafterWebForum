@@ -10,6 +10,11 @@ import { queuePostSubscriptionNotificationsAndDeliveries } from "@/lib/comment-s
 import { resolveActiveUserFromSession } from "@/lib/active-user";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { fetchCommentSubtreeRowsByRootIds } from "@/lib/comment-subtree-query";
+import { parsePostTagMetadata } from "@/lib/post-board";
+import {
+	isMissingPostBoardMetadataColumnError,
+	isMissingPostCommentCountColumnError,
+} from "@/lib/db-schema-guard";
 import { z } from "zod";
 
 const DEFAULT_COMMENT_ROOT_LIMIT = 20;
@@ -27,6 +32,46 @@ const commentIncludeWithAuthor = {
 		select: commentAuthorSelect,
 	},
 } as const;
+
+async function loadCommentTargetPost(postId: number) {
+	try {
+		return await prisma.post.findFirst({
+			where: {
+				id: postId,
+				deletedAt: null,
+			},
+			select: {
+				id: true,
+				authorId: true,
+				board: true,
+				tags: true,
+			},
+		});
+	} catch (error) {
+		if (!isMissingPostBoardMetadataColumnError(error)) {
+			throw error;
+		}
+		console.warn("[API] comments route post board columns missing; using legacy tag metadata fallback");
+		const legacyPost = await prisma.post.findFirst({
+			where: {
+				id: postId,
+				deletedAt: null,
+			},
+			select: {
+				id: true,
+				authorId: true,
+				tags: true,
+			},
+		});
+		if (!legacyPost) {
+			return null;
+		}
+		return {
+			...legacyPost,
+			board: parsePostTagMetadata(legacyPost.tags, null, null).board,
+		};
+	}
+}
 
 const commentCreateBodySchema = z.object({
 	content: z.string().trim().min(1),
@@ -65,12 +110,7 @@ export async function GET(
 			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
-		const post = await prisma.post.findFirst({
-			where: {
-				id: postId,
-				deletedAt: null,
-			},
-		});
+		const post = await loadCommentTargetPost(postId);
 
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
@@ -191,12 +231,7 @@ export async function POST(
 		const content = parsedBody.data.content;
 		const normalizedParentId = parsedBody.data.parentId ?? null;
 
-		const post = await prisma.post.findFirst({
-			where: {
-				id: postId,
-				deletedAt: null,
-			},
-		});
+		const post = await loadCommentTargetPost(postId);
 
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
@@ -218,8 +253,40 @@ export async function POST(
 			}
 		}
 
-		const [comment, updatedPost] = await prisma.$transaction([
-			prisma.comment.create({
+		let comment;
+		let commentCount: number;
+		try {
+			const [createdComment, updatedPost] = await prisma.$transaction([
+				prisma.comment.create({
+					data: {
+						content,
+						postId,
+						authorId: sessionUserId,
+						parentId: normalizedParentId,
+					},
+					include: commentIncludeWithAuthor,
+				}),
+				prisma.post.update({
+					where: { id: postId },
+					data: {
+						updatedAt: new Date(),
+						commentCount: {
+							increment: 1,
+						},
+					},
+					select: {
+						commentCount: true,
+					},
+				}),
+			]);
+			comment = createdComment;
+			commentCount = updatedPost.commentCount;
+		} catch (error) {
+			if (!isMissingPostCommentCountColumnError(error)) {
+				throw error;
+			}
+			console.warn("[API] POST /api/posts/[id]/comments post commentCount column missing; using counted fallback");
+			comment = await prisma.comment.create({
 				data: {
 					content,
 					postId,
@@ -227,22 +294,22 @@ export async function POST(
 					parentId: normalizedParentId,
 				},
 				include: commentIncludeWithAuthor,
-			}),
-			prisma.post.update({
+			});
+			await prisma.post.update({
 				where: { id: postId },
 				data: {
 					updatedAt: new Date(),
-					commentCount: {
-						increment: 1,
-					},
 				},
 				select: {
-					commentCount: true,
+					id: true,
 				},
-			}),
-		]);
-
-		const commentCount = updatedPost.commentCount;
+			});
+			commentCount = await prisma.comment.count({
+				where: {
+					postId,
+				},
+			});
+		}
 
 		await prisma.postRead.upsert({
 			where: {

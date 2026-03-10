@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const authMock = vi.fn();
 const postFindFirstMock = vi.fn();
 const commentFindManyMock = vi.fn();
+const commentCountMock = vi.fn();
 const commentFindFirstMock = vi.fn();
 const commentCreateMock = vi.fn();
 const postReadUpsertMock = vi.fn();
@@ -29,6 +30,7 @@ vi.mock("@/lib/prisma", () => ({
 		},
 		comment: {
 			findMany: commentFindManyMock,
+			count: commentCountMock,
 			findFirst: commentFindFirstMock,
 			create: commentCreateMock,
 		},
@@ -95,6 +97,7 @@ describe("POST /api/posts/[id]/comments", () => {
 		authMock.mockReset();
 		postFindFirstMock.mockReset();
 		commentFindManyMock.mockReset();
+		commentCountMock.mockReset();
 		commentFindFirstMock.mockReset();
 		commentCreateMock.mockReset();
 		postReadUpsertMock.mockReset();
@@ -115,6 +118,7 @@ describe("POST /api/posts/[id]/comments", () => {
 
 		transactionMock.mockImplementation(async (operations: unknown[]) => Promise.all(operations as Promise<unknown>[]));
 		postUpdateMock.mockResolvedValue({ commentCount: 1 });
+		commentCountMock.mockResolvedValue(1);
 		notificationCreateManyMock.mockResolvedValue({ count: 0 });
 		notificationFindManyMock.mockResolvedValue([]);
 		pushSubscriptionFindManyMock.mockResolvedValue([]);
@@ -320,5 +324,60 @@ describe("POST /api/posts/[id]/comments", () => {
 				]),
 			})
 		);
+	});
+
+	it("falls back when Post board column is missing during comment creation", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 0, nickname: "actor" } });
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: true,
+			context: { userId: 10, role: "user", nickname: "actor", isApproved: 0, isBanned: 0 },
+		});
+		postFindFirstMock
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.board"))
+			.mockResolvedValueOnce({ id: 12, authorId: 1, deletedAt: null, tags: '["__sys:board:ombudsman"]' });
+		commentCreateMock.mockResolvedValue(
+			buildCommentRow({ id: 160, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "hello" })
+		);
+		postUpdateMock.mockResolvedValue({ commentCount: 2 });
+
+		const { POST } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "hello" }),
+		});
+
+		const res = await POST(req as never, { params: Promise.resolve({ id: "12" }) });
+		expect(res.status).toBe(200);
+		expect(postFindFirstMock).toHaveBeenCalledTimes(2);
+	});
+
+	it("falls back when Post.commentCount column is missing during comment creation", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1, nickname: "actor" } });
+		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null, tags: null, board: "develope" });
+		commentCreateMock
+			.mockResolvedValueOnce(
+				buildCommentRow({ id: 170, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "hello" })
+			)
+			.mockResolvedValueOnce(
+				buildCommentRow({ id: 171, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "hello" })
+			);
+		postUpdateMock
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.commentCount"))
+			.mockResolvedValueOnce({});
+		commentCountMock.mockResolvedValueOnce(4);
+
+		const { POST } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "hello" }),
+		});
+
+		const res = await POST(req as never, { params: Promise.resolve({ id: "12" }) });
+		const body = (await res.json()) as { success: boolean };
+		expect(res.status).toBe(200);
+		expect(body.success).toBe(true);
+		expect(commentCountMock).toHaveBeenCalledWith({ where: { postId: 12 } });
 	});
 });
