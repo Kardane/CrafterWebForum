@@ -5,6 +5,7 @@ import { toSessionUserId } from '@/lib/session-user';
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from '@/lib/cache-tags';
 import { broadcastRealtime } from '@/lib/realtime/server-broadcast';
 import { REALTIME_EVENTS, REALTIME_TOPICS } from '@/lib/realtime/constants';
+import { isMissingPostCommentCountColumnError } from '@/lib/db-schema-guard';
 
 
 /**
@@ -182,19 +183,34 @@ export async function DELETE(
 			},
 		});
 		const deletedCommentCount = deletedResult.count;
-		const postSummary = await prisma.post.findUnique?.({
-			where: { id: comment.postId },
-			select: { commentCount: true },
-		});
-		const nextCommentCount = Math.max((postSummary?.commentCount ?? 0) - deletedCommentCount, 0);
+		try {
+			const postSummary = await prisma.post.findUnique?.({
+				where: { id: comment.postId },
+				select: { commentCount: true },
+			});
+			const nextCommentCount = Math.max((postSummary?.commentCount ?? 0) - deletedCommentCount, 0);
 
-		await prisma.post.update({
-			where: { id: comment.postId },
-			data: {
-				updatedAt: new Date(),
-				commentCount: nextCommentCount,
-			},
-		});
+			await prisma.post.update({
+				where: { id: comment.postId },
+				data: {
+					updatedAt: new Date(),
+					commentCount: nextCommentCount,
+				},
+				select: { id: true },
+			});
+		} catch (error) {
+			if (!isMissingPostCommentCountColumnError(error)) {
+				throw error;
+			}
+			console.warn('[API] DELETE /api/comments/[id] post commentCount column missing; updating timestamp only');
+			await prisma.post.update({
+				where: { id: comment.postId },
+				data: {
+					updatedAt: new Date(),
+				},
+				select: { id: true },
+			});
+		}
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId: comment.postId,
