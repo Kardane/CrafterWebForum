@@ -65,18 +65,17 @@ export default function PostCard({
 	const boardLabel = getBoardLabel(board);
 
 	return (
-		<Link
-			href={detailHref}
-			className="block"
-			onClick={() => {
-				onNavigate?.(id);
-			}}
-		>
-			<div className="bg-bg-secondary rounded-lg border border-bg-tertiary p-4 hover:border-accent hover:shadow-md transition-all duration-200 cursor-pointer flex gap-4 h-full">
-
-				<div className="flex-1 flex flex-col min-w-0">
+		<article className="bg-bg-secondary rounded-lg border border-bg-tertiary p-4 transition-all duration-200 hover:border-accent hover:shadow-md h-full">
+			<Link
+				href={detailHref}
+				className="flex gap-4 cursor-pointer"
+				onClick={() => {
+					onNavigate?.(id);
+				}}
+			>
+				<div className="flex-1 min-w-0">
 					<div className="flex flex-col gap-1 mb-2">
-					<div className="flex flex-wrap items-center gap-1.5 mb-1">
+						<div className="flex flex-wrap items-center gap-1.5 mb-1">
 							<span className="px-2 py-[2px] rounded text-[10px] font-semibold bg-accent/15 text-accent">
 								{boardLabel}
 							</span>
@@ -89,17 +88,9 @@ export default function PostCard({
 								</span>
 							))}
 							{isSinmungo && serverAddress && (
-								<button
-									type="button"
-									onClick={(event) => {
-										event.preventDefault();
-										event.stopPropagation();
-										void navigator.clipboard?.writeText(serverAddress);
-									}}
-									className="rounded border border-border bg-bg-tertiary px-2 py-[2px] text-[10px] font-medium text-text-secondary hover:bg-bg-primary hover:text-text-primary"
-								>
+								<span className="rounded border border-border bg-bg-tertiary px-2 py-[2px] text-[10px] font-medium text-text-secondary">
 									{serverAddress}
-								</button>
+								</span>
 							)}
 						</div>
 
@@ -109,60 +100,6 @@ export default function PostCard({
 							<span className="font-medium text-text-secondary mr-2">{authorName}:</span>
 							{previewText}
 						</div>
-					</div>
-
-					<div className="mt-auto flex items-center gap-4 text-xs text-text-muted font-medium">
-						<div
-							onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-							}}
-							className="flex items-center"
-						>
-							<LikeButton
-								postId={id}
-								initialLikes={likeCount}
-								initialLiked={!!userLiked}
-								variant="legacy"
-								className="!px-2 !py-0.5 !rounded-md h-auto text-xs"
-							/>
-						</div>
-						<div
-							onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-							}}
-							className="flex items-center"
-						>
-							<PostSubscriptionButton
-								postId={id}
-								initialSubscribed={initialSubscribed}
-								variant="icon"
-								sidebarFallbackItem={{
-									title,
-									href: `/posts/${id}`,
-									board,
-									serverAddress: serverAddress ?? null,
-									author: {
-										nickname: authorName,
-										minecraftUuid: authorUuid ?? null,
-									},
-									commentCount,
-									latestCommentId: null,
-								}}
-							/>
-						</div>
-						<div className="flex items-center gap-1">
-							<MessageSquare size={14} />
-							<span>{commentCount}</span>
-						</div>
-						<span>{timeAgo}</span>
-
-						{unreadCount > 0 && (
-							<span className="text-error font-bold flex items-center gap-1">
-								• 새 메시지 {unreadCount}개
-							</span>
-						)}
 					</div>
 				</div>
 
@@ -178,8 +115,62 @@ export default function PostCard({
 						/>
 					</div>
 				)}
+			</Link>
 
+			<div className="mt-3 flex flex-wrap items-center gap-3 border-t border-bg-tertiary pt-3 text-xs font-medium text-text-muted">
+				{isSinmungo && serverAddress && (
+					<button
+						type="button"
+						aria-label="서버 주소 복사"
+						onClick={() => {
+							void navigator.clipboard?.writeText(serverAddress);
+						}}
+						className="rounded border border-border bg-bg-tertiary px-2 py-[2px] text-[10px] font-medium text-text-secondary hover:bg-bg-primary hover:text-text-primary"
+					>
+						{serverAddress}
+					</button>
+				)}
+
+				<div className="flex items-center">
+					<LikeButton
+						postId={id}
+						initialLikes={likeCount}
+						initialLiked={!!userLiked}
+						variant="legacy"
+						className="!px-2 !py-0.5 !rounded-md h-auto text-xs"
+					/>
+				</div>
+				<div className="flex items-center">
+					<PostSubscriptionButton
+						postId={id}
+						initialSubscribed={initialSubscribed}
+						variant="icon"
+						sidebarFallbackItem={{
+							title,
+							href: `/posts/${id}`,
+							board,
+							serverAddress: serverAddress ?? null,
+							author: {
+								nickname: authorName,
+								minecraftUuid: authorUuid ?? null,
+							},
+							commentCount,
+							latestCommentId: null,
+						}}
+					/>
+				</div>
+				<div className="flex items-center gap-1">
+					<MessageSquare size={14} />
+					<span>{commentCount}</span>
+				</div>
+				<span>{timeAgo}</span>
+
+				{unreadCount > 0 && (
+					<span className="text-error font-bold flex items-center gap-1">
+						• 새 메시지 {unreadCount}개
+					</span>
+				)}
 			</div>
-		</Link>
+		</article>
 	);
 }
