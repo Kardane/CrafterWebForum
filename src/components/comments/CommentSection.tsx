@@ -18,6 +18,7 @@ import {
 	buildInitialCommentViewState,
 	hasCommentId,
 	parseRealtimeComment,
+	shouldRefreshCommentsOnMount,
 	toDateKey,
 	toDateLabel,
 } from "./comment-section-helpers";
@@ -142,6 +143,8 @@ export default function CommentSection({
 	const composerShellRef = useRef<HTMLDivElement>(null);
 	const [composerDockInsets, setComposerDockInsets] = useState<{ left: number; right: number } | null>(null);
 	const initialUrlCommentJumpHandledRef = useRef(false);
+	const initialFreshReloadHandledRef = useRef(false);
+	const pendingInitialTargetCommentIdRef = useRef<number | null>(null);
 
 	// --- 파생 데이터 ---
 	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
@@ -333,21 +336,72 @@ export default function CommentSection({
 	}, [scrollToBottom]);
 
 	useEffect(() => {
+		if (initialFreshReloadHandledRef.current) {
+			return;
+		}
+
+		const targetCommentId = parseTargetCommentIdFromLocation();
+		if (
+			!shouldRefreshCommentsOnMount({
+				initialComments,
+				lastReadCommentCount: readMarker?.lastReadCommentCount ?? 0,
+				totalCommentCount: readMarker?.totalCommentCount ?? 0,
+				targetCommentId,
+			})
+		) {
+			initialFreshReloadHandledRef.current = true;
+			return;
+		}
+
+		initialFreshReloadHandledRef.current = true;
+		const rafId = window.requestAnimationFrame(() => {
+			void reloadComments();
+		});
+
+		return () => {
+			window.cancelAnimationFrame(rafId);
+		};
+	}, [initialComments, readMarker?.lastReadCommentCount, readMarker?.totalCommentCount, reloadComments]);
+
+	useEffect(() => {
 		if (initialUrlCommentJumpHandledRef.current || flattenedComments.length === 0) {
 			return;
 		}
 
 		const targetCommentId = parseTargetCommentIdFromLocation();
-		initialUrlCommentJumpHandledRef.current = true;
 		if (!targetCommentId) {
+			initialUrlCommentJumpHandledRef.current = true;
 			return;
 		}
 
 		const rafId = window.requestAnimationFrame(() => {
 			if (!ensureCommentVisible(targetCommentId)) {
+				pendingInitialTargetCommentIdRef.current = targetCommentId;
 				return;
 			}
+			initialUrlCommentJumpHandledRef.current = true;
+			pendingInitialTargetCommentIdRef.current = null;
 			scrollToCommentElement(targetCommentId, true, setHighlightedCommentId);
+		});
+
+		return () => {
+		window.cancelAnimationFrame(rafId);
+		};
+	}, [ensureCommentVisible, flattenedComments.length, scrollToCommentElement]);
+
+	useEffect(() => {
+		const pendingCommentId = pendingInitialTargetCommentIdRef.current;
+		if (initialUrlCommentJumpHandledRef.current || pendingCommentId === null || flattenedComments.length === 0) {
+			return;
+		}
+
+		const rafId = window.requestAnimationFrame(() => {
+			if (!ensureCommentVisible(pendingCommentId)) {
+				return;
+			}
+			initialUrlCommentJumpHandledRef.current = true;
+			pendingInitialTargetCommentIdRef.current = null;
+			scrollToCommentElement(pendingCommentId, true, setHighlightedCommentId);
 		});
 
 		return () => {

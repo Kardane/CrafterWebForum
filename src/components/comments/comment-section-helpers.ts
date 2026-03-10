@@ -11,6 +11,13 @@ interface InitialCommentViewState {
 	expandedThreadRoots: Set<number>;
 }
 
+interface ShouldRefreshCommentsOnMountInput {
+	initialComments: Comment[];
+	lastReadCommentCount: number;
+	totalCommentCount: number;
+	targetCommentId: number | null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
@@ -135,4 +142,17 @@ export function buildInitialCommentViewState(
 	}
 
 	return { visibleStart, expandedThreadRoots };
+}
+
+export function shouldRefreshCommentsOnMount({
+	initialComments,
+	lastReadCommentCount,
+	totalCommentCount,
+	targetCommentId,
+}: ShouldRefreshCommentsOnMountInput): boolean {
+	if (targetCommentId !== null && !hasCommentId(initialComments, targetCommentId)) {
+		return true;
+	}
+
+	return totalCommentCount > lastReadCommentCount;
 }

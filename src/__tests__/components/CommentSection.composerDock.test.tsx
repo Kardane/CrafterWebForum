@@ -1,7 +1,10 @@
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import CommentSection from "@/components/comments/CommentSection";
+
+const scrollToBottomMock = vi.fn();
+const scrollToCommentElementMock = vi.fn();
 
 vi.mock("next-auth/react", () => ({
 	useSession: () => ({ data: null }),
@@ -49,8 +52,8 @@ vi.mock("@/components/comments/CommentForm", () => ({
 
 vi.mock("@/components/comments/useCommentScroll", () => ({
 	useCommentScroll: () => ({
-		scrollToBottom: vi.fn(),
-		scrollToCommentElement: vi.fn(),
+		scrollToBottom: scrollToBottomMock,
+		scrollToCommentElement: scrollToCommentElementMock,
 	}),
 }));
 
@@ -87,6 +90,9 @@ describe("CommentSection composer dock", () => {
 	afterEach(() => {
 		Object.defineProperty(globalThis, "ResizeObserver", { value: originalResizeObserver, configurable: true });
 		Object.defineProperty(window, "innerWidth", { value: originalInnerWidth, configurable: true });
+		window.history.replaceState(null, "", "/");
+		scrollToBottomMock.mockReset();
+		scrollToCommentElementMock.mockReset();
 		vi.restoreAllMocks();
 	});
 
@@ -138,5 +144,70 @@ describe("CommentSection composer dock", () => {
 		expect(dock).toBeTruthy();
 		expect(dock?.style.left).toBe("100px");
 		expect(dock?.style.right).toBe("300px");
+	});
+
+	it("retries comment jump after initial fresh reload brings target comment", async () => {
+		const rafCallbacks: FrameRequestCallback[] = [];
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+			rafCallbacks.push(cb);
+			return rafCallbacks.length;
+		});
+		vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+		window.history.replaceState(null, "", "/posts/1?commentId=99#comment-99");
+
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				comments: [
+					{
+						id: 1,
+						content: "root",
+						createdAt: "2026-03-10T00:00:00.000Z",
+						updatedAt: "2026-03-10T00:00:00.000Z",
+						isPinned: false,
+						parentId: null,
+						isPostAuthor: false,
+						author: { id: 1, nickname: "writer", minecraftUuid: null, role: "user" },
+						replies: [
+							{
+								id: 99,
+								content: "target",
+								createdAt: "2026-03-10T00:01:00.000Z",
+								updatedAt: "2026-03-10T00:01:00.000Z",
+								isPinned: false,
+								parentId: 1,
+								isPostAuthor: false,
+								author: { id: 2, nickname: "alice", minecraftUuid: null, role: "user" },
+								replies: [],
+							},
+						],
+					},
+				],
+			}),
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(
+			<CommentSection
+				postId={1}
+				initialComments={[]}
+				readMarker={{ lastReadCommentCount: 0, totalCommentCount: 1 }}
+			/>
+		);
+
+		for (let i = 0; i < 5; i += 1) {
+			await act(async () => {
+				for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
+					cb(0);
+				}
+				await Promise.resolve();
+			});
+		}
+
+		expect(fetchMock).toHaveBeenCalledWith("/api/posts/1/comments", { cache: "no-store" });
+		await waitFor(() => {
+			expect(scrollToCommentElementMock).toHaveBeenCalledWith(99, true, expect.any(Function));
+		});
 	});
 });
