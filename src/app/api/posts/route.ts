@@ -8,6 +8,7 @@ import { getPostMutationTags, safeRevalidateTags } from "@/lib/cache-tags";
 import { normalizeBoardType, toStoredTags } from "@/lib/post-board";
 import { resolveActiveUserFromSession } from "@/lib/active-user";
 import {
+	isMissingPostCommentCountColumnError,
 	isMissingPostBoardMetadataColumnError,
 	isMissingPostSubscriptionTableError,
 } from "@/lib/db-schema-guard";
@@ -131,19 +132,24 @@ export async function POST(request: NextRequest) {
 					commentCount: 0,
 					authorId: sessionUserId,
 				},
+				select: {
+					id: true,
+				},
 			});
 		} catch (error) {
-			if (!isMissingPostBoardMetadataColumnError(error)) {
+			if (!isMissingPostBoardMetadataColumnError(error) && !isMissingPostCommentCountColumnError(error)) {
 				throw error;
 			}
-			console.warn("[API] POST /api/posts post board columns missing; storing board metadata in tags only");
+			console.warn("[API] POST /api/posts legacy post columns missing; storing board metadata in tags only");
 			post = await prisma.post.create({
 				data: {
 					title,
 					content,
 					tags: storedTags,
-					commentCount: 0,
 					authorId: sessionUserId,
+				},
+				select: {
+					id: true,
 				},
 			});
 		}
