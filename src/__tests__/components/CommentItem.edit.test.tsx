@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-auth/react", () => ({
 	useSession: () => ({ data: { user: { id: "7", role: "user" } } }),
@@ -16,6 +16,10 @@ vi.mock("@/components/ui/ImageLightboxProvider", () => ({
 }));
 
 describe("CommentItem edit behavior", () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it("keeps edit mode open when onEdit rejects", async () => {
 		const onEdit = vi.fn().mockRejectedValue(new Error("update failed"));
 		const { default: CommentItem } = await import("@/components/comments/CommentItem");
@@ -85,5 +89,45 @@ describe("CommentItem edit behavior", () => {
 		const styleTag = container.querySelector("style");
 		expect(styleTag?.textContent).toContain(":global(.comment-row:hover) .comment-item");
 		expect(styleTag?.textContent).toContain(":global(.comment-row:hover) .comment-actions");
+	});
+
+	it("keeps toolbar active while moving from row to actions", async () => {
+		vi.useFakeTimers();
+		const { default: CommentItem } = await import("@/components/comments/CommentItem");
+		const { container } = render(
+			<CommentItem
+				comment={{
+					id: 101,
+					content: "original comment",
+					createdAt: "2026-03-06T00:00:00.000Z",
+					updatedAt: "2026-03-06T00:00:00.000Z",
+					isPinned: false,
+					parentId: null,
+					isPostAuthor: false,
+					author: {
+						id: 7,
+						nickname: "alice",
+						minecraftUuid: null,
+						role: "user",
+					},
+					replies: [],
+				}}
+				onReplyRequest={vi.fn()}
+				onEdit={vi.fn()}
+				onDelete={vi.fn()}
+			/>
+		);
+
+		const wrapper = container.querySelector(".comment-wrapper") as HTMLDivElement;
+		const actions = container.querySelector(".comment-actions") as HTMLDivElement;
+
+		fireEvent.mouseEnter(wrapper);
+		expect(wrapper.className).toContain("toolbar-active");
+
+		fireEvent.mouseLeave(wrapper);
+		fireEvent.mouseEnter(actions);
+		vi.advanceTimersByTime(150);
+
+		expect(wrapper.className).toContain("toolbar-active");
 	});
 });

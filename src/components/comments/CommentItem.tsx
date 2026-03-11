@@ -76,6 +76,7 @@ export default function CommentItem({
 	const [isEditing, setIsEditing] = useState(false);
 	const [copiedType, setCopiedType] = useState<CopiedType>(null);
 	const [isActionSuppressed, setIsActionSuppressed] = useState(false);
+	const [isToolbarActive, setIsToolbarActive] = useState(false);
 	const avatarSeed = comment.author.minecraftUuid ?? "";
 	const avatarCandidates = useMemo(() => buildAvatarCandidates(comment.author.minecraftUuid, 36), [comment.author.minecraftUuid]);
 	const [avatarState, setAvatarState] = useState<{ seed: string; index: number }>({
@@ -84,6 +85,7 @@ export default function CommentItem({
 	});
 	const copiedTimeoutRef = useRef<number | null>(null);
 	const suppressTimeoutRef = useRef<number | null>(null);
+	const toolbarLeaveTimeoutRef = useRef<number | null>(null);
 
 	useEffect(
 		() => () => {
@@ -93,9 +95,31 @@ export default function CommentItem({
 			if (suppressTimeoutRef.current) {
 				window.clearTimeout(suppressTimeoutRef.current);
 			}
+			if (toolbarLeaveTimeoutRef.current) {
+				window.clearTimeout(toolbarLeaveTimeoutRef.current);
+			}
 		},
 		[]
 	);
+
+	const cancelToolbarHide = () => {
+		if (toolbarLeaveTimeoutRef.current) {
+			window.clearTimeout(toolbarLeaveTimeoutRef.current);
+			toolbarLeaveTimeoutRef.current = null;
+		}
+	};
+
+	const activateToolbar = () => {
+		cancelToolbarHide();
+		setIsToolbarActive(true);
+	};
+
+	const scheduleToolbarHide = () => {
+		cancelToolbarHide();
+		toolbarLeaveTimeoutRef.current = window.setTimeout(() => {
+			setIsToolbarActive(false);
+		}, 120);
+	};
 
 	useEffect(() => {
 		if (!shouldStartEdit) {
@@ -203,8 +227,12 @@ export default function CommentItem({
 
 	return (
 		<div
-			className="comment-wrapper"
+			className={`comment-wrapper ${isToolbarActive ? "toolbar-active" : ""}`}
 			id={`comment-${comment.id}`}
+			onMouseEnter={activateToolbar}
+			onMouseLeave={scheduleToolbarHide}
+			onFocusCapture={activateToolbar}
+			onBlurCapture={scheduleToolbarHide}
 		>
 			<div
 				className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""} ${isMentionHighlighted ? "is-mention-highlighted" : ""} ${isCompact ? "compact" : ""}`}
@@ -292,7 +320,11 @@ export default function CommentItem({
 				</div>
 
 				{!isEditing && (
-					<div className={`comment-actions ${isActionSuppressed ? "suppressed" : ""}`}>
+					<div
+						className={`comment-actions ${isActionSuppressed ? "suppressed" : ""}`}
+						onMouseEnter={activateToolbar}
+						onMouseLeave={scheduleToolbarHide}
+					>
 						<button
 							type="button"
 							className="action-btn"
@@ -357,6 +389,7 @@ export default function CommentItem({
 					box-sizing: border-box;
 				}
 
+				.comment-wrapper.toolbar-active .comment-item,
 				:global(.comment-row:hover) .comment-item,
 				.comment-wrapper:hover .comment-item {
 					background: rgba(0, 0, 0, 0.2);
@@ -390,6 +423,7 @@ export default function CommentItem({
 					border-left: 3px solid var(--accent);
 				}
 
+				.comment-wrapper.toolbar-active .comment-item.pinned,
 				:global(.comment-row:hover) .comment-item.pinned,
 				.comment-wrapper:hover .comment-item.pinned {
 					background: rgba(139, 35, 50, 0.2);
@@ -605,6 +639,7 @@ export default function CommentItem({
 					flex: 0 0 auto;
 				}
 
+				.comment-wrapper.toolbar-active .comment-hover-time,
 				:global(.comment-row:hover) .comment-hover-time,
 				.comment-wrapper:hover .comment-hover-time {
 					opacity: 1;
@@ -626,6 +661,7 @@ export default function CommentItem({
 					transition: opacity 0.15s ease;
 				}
 
+				.comment-wrapper.toolbar-active .comment-actions,
 				:global(.comment-row:hover) .comment-actions,
 				.comment-wrapper:hover .comment-actions,
 				.comment-wrapper:focus-within .comment-actions {
