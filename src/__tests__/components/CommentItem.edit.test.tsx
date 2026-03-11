@@ -87,8 +87,8 @@ describe("CommentItem edit behavior", () => {
 		);
 
 		const styleTag = container.querySelector("style");
-		expect(styleTag?.textContent).toContain(":global(.comment-row:hover) .comment-item");
-		expect(styleTag?.textContent).toContain(":global(.comment-row:hover) .comment-actions");
+		expect(styleTag?.textContent).toContain(":global(.comment-interactive-row:hover) .comment-item");
+		expect(styleTag?.textContent).toContain(":global(.comment-interactive-row:hover) .comment-actions");
 	});
 
 	it("keeps toolbar active while moving from row to actions", async () => {

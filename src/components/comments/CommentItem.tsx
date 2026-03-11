@@ -386,11 +386,12 @@ export default function CommentItem({
 					transition: background-color 0.15s;
 					align-items: stretch;
 					width: 100%;
+					min-width: 0;
 					box-sizing: border-box;
 				}
 
 				.comment-wrapper.toolbar-active .comment-item,
-				:global(.comment-row:hover) .comment-item,
+				:global(.comment-interactive-row:hover) .comment-item,
 				.comment-wrapper:hover .comment-item {
 					background: rgba(0, 0, 0, 0.2);
 				}
@@ -424,7 +425,7 @@ export default function CommentItem({
 				}
 
 				.comment-wrapper.toolbar-active .comment-item.pinned,
-				:global(.comment-row:hover) .comment-item.pinned,
+				:global(.comment-interactive-row:hover) .comment-item.pinned,
 				.comment-wrapper:hover .comment-item.pinned {
 					background: rgba(139, 35, 50, 0.2);
 				}
@@ -640,7 +641,7 @@ export default function CommentItem({
 				}
 
 				.comment-wrapper.toolbar-active .comment-hover-time,
-				:global(.comment-row:hover) .comment-hover-time,
+				:global(.comment-interactive-row:hover) .comment-hover-time,
 				.comment-wrapper:hover .comment-hover-time {
 					opacity: 1;
 				}
@@ -662,7 +663,7 @@ export default function CommentItem({
 				}
 
 				.comment-wrapper.toolbar-active .comment-actions,
-				:global(.comment-row:hover) .comment-actions,
+				:global(.comment-interactive-row:hover) .comment-actions,
 				.comment-wrapper:hover .comment-actions,
 				.comment-wrapper:focus-within .comment-actions {
 					opacity: 1;
