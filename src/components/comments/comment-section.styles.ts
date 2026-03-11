@@ -47,11 +47,6 @@ export const commentSectionStyles = `
 		width: 100%;
 	}
 
-	.comment-interactive-row > * {
-		flex: 1 1 auto;
-		min-width: 0;
-	}
-
 	:global(.read-marker) {
 		display: flex;
 		align-items: center;

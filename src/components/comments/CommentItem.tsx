@@ -372,7 +372,9 @@ export default function CommentItem({
 				.comment-wrapper {
 					margin-bottom: 4px;
 					display: block;
+					flex: 1 1 auto;
 					width: 100%;
+					min-width: 0;
 					box-sizing: border-box;
 				}
 

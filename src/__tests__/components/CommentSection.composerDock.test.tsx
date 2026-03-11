@@ -233,5 +233,6 @@ describe("CommentSection composer dock", () => {
 		);
 
 		expect(container.querySelector(".comment-row.comment-interactive-row")).toBeTruthy();
+		expect(container.querySelector(".comment-wrapper")?.getAttribute("style") ?? "").not.toContain("flex");
 	});
 });
