@@ -44,7 +44,7 @@ export function processAnchorEmbeds(html: string): string {
 		}
 
 		const externalCard = buildExternalCardByUrl(decodedHref);
-		if (externalCard.includes('class="external-link-card"')) {
+		if (externalCard.includes('class="external-link-card') || externalCard.includes("class='external-link-card")) {
 			return externalCard;
 		}
 

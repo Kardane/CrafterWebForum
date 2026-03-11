@@ -424,6 +424,145 @@
 		border: 1px solid color-mix(in srgb, var(--color-border) 75%, #000 25%);
 	}
 
+	.post-content .external-link-card--github {
+		background:
+			linear-gradient(135deg, color-mix(in srgb, #58a6ff 10%, transparent) 0%, transparent 42%),
+			linear-gradient(180deg, color-mix(in srgb, var(--color-bg-tertiary) 76%, #0d1117 24%) 0%, color-mix(in srgb, var(--color-bg-tertiary) 64%, #0d1117 36%) 100%);
+		border-color: color-mix(in srgb, var(--color-border) 50%, #30363d 50%);
+		padding: 15px 16px;
+		gap: 14px;
+		box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 5%, transparent), 0 10px 24px rgba(0, 0, 0, 0.18);
+	}
+
+	.post-content .external-link-card--github:hover {
+		border-color: color-mix(in srgb, #58a6ff 56%, var(--color-border) 44%);
+		box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent), 0 14px 28px rgba(0, 0, 0, 0.22);
+	}
+
+	.post-content .external-link-card--github .external-link-card__media {
+		width: 56px;
+		height: 56px;
+		border-radius: 16px;
+		background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, rgba(13, 17, 23, 0.22) 100%);
+		border: 1px solid color-mix(in srgb, #58a6ff 18%, var(--color-border) 82%);
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+	}
+
+	.post-content .external-link-card--github .external-link-card__thumb {
+		object-fit: cover;
+	}
+
+	.post-content .external-link-card--github .external-link-card__icon {
+		display: none;
+	}
+
+	.post-content .external-link-card--github .external-link-card__body {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0;
+		align-content: start;
+	}
+
+	.post-content .external-link-card--github .external-link-card__badge {
+		display: inline-flex;
+		align-items: center;
+		justify-self: start;
+		padding: 3px 9px;
+		border-radius: 999px;
+		background: color-mix(in srgb, #58a6ff 16%, transparent);
+		color: color-mix(in srgb, #ffffff 82%, #58a6ff 18%);
+		font-size: 0.65rem;
+		font-weight: 700;
+		letter-spacing: 0.03em;
+		border: 1px solid color-mix(in srgb, #58a6ff 28%, transparent);
+		margin-bottom: 8px;
+	}
+
+	.post-content .external-link-card--github .external-link-card__title {
+		font-size: 1.02rem;
+		color: #58a6ff;
+		font-weight: 700;
+		line-height: 1.28;
+		margin-bottom: 3px;
+	}
+
+	.post-content .external-link-card--github .external-link-card__subtitle {
+		font-size: 0.78rem;
+		color: color-mix(in srgb, var(--color-text-secondary) 86%, #8b949e 14%);
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		margin-bottom: 8px;
+	}
+
+	.post-content .external-link-card--github .external-link-card__description {
+		order: 4;
+		color: color-mix(in srgb, var(--color-text-muted) 92%, #c9d1d9 8%);
+		font-size: 0.79rem;
+		line-height: 1.45;
+		margin-top: 2px;
+		margin-bottom: 10px;
+		-webkit-line-clamp: 3;
+	}
+
+	.post-content .external-link-card--github .external-link-card__meta {
+		order: 6;
+		margin-top: 10px;
+		gap: 6px;
+	}
+
+	.post-content .external-link-card--github .external-link-card__meta-chip {
+		background: color-mix(in srgb, #0d1117 42%, transparent);
+		border: 1px solid color-mix(in srgb, #58a6ff 12%, var(--color-border) 88%);
+		color: color-mix(in srgb, var(--color-text-secondary) 92%, #c9d1d9 8%);
+		border-radius: 999px;
+		padding: 3px 8px;
+	}
+
+	.post-content .external-link-card--github .external-link-card__author {
+		order: 3;
+		gap: 7px;
+		font-size: 0.73rem;
+		color: color-mix(in srgb, var(--color-text-secondary) 90%, #c9d1d9 10%);
+		margin-bottom: 8px;
+	}
+
+	.post-content .external-link-card--github .external-link-card__author-avatar {
+		width: 20px;
+		height: 20px;
+		border: 1px solid color-mix(in srgb, #58a6ff 16%, var(--color-border) 84%);
+	}
+
+	.post-content .external-link-card--github .external-link-card__author-name {
+		max-width: 260px;
+	}
+
+	.post-content .external-link-card--github .external-link-card__status {
+		order: 5;
+		justify-self: start;
+		margin-top: 2px;
+	}
+
+	@media (max-width: 640px) {
+		.post-content .external-link-card--github {
+			padding: 13px 14px;
+			gap: 12px;
+		}
+
+		.post-content .external-link-card--github .external-link-card__media {
+			width: 48px;
+			height: 48px;
+			border-radius: 14px;
+		}
+
+		.post-content .external-link-card--github .external-link-card__title {
+			font-size: 0.95rem;
+		}
+
+		.post-content .external-link-card--github .external-link-card__meta {
+			gap: 5px;
+		}
+	}
+
 	.post-content .md-hr {
 		border: 0;
 		border-top: 1px solid rgba(255, 255, 255, 0.05);

@@ -64,9 +64,11 @@ function createCardHtml(params: {
 	iconUrl: string;
 	chips: string[];
 	extraAttributes?: string;
+	className?: string;
 }): string {
-	const { url, badge, title, subtitle, iconUrl, chips, extraAttributes = "" } = params;
-	return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="external-link-card"${extraAttributes}>
+	const { url, badge, title, subtitle, iconUrl, chips, extraAttributes = "", className = "" } = params;
+	const classes = ["external-link-card", className].filter(Boolean).join(" ");
+	return `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="${classes}"${extraAttributes}>
 		<span class="external-link-card__media">
 			<img src="${escapeHtml(iconUrl)}" alt="${escapeHtml(badge)} 썸네일" class="external-link-card__thumb" loading="lazy" decoding="async">
 			<img src="${escapeHtml(iconUrl)}" alt="" aria-hidden="true" class="external-link-card__icon" loading="lazy" decoding="async">
@@ -164,6 +166,7 @@ export function buildExternalCardByUrl(rawUrl: string): string {
 				iconUrl,
 				chips,
 				extraAttributes,
+				className: "external-link-card--github",
 			});
 		}
 

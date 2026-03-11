@@ -29,6 +29,7 @@ describe("embed utils", () => {
 	it("renders github links as cards", () => {
 		const html = processAllEmbeds("https://github.com/vercel/next.js/issues/1");
 		expect(html).toContain("external-link-card");
+		expect(html).toContain("external-link-card--github");
 		expect(html).toContain("external-link-card__icon");
 		expect(html).toContain("Issue #1");
 	});
