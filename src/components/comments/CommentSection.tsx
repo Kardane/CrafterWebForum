@@ -706,7 +706,7 @@ export default function CommentSection({
 								);
 							}
 							return (
-								<div className="comment-row" key={row.key}>
+								<div className="comment-row comment-interactive-row" key={row.key}>
 									<CommentItem
 										comment={row.item.comment}
 										replyToName={row.item.replyToName}

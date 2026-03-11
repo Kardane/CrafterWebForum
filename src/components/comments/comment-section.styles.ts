@@ -41,6 +41,17 @@ export const commentSectionStyles = `
 		contain-intrinsic-size: 140px;
 	}
 
+	.comment-interactive-row {
+		display: flex;
+		align-items: stretch;
+		width: 100%;
+	}
+
+	.comment-interactive-row > * {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+
 	:global(.read-marker) {
 		display: flex;
 		align-items: center;

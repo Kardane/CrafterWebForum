@@ -210,4 +210,28 @@ describe("CommentSection composer dock", () => {
 			expect(scrollToCommentElementMock).toHaveBeenCalledWith(99, true, expect.any(Function));
 		});
 	});
+
+	it("renders comment rows with the full-width interactive row class", () => {
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+		const { container } = render(
+			<CommentSection
+				postId={1}
+				initialComments={[
+					{
+						id: 1,
+						content: "comment",
+						createdAt: "2026-03-10T00:00:00.000Z",
+						updatedAt: "2026-03-10T00:00:00.000Z",
+						isPinned: false,
+						parentId: null,
+						isPostAuthor: false,
+						author: { id: 1, nickname: "writer", minecraftUuid: null, role: "user" },
+						replies: [],
+					},
+				]}
+			/>
+		);
+
+		expect(container.querySelector(".comment-row.comment-interactive-row")).toBeTruthy();
+	});
 });
