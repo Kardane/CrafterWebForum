@@ -82,6 +82,41 @@ describe("PATCH /api/comments/[id]", () => {
 		expect(commentUpdateMock).toHaveBeenCalledTimes(1);
 		expect(body.comment.isPostAuthor).toBe(true);
 	});
+
+	it("allows admin to update another user's comment", async () => {
+		authMock.mockResolvedValue({ user: { id: "1", role: "admin" } });
+		commentFindUniqueMock.mockResolvedValue({ id: 11, authorId: 5, postId: 3 });
+		commentUpdateMock.mockResolvedValue({
+			id: 11,
+			content: "updated by admin",
+			createdAt: new Date("2026-02-08T00:00:00.000Z"),
+			updatedAt: new Date("2026-02-08T00:01:00.000Z"),
+			isPinned: false,
+			parentId: null,
+			author: {
+				id: 5,
+				nickname: "writer",
+				minecraftUuid: null,
+				role: "user",
+			},
+			post: {
+				authorId: 9,
+				tags: null,
+			},
+		});
+		postUpdateMock.mockResolvedValue({ id: 3 });
+
+		const { PATCH } = await import("@/app/api/comments/[id]/route");
+		const req = new Request("http://localhost/api/comments/11", {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "updated by admin" }),
+		});
+		const res = await PATCH(req as never, { params: Promise.resolve({ id: "11" }) });
+
+		expect(res.status).toBe(200);
+		expect(commentUpdateMock).toHaveBeenCalledTimes(1);
+	});
 });
 
 describe("POST /api/comments/[id]/pin", () => {

@@ -48,7 +48,7 @@ export async function PATCH(
 			return NextResponse.json({ error: 'Comment not found' }, { status: 404 });
 		}
 
-		if (comment.authorId !== sessionUserId) {
+		if (comment.authorId !== sessionUserId && session.user.role !== 'admin') {
 			return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 		}
 

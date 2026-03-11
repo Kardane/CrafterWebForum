@@ -37,7 +37,7 @@ interface CommentItemProps {
 	replyToPreview?: string | null;
 	onReplyRequest: (commentId: number, nickname: string, preview: string) => void;
 	onNavigateToComment?: (commentId: number) => void;
-	onEdit: (commentId: number, content: string) => void;
+	onEdit: (commentId: number, content: string) => Promise<void> | void;
 	onDelete: (commentId: number, event?: React.MouseEvent) => void;
 	onPin?: (commentId: number) => void;
 	onVote?: (commentId: number, optionId: number) => void;
@@ -145,14 +145,18 @@ export default function CommentItem({
 		}, 700);
 	};
 
-	const handleEditSubmit = (content: string) => {
+	const handleEditSubmit = async (content: string) => {
 		if (!content.trim()) {
 			onDelete(comment.id);
 			setIsEditing(false);
 			return;
 		}
-		onEdit(comment.id, content);
-		setIsEditing(false);
+		try {
+			await onEdit(comment.id, content);
+			setIsEditing(false);
+		} catch {
+			return;
+		}
 	};
 
 	const markCopied = (type: Exclude<CopiedType, null>) => {
@@ -335,7 +339,9 @@ export default function CommentItem({
 			<style jsx>{`
 				.comment-wrapper {
 					margin-bottom: 4px;
+					display: block;
 					width: 100%;
+					box-sizing: border-box;
 				}
 
 				.comment-item {
@@ -348,8 +354,10 @@ export default function CommentItem({
 					transition: background-color 0.15s;
 					align-items: stretch;
 					width: 100%;
+					box-sizing: border-box;
 				}
 
+				:global(.comment-row:hover) .comment-item,
 				.comment-wrapper:hover .comment-item {
 					background: rgba(0, 0, 0, 0.2);
 				}
@@ -382,6 +390,7 @@ export default function CommentItem({
 					border-left: 3px solid var(--accent);
 				}
 
+				:global(.comment-row:hover) .comment-item.pinned,
 				.comment-wrapper:hover .comment-item.pinned {
 					background: rgba(139, 35, 50, 0.2);
 				}
@@ -596,6 +605,7 @@ export default function CommentItem({
 					flex: 0 0 auto;
 				}
 
+				:global(.comment-row:hover) .comment-hover-time,
 				.comment-wrapper:hover .comment-hover-time {
 					opacity: 1;
 				}
@@ -616,6 +626,7 @@ export default function CommentItem({
 					transition: opacity 0.15s ease;
 				}
 
+				:global(.comment-row:hover) .comment-actions,
 				.comment-wrapper:hover .comment-actions,
 				.comment-wrapper:focus-within .comment-actions {
 					opacity: 1;
