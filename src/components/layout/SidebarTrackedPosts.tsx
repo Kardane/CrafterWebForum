@@ -457,7 +457,12 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 					return (
 						<div
 							key={item.postId}
-							className="flex items-start gap-2 rounded border border-transparent px-2 py-2 transition-colors hover:border-border hover:bg-bg-tertiary"
+							className={classNames(
+								"flex items-start gap-2 rounded border px-2 py-2 transition-colors",
+								item.newCommentCount > 0
+									? "border-yellow-500/30 bg-yellow-500/10 hover:border-yellow-500/50 hover:bg-yellow-500/20"
+									: "border-transparent hover:border-border hover:bg-bg-tertiary"
+							)}
 						>
 							<Link
 								href={targetHref}

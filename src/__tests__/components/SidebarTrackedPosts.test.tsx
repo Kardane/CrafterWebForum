@@ -202,4 +202,32 @@ describe("SidebarTrackedPosts", () => {
 		});
 		expect(JSON.parse(window.localStorage.getItem("sidebarTrackedPostsFallback:7") ?? "[]")).toHaveLength(1);
 	});
+
+	it("새 댓글이 있는 포스트는 노란색 하이라이트 클래스가 적용되어야 함", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					items: [
+						{ ...trackedPost, postId: 1, title: "no new comments", newCommentCount: 0 },
+						{ ...trackedPost, postId: 2, title: "has new comments", newCommentCount: 5 },
+					],
+					page: { nextCursor: null, hasMore: false },
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			)
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
+		render(<SidebarTrackedPosts />);
+
+		const noNewComments = await screen.findByText("no new comments");
+		const hasNewComments = await screen.findByText("has new comments");
+
+		const noNewCommentsContainer = noNewComments.closest(".flex.items-start.gap-2.rounded.border");
+		const hasNewCommentsContainer = hasNewComments.closest(".flex.items-start.gap-2.rounded.border");
+
+		expect(noNewCommentsContainer).not.toHaveClass("bg-yellow-500/10");
+		expect(hasNewCommentsContainer).toHaveClass("bg-yellow-500/10");
+	});
 });
