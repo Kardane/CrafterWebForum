@@ -152,47 +152,38 @@ export function useCommentScroll({
 		latestJumpAppliedRef.current = false;
 	}, [postId]);
 
-	// 저장된 스크롤 위치 복원
 	useEffect(() => {
 		if (restoreCheckedRef.current || flattenedCommentsLength === 0) {
 			return;
 		}
 		restoreCheckedRef.current = true;
-		const saved = readPostDetailScrollState(postId);
-		if (!saved) {
-			return;
-		}
-		restoreAppliedRef.current = true;
-		if (saved.anchorCommentId !== null && ensureCommentVisible(saved.anchorCommentId)) {
-			requestAnimationFrame(() => {
-				const target = document.getElementById(`comment-${saved.anchorCommentId}`);
-				target?.scrollIntoView({ behavior: "smooth", block: "center" });
-			});
-		} else {
-			window.scrollTo({ top: saved.scrollY, behavior: "auto" });
-		}
-		clearPostDetailScrollState(postId);
-	}, [ensureCommentVisible, flattenedCommentsLength, postId]);
 
-	// 첫 진입 시 최신 댓글로 이동
-	useEffect(() => {
-		if (latestJumpAppliedRef.current || flattenedCommentsLength === 0) {
-			return;
+		const saved = readPostDetailScrollState(postId);
+		let restored = false;
+		if (saved) {
+			restoreAppliedRef.current = true;
+			restored = true;
+			if (saved.anchorCommentId !== null && ensureCommentVisible(saved.anchorCommentId)) {
+				requestAnimationFrame(() => {
+					const target = document.getElementById(`comment-${saved.anchorCommentId}`);
+					target?.scrollIntoView({ behavior: "smooth", block: "center" });
+				});
+			} else {
+				window.scrollTo({ top: saved.scrollY, behavior: "auto" });
+			}
+			clearPostDetailScrollState(postId);
 		}
-		if (!restoreCheckedRef.current) {
-			return;
-		}
-		if (hasTargetCommentInUrl()) {
+
+		if (hasTargetCommentInUrl() || restored) {
 			latestJumpAppliedRef.current = true;
 			return;
 		}
-		if (readPostDetailScrollState(postId)) {
+
+		if (!latestJumpAppliedRef.current) {
 			latestJumpAppliedRef.current = true;
-			return;
+			scrollToBottom("auto");
 		}
-		latestJumpAppliedRef.current = true;
-		scrollToBottom("auto");
-	}, [flattenedCommentsLength, postId, scrollToBottom]);
+	}, [ensureCommentVisible, flattenedCommentsLength, postId, scrollToBottom]);
 
 	// 스크롤/비저빌리티 이벤트 리스너 등록
 	useEffect(() => {
