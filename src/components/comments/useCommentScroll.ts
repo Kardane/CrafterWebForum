@@ -186,9 +186,13 @@ export function useCommentScroll({
 			latestJumpAppliedRef.current = true;
 			return;
 		}
+		if (readPostDetailScrollState(postId)) {
+			latestJumpAppliedRef.current = true;
+			return;
+		}
 		latestJumpAppliedRef.current = true;
 		scrollToBottom("auto");
-	}, [flattenedCommentsLength, scrollToBottom]);
+	}, [flattenedCommentsLength, postId, scrollToBottom]);
 
 	// 스크롤/비저빌리티 이벤트 리스너 등록
 	useEffect(() => {

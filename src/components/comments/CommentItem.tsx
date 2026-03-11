@@ -201,12 +201,12 @@ export default function CommentItem({
 		<div
 			className="comment-wrapper"
 			id={`comment-${comment.id}`}
-			onMouseLeave={() => {
-				setIsActionSuppressed(false);
-			}}
 		>
 			<div
 				className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""} ${isMentionHighlighted ? "is-mention-highlighted" : ""} ${isCompact ? "compact" : ""}`}
+				onMouseLeave={() => {
+					setIsActionSuppressed(false);
+				}}
 			>
 				{replyToName && replyToCommentId && (
 					<div className="reply-context-line">
@@ -335,6 +335,7 @@ export default function CommentItem({
 			<style jsx>{`
 				.comment-wrapper {
 					margin-bottom: 4px;
+					width: 100%;
 				}
 
 				.comment-item {
@@ -346,9 +347,10 @@ export default function CommentItem({
 					position: relative;
 					transition: background-color 0.15s;
 					align-items: stretch;
+					width: 100%;
 				}
 
-				.comment-item:hover {
+				.comment-wrapper:hover .comment-item {
 					background: rgba(0, 0, 0, 0.2);
 				}
 
@@ -380,7 +382,7 @@ export default function CommentItem({
 					border-left: 3px solid var(--accent);
 				}
 
-				.comment-item.pinned:hover {
+				.comment-wrapper:hover .comment-item.pinned {
 					background: rgba(139, 35, 50, 0.2);
 				}
 
@@ -615,7 +617,7 @@ export default function CommentItem({
 				}
 
 				.comment-wrapper:hover .comment-actions,
-				.comment-item:focus-within .comment-actions {
+				.comment-wrapper:focus-within .comment-actions {
 					opacity: 1;
 					pointer-events: auto;
 				}
