@@ -68,6 +68,8 @@ describe("PATCH /api/comments/[id]", () => {
 				authorId: 5,
 			},
 		});
+		postFindUniqueMock.mockResolvedValue({ authorId: 5, tags: null });
+		postUpdateMock.mockResolvedValue({ id: 3 });
 
 		const { PATCH } = await import("@/app/api/comments/[id]/route");
 		const req = new Request("http://localhost/api/comments/11", {
@@ -104,6 +106,7 @@ describe("PATCH /api/comments/[id]", () => {
 				tags: null,
 			},
 		});
+		postFindUniqueMock.mockResolvedValue({ authorId: 9, tags: null });
 		postUpdateMock.mockResolvedValue({ id: 3 });
 
 		const { PATCH } = await import("@/app/api/comments/[id]/route");
@@ -116,6 +119,42 @@ describe("PATCH /api/comments/[id]", () => {
 
 		expect(res.status).toBe(200);
 		expect(commentUpdateMock).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps comment update working when Post.tags column is missing", async () => {
+		authMock.mockResolvedValue({ user: { id: "5", role: "user" } });
+		commentFindUniqueMock.mockResolvedValue({ id: 11, authorId: 5, postId: 3 });
+		commentUpdateMock.mockResolvedValue({
+			id: 11,
+			content: "updated",
+			createdAt: new Date("2026-02-08T00:00:00.000Z"),
+			updatedAt: new Date("2026-02-08T00:01:00.000Z"),
+			isPinned: false,
+			parentId: null,
+			author: {
+				id: 5,
+				nickname: "writer",
+				minecraftUuid: null,
+				role: "user",
+			},
+		});
+		postUpdateMock.mockResolvedValue({ id: 3 });
+		postFindUniqueMock
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: Post.tags"))
+			.mockResolvedValueOnce({ authorId: 5 });
+
+		const { PATCH } = await import("@/app/api/comments/[id]/route");
+		const req = new Request("http://localhost/api/comments/11", {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "updated" }),
+		});
+		const res = await PATCH(req as never, { params: Promise.resolve({ id: "11" }) });
+		const body = await res.json();
+
+		expect(res.status).toBe(200);
+		expect(postFindUniqueMock).toHaveBeenCalledTimes(2);
+		expect(body.comment.isPostAuthor).toBe(true);
 	});
 });
 

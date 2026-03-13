@@ -59,6 +59,11 @@ export function isMissingPostCommentCountColumnError(error: unknown): boolean {
 	return hasMissingColumnPattern(message, "post", "commentcount");
 }
 
+export function isMissingPostTagsColumnError(error: unknown): boolean {
+	const message = toErrorMessage(error).toLowerCase();
+	return hasMissingColumnPattern(message, "post", "tags");
+}
+
 export function isMissingPostBoardMetadataColumnError(error: unknown): boolean {
 	return isMissingPostBoardColumnError(error) || isMissingPostServerAddressColumnError(error);
 }

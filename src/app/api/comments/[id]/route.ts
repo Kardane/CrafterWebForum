@@ -5,7 +5,7 @@ import { toSessionUserId } from '@/lib/session-user';
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from '@/lib/cache-tags';
 import { broadcastRealtime } from '@/lib/realtime/server-broadcast';
 import { REALTIME_EVENTS, REALTIME_TOPICS } from '@/lib/realtime/constants';
-import { isMissingPostCommentCountColumnError } from '@/lib/db-schema-guard';
+import { isMissingPostCommentCountColumnError, isMissingPostTagsColumnError } from '@/lib/db-schema-guard';
 
 
 /**
@@ -68,12 +68,6 @@ export async function PATCH(
 						role: true,
 					},
 				},
-				post: {
-					select: {
-						authorId: true,
-						tags: true,
-					},
-				},
 			},
 		});
 
@@ -81,10 +75,35 @@ export async function PATCH(
 			where: { id: comment.postId },
 			data: { updatedAt: new Date() },
 		});
+		let postAuthorId: number | null = null;
+		let postTags: string | null = null;
+		try {
+			const postForContext = await prisma.post.findUnique({
+				where: { id: comment.postId },
+				select: {
+					authorId: true,
+					tags: true,
+				},
+			});
+			postAuthorId = postForContext?.authorId ?? null;
+			postTags = postForContext?.tags ?? null;
+		} catch (error) {
+			if (!isMissingPostTagsColumnError(error)) {
+				throw error;
+			}
+			console.warn('[API] PATCH /api/comments/[id] post tags column missing; revalidating without tag fan-out');
+			const legacyPost = await prisma.post.findUnique({
+				where: { id: comment.postId },
+				select: {
+					authorId: true,
+				},
+			});
+			postAuthorId = legacyPost?.authorId ?? null;
+		}
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId: comment.postId,
-				tags: parsePostTags(updated.post.tags),
+				tags: parsePostTags(postTags),
 			})
 		);
 
@@ -104,7 +123,7 @@ export async function PATCH(
 					updatedAt: updated.updatedAt,
 					isPinned: Boolean(updated.isPinned),
 					parentId: updated.parentId,
-					isPostAuthor: updated.author.id === updated.post.authorId,
+					isPostAuthor: postAuthorId !== null && updated.author.id === postAuthorId,
 					author: {
 						id: updated.author.id,
 						nickname: updated.author.nickname,
@@ -126,7 +145,7 @@ export async function PATCH(
 					isPinned: updated.isPinned,
 					parentId: updated.parentId,
 					author: updated.author,
-					isPostAuthor: updated.author.id === updated.post.authorId,
+					isPostAuthor: postAuthorId !== null && updated.author.id === postAuthorId,
 				},
 			});
 	} catch (error) {
