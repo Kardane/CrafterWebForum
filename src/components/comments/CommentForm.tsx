@@ -54,6 +54,7 @@ export default function CommentForm({
 	const [isPollModalOpen, setIsPollModalOpen] = useState(false);
 	const [isSyntaxHelpOpen, setIsSyntaxHelpOpen] = useState(false);
 	const [isUploading, setIsUploading] = useState(false);
+	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isDragActive, setIsDragActive] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -313,6 +314,9 @@ export default function CommentForm({
 	};
 
 	const handleFormSubmit = async (overrideContent?: string) => {
+		if (isSubmitting) {
+			return;
+		}
 		const targetContent = overrideContent ?? content;
 		const trimmedContent = targetContent.trim();
 		if (!trimmedContent && !isEditMode) {
@@ -320,6 +324,7 @@ export default function CommentForm({
 			return;
 		}
 
+		setIsSubmitting(true);
 		try {
 			await onSubmit(targetContent);
 			isUserResizedRef.current = false;
@@ -330,6 +335,8 @@ export default function CommentForm({
 			}
 		} catch (error) {
 			console.error("Comment submit error:", error);
+		} finally {
+			setIsSubmitting(false);
 		}
 	};
 
@@ -470,7 +477,7 @@ export default function CommentForm({
 							// 엔터키: 쉬프트 없이 누르면 전송
 							if (event.key === "Enter" && !event.shiftKey) {
 								event.preventDefault();
-								if ((content.trim() || isEditMode) && !disabled && !isUploading) {
+								if ((content.trim() || isEditMode) && !disabled && !isUploading && !isSubmitting) {
 									void handleFormSubmit();
 								}
 								return;
@@ -500,8 +507,12 @@ export default function CommentForm({
 						onMouseUp={handleTextareaMouseUp}
 					/>
 
-					<button type="submit" disabled={disabled || isUploading || !content.trim()} className="submit-btn">
-						{isUploading ? text("comment.uploadingButton") : disabled ? "..." : text("comment.submitButton")}
+					<button
+						type="submit"
+						disabled={disabled || isUploading || isSubmitting || !content.trim()}
+						className="submit-btn"
+					>
+						{isUploading || isSubmitting ? text("comment.uploadingButton") : disabled ? "..." : text("comment.submitButton")}
 					</button>
 				</div>
 

@@ -69,27 +69,40 @@ export async function PATCH(
 			},
 		});
 
-		await prisma.post.update({
-			where: { id: comment.postId },
-			data: { updatedAt: new Date() },
-		});
-		safeRevalidateTags(
-			getPostMutationTags({
-				postId: comment.postId,
-			})
-		);
+		try {
+			await prisma.post.update({
+				where: { id: comment.postId },
+				data: { updatedAt: new Date() },
+			});
+		} catch (error) {
+			console.warn('[API] PATCH /api/comments/[id] post timestamp update failed; continuing', error);
+		}
 
-		void broadcastRealtime({
-			topic: REALTIME_TOPICS.post(comment.postId),
-			event: REALTIME_EVENTS.COMMENT_UPDATED,
-			payload: {
-				postId: comment.postId,
-				commentId: updated.id,
-				actorUserId: sessionUserId,
-				content: updated.content,
-				updatedAt: updated.updatedAt,
-			},
-		});
+		try {
+			safeRevalidateTags(
+				getPostMutationTags({
+					postId: comment.postId,
+				})
+			);
+		} catch (error) {
+			console.warn('[API] PATCH /api/comments/[id] cache revalidate failed; continuing', error);
+		}
+
+		try {
+			void broadcastRealtime({
+				topic: REALTIME_TOPICS.post(comment.postId),
+				event: REALTIME_EVENTS.COMMENT_UPDATED,
+				payload: {
+					postId: comment.postId,
+					commentId: updated.id,
+					actorUserId: sessionUserId,
+					content: updated.content,
+					updatedAt: updated.updatedAt,
+				},
+			});
+		} catch (error) {
+			console.warn('[API] PATCH /api/comments/[id] realtime broadcast failed; continuing', error);
+		}
 
 		return NextResponse.json({
 			success: true,
