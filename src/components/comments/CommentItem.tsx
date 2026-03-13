@@ -195,9 +195,9 @@ export default function CommentItem({
 			className={`comment-wrapper ${isToolbarActive ? "toolbar-active" : ""}`}
 			id={`comment-${comment.id}`}
 			onMouseEnter={activateToolbar}
-			onMouseLeave={scheduleToolbarHide}
+			onMouseLeave={(event) => scheduleToolbarHide(event.relatedTarget)}
 			onFocusCapture={activateToolbar}
-			onBlurCapture={scheduleToolbarHide}
+			onBlurCapture={(event) => scheduleToolbarHide(event.relatedTarget)}
 		>
 			<div
 				className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""} ${isMentionHighlighted ? "is-mention-highlighted" : ""} ${isCompact ? "compact" : ""}`}
@@ -288,7 +288,7 @@ export default function CommentItem({
 					<div
 						className={`comment-actions ${isActionSuppressed ? "suppressed" : ""}`}
 						onMouseEnter={activateToolbar}
-						onMouseLeave={scheduleToolbarHide}
+						onMouseLeave={(event) => scheduleToolbarHide(event.relatedTarget)}
 					>
 						<button
 							type="button"

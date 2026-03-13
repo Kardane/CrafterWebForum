@@ -128,6 +128,7 @@ describe("CommentItem edit behavior", () => {
 		fireEvent.mouseEnter(wrapper);
 		expect(wrapper.className).toContain("toolbar-active");
 
+		fireEvent.mouseLeave(wrapper, { relatedTarget: actions });
 		fireEvent.mouseEnter(actions);
 
 		expect(wrapper.className).toContain("toolbar-active");
@@ -165,6 +166,42 @@ describe("CommentItem edit behavior", () => {
 
 		fireEvent.mouseLeave(wrapper);
 		expect(wrapper.className).not.toContain("toolbar-active");
+	});
+
+	it("툴바에서 수정 버튼을 클릭하면 바로 편집 모드로 들어가야 함", async () => {
+		const { default: CommentItem } = await import("@/components/comments/CommentItem");
+		const { container } = render(
+			<CommentItem
+				comment={{
+					id: 101,
+					content: "original comment",
+					createdAt: "2026-03-06T00:00:00.000Z",
+					updatedAt: "2026-03-06T00:00:00.000Z",
+					isPinned: false,
+					parentId: null,
+					isPostAuthor: false,
+					author: {
+						id: 7,
+						nickname: "alice",
+						minecraftUuid: null,
+						role: "user",
+					},
+					replies: [],
+				}}
+				onReplyRequest={vi.fn()}
+				onEdit={vi.fn()}
+				onDelete={vi.fn()}
+			/>
+		);
+
+		const wrapper = container.querySelector(".comment-wrapper") as HTMLDivElement;
+		const actions = container.querySelector(".comment-actions") as HTMLDivElement;
+
+		fireEvent.mouseEnter(wrapper);
+		fireEvent.mouseLeave(wrapper, { relatedTarget: actions });
+		fireEvent.click(screen.getByTitle("수정"));
+
+		expect(await screen.findByPlaceholderText("댓글을 수정해줘")).toBeTruthy();
 	});
 
 	it("복사 직후 suppression이 걸렸다가 다시 해제되어야 함", async () => {

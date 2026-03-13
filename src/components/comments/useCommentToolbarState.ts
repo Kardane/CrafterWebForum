@@ -44,12 +44,26 @@ export function useCommentToolbarState({ commentId, isEditing }: UseCommentToolb
 		setIsToolbarActive(true);
 	}, [isEditing]);
 
-	const scheduleToolbarHide = useCallback(() => {
+	const shouldKeepToolbarActive = useCallback(
+		(nextTarget: EventTarget | null) => {
+			if (!(nextTarget instanceof Node)) {
+				return false;
+			}
+			const container = document.getElementById(`comment-${commentId}`);
+			return Boolean(container?.contains(nextTarget));
+		},
+		[commentId]
+	);
+
+	const scheduleToolbarHide = useCallback((nextTarget?: EventTarget | null) => {
 		if (isEditing) {
 			return;
 		}
+		if (shouldKeepToolbarActive(nextTarget ?? null)) {
+			return;
+		}
 		setIsToolbarActive(false);
-	}, [isEditing]);
+	}, [isEditing, shouldKeepToolbarActive]);
 
 	const resetActionSuppression = useCallback(() => {
 		clearSuppressionTimer();
