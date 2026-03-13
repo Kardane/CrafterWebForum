@@ -46,4 +46,18 @@ describe("ToolsDock", () => {
 
 		expect(screen.getByTitle("도구 모음")).toBeInTheDocument();
 	});
+
+	it("keeps the closed desktop wrapper click-through except for the visible dock", async () => {
+		usePathnameMock.mockReturnValue("/develope");
+		const { default: ToolsDock } = await import("@/components/layout/ToolsDock");
+
+		const { container } = render(<ToolsDock isVisible />);
+
+		const wrapper = container.querySelector(".pointer-events-none.fixed.right-0") as HTMLDivElement | null;
+		const aside = container.querySelector("aside") as HTMLElement | null;
+
+		expect(wrapper).toBeTruthy();
+		expect(wrapper?.className).toContain("pointer-events-none");
+		expect(aside?.className).toContain("pointer-events-auto");
+	});
 });
