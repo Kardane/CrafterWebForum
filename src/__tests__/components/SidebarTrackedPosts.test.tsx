@@ -1,9 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { showToastMock } = vi.hoisted(() => ({
+const { showToastMock, realtimeState } = vi.hoisted(() => ({
 	showToastMock: vi.fn(),
+	realtimeState: {
+		handlers: {} as Record<string, (payload: Record<string, unknown>) => void>,
+	},
 }));
 
 vi.mock("next/link", () => ({
@@ -35,7 +38,9 @@ vi.mock("@/components/ui/useToast", () => ({
 }));
 
 vi.mock("@/lib/realtime/useRealtimeBroadcast", () => ({
-	useRealtimeBroadcast: () => undefined,
+	useRealtimeBroadcast: (_topic: string | null, handlers: Record<string, (payload: Record<string, unknown>) => void>) => {
+		realtimeState.handlers = handlers;
+	},
 }));
 
 const trackedPost = {
@@ -62,6 +67,7 @@ describe("SidebarTrackedPosts", () => {
 		vi.unstubAllGlobals();
 		vi.restoreAllMocks();
 		showToastMock.mockReset();
+		realtimeState.handlers = {};
 		window.localStorage.clear();
 	});
 
@@ -155,13 +161,15 @@ describe("SidebarTrackedPosts", () => {
 	});
 
 	it("fallback 로컬 구독 목록은 새로 마운트해도 유지해야 함", async () => {
-		const fetchMock = vi.fn().mockResolvedValue(
-			new Response(
-				JSON.stringify({
-					items: [],
-					page: { nextCursor: null, hasMore: false },
-				}),
-				{ status: 200, headers: { "Content-Type": "application/json" } }
+		const fetchMock = vi.fn().mockImplementation(() =>
+			Promise.resolve(
+				new Response(
+					JSON.stringify({
+						items: [],
+						page: { nextCursor: null, hasMore: false },
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } }
+				)
 			)
 		);
 		vi.stubGlobal("fetch", fetchMock);
@@ -176,21 +184,23 @@ describe("SidebarTrackedPosts", () => {
 			);
 		});
 
-		window.dispatchEvent(
-			new CustomEvent("sidebarTrackedPostsFallbackChanged", {
-				detail: {
-					postId: 1,
-					enabled: true,
-					item: {
-						title: "alpha",
-						href: "/posts/1",
-						author: { nickname: "alice", minecraftUuid: null },
-						commentCount: 3,
-						latestCommentId: null,
+		act(() => {
+			window.dispatchEvent(
+				new CustomEvent("sidebarTrackedPostsFallbackChanged", {
+					detail: {
+						postId: 1,
+						enabled: true,
+						item: {
+							title: "alpha",
+							href: "/posts/1",
+							author: { nickname: "alice", minecraftUuid: null },
+							commentCount: 3,
+							latestCommentId: null,
+						},
 					},
-				},
-			})
-		);
+				})
+			);
+		});
 
 		await screen.findByText("alpha");
 		firstView.unmount();
@@ -229,5 +239,111 @@ describe("SidebarTrackedPosts", () => {
 
 		expect(noNewCommentsContainer).not.toHaveClass("bg-yellow-500/10");
 		expect(hasNewCommentsContainer).toHaveClass("bg-yellow-500/10");
+	});
+
+	it("같은 포스트가 fallback과 서버에 함께 있으면 서버 최신 상태를 우선해야 함", async () => {
+		window.localStorage.setItem(
+			"sidebarTrackedPostsFallback:7",
+			JSON.stringify([
+				{
+					...trackedPost,
+					commentCount: 1,
+					newCommentCount: 0,
+					latestCommentId: null,
+					lastActivityAt: "2026-03-05T00:00:00.000Z",
+				},
+			])
+		);
+
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					items: [
+						{
+							...trackedPost,
+							commentCount: 8,
+							newCommentCount: 4,
+							latestCommentId: 77,
+							lastActivityAt: "2026-03-06T12:00:00.000Z",
+						},
+					],
+					page: { nextCursor: null, hasMore: false },
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			)
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
+		render(<SidebarTrackedPosts />);
+
+		await waitFor(() => {
+			const link = screen.getByRole("link", { name: /alpha/i });
+			expect(link).toHaveAttribute("href", "/posts/1?commentId=77#comment-77");
+		});
+		expect(screen.getByText("4")).toBeTruthy();
+		expect(screen.getByText("8")).toBeTruthy();
+	});
+
+	it("post_comment realtime 수신 후 즉시 갱신하고 1회 재조회로 최신 상태에 수렴해야 함", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						items: [
+							{
+								...trackedPost,
+								commentCount: 3,
+								newCommentCount: 0,
+								latestCommentId: 50,
+							},
+						],
+						page: { nextCursor: null, hasMore: false },
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } }
+				)
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						items: [
+							{
+								...trackedPost,
+								commentCount: 4,
+								newCommentCount: 1,
+								latestCommentId: 99,
+							},
+						],
+						page: { nextCursor: null, hasMore: false },
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } }
+				)
+			);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
+		render(<SidebarTrackedPosts />);
+
+		await screen.findByText("alpha");
+
+		await act(async () => {
+			realtimeState.handlers["notification.created"]?.({
+				type: "post_comment",
+				postId: 1,
+				commentId: 99,
+			});
+			await Promise.resolve();
+		});
+
+		await waitFor(() => {
+			expect(screen.getByText("1")).toBeTruthy();
+		});
+
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+			const link = screen.getByRole("link", { name: /alpha/i });
+			expect(link).toHaveAttribute("href", "/posts/1?commentId=99#comment-99");
+		});
 	});
 });

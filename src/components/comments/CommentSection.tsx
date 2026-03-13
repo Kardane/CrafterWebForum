@@ -14,6 +14,7 @@ import PinnedCommentsModal from "./PinnedCommentsModal";
 import CommentDateDividerRow from "./CommentDateDividerRow";
 import ReadMarkerRow from "./ReadMarkerRow";
 import ThreadToggleRow from "./ThreadToggleRow";
+import { parseTargetCommentIdFromLocation } from "./comment-navigation";
 import {
 	buildInitialCommentViewState,
 	hasCommentId,
@@ -85,26 +86,6 @@ type RenderRow =
 	| { type: "thread-toggle"; key: string; rootId: number; replyCount: number; isCollapsed: boolean };
 
 const COMPOSER_RESERVE_HEIGHT = 220;
-
-function parseTargetCommentIdFromLocation(): number | null {
-	const searchParams = new URLSearchParams(window.location.search);
-	const queryCommentId = Number.parseInt(searchParams.get("commentId") ?? "", 10);
-	if (Number.isInteger(queryCommentId) && queryCommentId > 0) {
-		return queryCommentId;
-	}
-
-	const hashMatched = window.location.hash.match(/^#comment-(\d+)$/);
-	if (!hashMatched) {
-		return null;
-	}
-
-	const hashCommentId = Number.parseInt(hashMatched[1] ?? "", 10);
-	if (!Number.isInteger(hashCommentId) || hashCommentId <= 0) {
-		return null;
-	}
-
-	return hashCommentId;
-}
 
 export default function CommentSection({
 	postId,

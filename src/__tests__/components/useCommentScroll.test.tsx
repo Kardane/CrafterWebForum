@@ -106,4 +106,31 @@ describe("useCommentScroll", () => {
 		expect(stream.scrollTo).not.toHaveBeenCalled();
 		expect(windowScrollToMock).not.toHaveBeenCalled();
 	});
+
+	it("commentId 진입에서는 저장된 스크롤 위치를 복원하지 않아야 함", async () => {
+		readPostDetailScrollStateMock.mockReturnValue({
+			anchorCommentId: null,
+			scrollY: 320,
+		});
+		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+			configurable: true,
+			value: vi.fn(),
+		});
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+			cb(0);
+			return 1;
+		});
+		const windowScrollToMock = vi.fn();
+		vi.spyOn(window, "scrollTo").mockImplementation(windowScrollToMock as typeof window.scrollTo);
+		window.history.replaceState(null, "", "/posts/11?commentId=99#comment-99");
+
+		render(<TestHarness postId={11} />);
+
+		await act(async () => {
+			await Promise.resolve();
+		});
+
+		expect(windowScrollToMock).not.toHaveBeenCalled();
+		expect(clearPostDetailScrollStateMock).toHaveBeenCalledWith(11);
+	});
 });

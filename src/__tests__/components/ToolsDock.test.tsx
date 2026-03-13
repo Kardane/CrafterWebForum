@@ -1,5 +1,5 @@
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
 
 const usePathnameMock = vi.fn();
 
@@ -47,17 +47,33 @@ describe("ToolsDock", () => {
 		expect(screen.getByTitle("도구 모음")).toBeInTheDocument();
 	});
 
-	it("keeps the closed desktop wrapper click-through except for the visible dock", async () => {
+	it("접힌 데스크톱 상태에서는 실제 핸들 버튼만 보여야 함", async () => {
 		usePathnameMock.mockReturnValue("/develope");
 		const { default: ToolsDock } = await import("@/components/layout/ToolsDock");
 
 		const { container } = render(<ToolsDock isVisible />);
 
-		const wrapper = container.querySelector(".pointer-events-none.fixed.right-0") as HTMLDivElement | null;
+		const handle = screen.getByTitle("도구 모음 열기");
 		const aside = container.querySelector("aside") as HTMLElement | null;
 
-		expect(wrapper).toBeTruthy();
-		expect(wrapper?.className).toContain("pointer-events-none");
-		expect(aside?.className).toContain("pointer-events-auto");
+		expect(handle.className).toContain("top-1/2");
+		expect(aside?.className).toContain("pointer-events-none");
+		expect(aside?.className).toContain("translate-x-full");
+	});
+
+	it("데스크톱 패널은 핸들로 열고 닫을 수 있어야 함", async () => {
+		usePathnameMock.mockReturnValue("/develope");
+		const { default: ToolsDock } = await import("@/components/layout/ToolsDock");
+
+		const { container } = render(<ToolsDock isVisible />);
+		const handle = screen.getByTitle("도구 모음 열기");
+		const aside = container.querySelector("aside") as HTMLElement;
+
+		fireEvent.click(handle);
+		expect(aside.className).toContain("translate-x-0");
+		expect(aside.className).toContain("opacity-100");
+
+		fireEvent.click(screen.getByTitle("도구 모음 접기"));
+		expect(aside.className).toContain("translate-x-full");
 	});
 });

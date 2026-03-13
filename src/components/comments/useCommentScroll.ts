@@ -12,22 +12,13 @@ import {
 	savePostDetailScrollState,
 } from "@/lib/scroll-restore";
 import { DETAIL_SCROLL_SAVE_DELAY_MS, parseCommentIdFromElementId } from "@/lib/comment-tree-ops";
+import { hasTargetCommentInLocation } from "./comment-navigation";
 
 interface UseCommentScrollOptions {
 	postId: number;
 	streamRef: RefObject<HTMLDivElement | null>;
 	ensureCommentVisible: (commentId: number) => boolean;
 	flattenedCommentsLength: number;
-}
-
-function hasTargetCommentInUrl(): boolean {
-	const searchParams = new URLSearchParams(window.location.search);
-	const queryCommentId = Number.parseInt(searchParams.get("commentId") ?? "", 10);
-	if (Number.isInteger(queryCommentId) && queryCommentId > 0) {
-		return true;
-	}
-
-	return /^#comment-\d+$/.test(window.location.hash);
 }
 
 export function useCommentScroll({
@@ -158,6 +149,12 @@ export function useCommentScroll({
 		}
 		restoreCheckedRef.current = true;
 
+		if (hasTargetCommentInLocation()) {
+			clearPostDetailScrollState(postId);
+			latestJumpAppliedRef.current = true;
+			return;
+		}
+
 		const saved = readPostDetailScrollState(postId);
 		let restored = false;
 		if (saved) {
@@ -174,7 +171,7 @@ export function useCommentScroll({
 			clearPostDetailScrollState(postId);
 		}
 
-		if (hasTargetCommentInUrl() || restored) {
+		if (restored) {
 			latestJumpAppliedRef.current = true;
 			return;
 		}

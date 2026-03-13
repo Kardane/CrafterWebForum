@@ -111,67 +111,80 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 
 	return (
 		<>
-			<div className="pointer-events-none fixed right-0 top-1/2 z-[90] hidden -translate-y-1/2 md:block">
-				<button
-					type="button"
-					onClick={() => setIsDesktopOpen(false)}
-					className={classNames(
-						"fixed inset-0 w-screen bg-black/20 backdrop-blur-[1px] transition-opacity duration-200",
-						isDesktopOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
-					)}
-					aria-label="도구 모음 닫기"
-				/>
-				<aside
-					className="pointer-events-auto relative right-0 flex w-[18.5rem] overflow-hidden rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-secondary/95 shadow-[0_12px_36px_rgba(0,0,0,0.36)] backdrop-blur transition-transform duration-300 ease-out"
-					style={{
-						transform: `translateX(${isDesktopOpen ? "0" : "calc(100% - 2.75rem)"})`,
-					}}
-				>
-					<button
-						type="button"
-						onClick={() => setIsDesktopOpen((previous) => !previous)}
-						className="my-3 flex h-24 w-12 shrink-0 self-center flex-col items-center justify-center gap-2 rounded-l-2xl border border-r border-bg-tertiary bg-bg-primary/80 text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-						title={isDesktopOpen ? "도구 모음 닫기" : "도구 모음 열기"}
-					>
-						{isDesktopOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
-						<span className="[writing-mode:vertical-rl] text-[11px] tracking-[0.22em]">도구</span>
-					</button>
-					<div
-						className={classNames(
-							"flex min-h-[18rem] flex-1 flex-col transition-opacity duration-200",
-							isDesktopOpen ? "opacity-100" : "pointer-events-none opacity-0"
-						)}
-					>
-						<div className="flex items-center justify-between border-b border-bg-tertiary px-3 py-2">
-							<div>
-								<div className="text-xs font-semibold tracking-wide text-text-muted">도구 모음</div>
-								<div className="text-[11px] text-text-muted/80">자주 쓰는 링크 빠른 열기</div>
-							</div>
-							<div className="flex items-center gap-1">
-								<button
-									type="button"
-									onClick={() => setIsSettingsModalOpen(true)}
-									className="inline-flex h-8 w-8 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-									title="도구 링크 설정"
-								>
-									<Settings size={14} />
-								</button>
-								<button
-									type="button"
-									onClick={() => setIsDesktopOpen(false)}
-									className="inline-flex h-8 w-8 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
-									title="도구 모음 닫기"
-								>
-									<X size={14} />
-								</button>
-							</div>
+			<button
+				type="button"
+				onClick={() => setIsDesktopOpen(true)}
+				className={classNames(
+					"fixed right-0 top-1/2 z-[90] hidden -translate-y-1/2 rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-primary/85 px-3 py-3 text-text-muted shadow-[0_10px_28px_rgba(0,0,0,0.28)] backdrop-blur transition-colors hover:bg-bg-tertiary hover:text-text-primary md:inline-flex",
+					isDesktopOpen ? "pointer-events-none opacity-0" : "pointer-events-auto opacity-100"
+				)}
+				title="도구 모음 열기"
+				aria-label="도구 모음 열기"
+			>
+				<span className="flex items-center gap-2">
+					<PanelRightOpen size={16} />
+					<span className="text-xs font-semibold tracking-[0.2em]">도구</span>
+				</span>
+			</button>
+
+			<button
+				type="button"
+				onClick={() => setIsDesktopOpen(false)}
+				className={classNames(
+					"fixed inset-0 z-[89] hidden bg-black/20 backdrop-blur-[1px] transition-opacity duration-200 md:block",
+					isDesktopOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+				)}
+				aria-label="도구 모음 닫기"
+			/>
+
+			<aside
+				className={classNames(
+					"fixed right-0 top-1/2 z-[91] hidden w-[18.5rem] -translate-y-1/2 overflow-hidden rounded-l-2xl border border-r-0 border-bg-tertiary bg-bg-secondary/95 shadow-[0_12px_36px_rgba(0,0,0,0.36)] backdrop-blur transition-all duration-300 ease-out md:block",
+					isDesktopOpen ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0"
+				)}
+				aria-hidden={!isDesktopOpen}
+			>
+				<div className="flex min-h-[18rem] flex-col">
+					<div className="flex items-center justify-between border-b border-bg-tertiary px-3 py-2">
+						<div>
+							<div className="text-xs font-semibold tracking-wide text-text-muted">도구 모음</div>
+							<div className="text-[11px] text-text-muted/80">자주 쓰는 링크 빠른 열기</div>
 						</div>
-						<nav className="custom-scrollbar max-h-[70vh] overflow-y-auto p-2">
-							{links.map((link) => renderToolLink(link))}
-						</nav>
+						<div className="flex items-center gap-1">
+							<button
+								type="button"
+								onClick={() => setIsSettingsModalOpen(true)}
+								className="inline-flex h-8 w-8 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+								title="도구 링크 설정"
+							>
+								<Settings size={14} />
+							</button>
+							<button
+								type="button"
+								onClick={() => setIsDesktopOpen(false)}
+								className="inline-flex h-8 w-8 items-center justify-center rounded text-text-muted transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+								title="도구 모음 닫기"
+							>
+								<X size={14} />
+							</button>
+						</div>
 					</div>
-				</aside>
-			</div>
+					<nav className="custom-scrollbar max-h-[70vh] overflow-y-auto p-2">
+						{links.map((link) => renderToolLink(link))}
+					</nav>
+					<div className="border-t border-bg-tertiary px-2 py-2">
+						<button
+							type="button"
+							onClick={() => setIsDesktopOpen(false)}
+							className="inline-flex w-full items-center justify-center gap-2 rounded border border-border px-2 py-2 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+							title="도구 모음 접기"
+						>
+							<PanelRightClose size={14} />
+							접기
+						</button>
+					</div>
+				</div>
+			</aside>
 
 			{!isComposerPage && (
 				<button

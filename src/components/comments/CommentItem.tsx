@@ -12,6 +12,7 @@ import { toSessionUserId } from "@/lib/session-user";
 import { useToast } from "@/components/ui/useToast";
 import { buildAvatarCandidates } from "@/lib/avatar";
 import { toReplyPreview } from "@/lib/comment-stream";
+import { useCommentToolbarState } from "./useCommentToolbarState";
 
 interface Comment {
 	id: number;
@@ -75,8 +76,6 @@ export default function CommentItem({
 	const { showToast } = useToast();
 	const [isEditing, setIsEditing] = useState(false);
 	const [copiedType, setCopiedType] = useState<CopiedType>(null);
-	const [isActionSuppressed, setIsActionSuppressed] = useState(false);
-	const [isToolbarActive, setIsToolbarActive] = useState(false);
 	const avatarSeed = comment.author.minecraftUuid ?? "";
 	const avatarCandidates = useMemo(() => buildAvatarCandidates(comment.author.minecraftUuid, 36), [comment.author.minecraftUuid]);
 	const [avatarState, setAvatarState] = useState<{ seed: string; index: number }>({
@@ -84,42 +83,26 @@ export default function CommentItem({
 		index: 0,
 	});
 	const copiedTimeoutRef = useRef<number | null>(null);
-	const suppressTimeoutRef = useRef<number | null>(null);
-	const toolbarLeaveTimeoutRef = useRef<number | null>(null);
+	const {
+		isActionSuppressed,
+		isToolbarActive,
+		activateToolbar,
+		scheduleToolbarHide,
+		resetActionSuppression,
+		dismissToolbarFocus,
+	} = useCommentToolbarState({
+		commentId: comment.id,
+		isEditing,
+	});
 
 	useEffect(
 		() => () => {
 			if (copiedTimeoutRef.current) {
 				window.clearTimeout(copiedTimeoutRef.current);
 			}
-			if (suppressTimeoutRef.current) {
-				window.clearTimeout(suppressTimeoutRef.current);
-			}
-			if (toolbarLeaveTimeoutRef.current) {
-				window.clearTimeout(toolbarLeaveTimeoutRef.current);
-			}
 		},
 		[]
 	);
-
-	const cancelToolbarHide = () => {
-		if (toolbarLeaveTimeoutRef.current) {
-			window.clearTimeout(toolbarLeaveTimeoutRef.current);
-			toolbarLeaveTimeoutRef.current = null;
-		}
-	};
-
-	const activateToolbar = () => {
-		cancelToolbarHide();
-		setIsToolbarActive(true);
-	};
-
-	const scheduleToolbarHide = () => {
-		cancelToolbarHide();
-		toolbarLeaveTimeoutRef.current = window.setTimeout(() => {
-			setIsToolbarActive(false);
-		}, 120);
-	};
 
 	useEffect(() => {
 		if (!shouldStartEdit) {
@@ -150,24 +133,6 @@ export default function CommentItem({
 		const target = contentWithoutPoll || comment.content;
 		return toReplyPreview(target);
 	}, [comment.content, contentWithoutPoll]);
-
-	const dismissToolbarFocus = () => {
-		setIsActionSuppressed(true);
-		const active = document.activeElement;
-		if (active instanceof HTMLElement && active.closest(`#comment-${comment.id}`)) {
-			active.blur();
-		}
-		const selection = window.getSelection();
-		if (selection && selection.rangeCount > 0) {
-			selection.removeAllRanges();
-		}
-		if (suppressTimeoutRef.current) {
-			window.clearTimeout(suppressTimeoutRef.current);
-		}
-		suppressTimeoutRef.current = window.setTimeout(() => {
-			setIsActionSuppressed(false);
-		}, 700);
-	};
 
 	const handleEditSubmit = async (content: string) => {
 		if (!content.trim()) {
@@ -237,7 +202,7 @@ export default function CommentItem({
 			<div
 				className={`comment-item ${comment.isPinned ? "pinned" : ""} ${isHighlighted ? "is-highlighted" : ""} ${isMentionHighlighted ? "is-mention-highlighted" : ""} ${isCompact ? "compact" : ""}`}
 				onMouseLeave={() => {
-					setIsActionSuppressed(false);
+					resetActionSuppression();
 				}}
 			>
 				{replyToName && replyToCommentId && (
@@ -383,6 +348,7 @@ export default function CommentItem({
 					flex-direction: column;
 					gap: 0;
 					padding: 8px;
+					min-height: 42px;
 					border-radius: 6px;
 					position: relative;
 					transition: background-color 0.15s;
@@ -392,15 +358,14 @@ export default function CommentItem({
 					box-sizing: border-box;
 				}
 
-				.comment-wrapper.toolbar-active .comment-item,
-				:global(.comment-interactive-row:hover) .comment-item,
-				.comment-wrapper:hover .comment-item {
+				.comment-wrapper.toolbar-active .comment-item {
 					background: rgba(0, 0, 0, 0.2);
 				}
 
 				.comment-item.compact {
 					padding-top: 4px;
 					padding-bottom: 4px;
+					min-height: 38px;
 				}
 
 				.comment-main-row {
@@ -426,9 +391,7 @@ export default function CommentItem({
 					border-left: 3px solid var(--accent);
 				}
 
-				.comment-wrapper.toolbar-active .comment-item.pinned,
-				:global(.comment-interactive-row:hover) .comment-item.pinned,
-				.comment-wrapper:hover .comment-item.pinned {
+				.comment-wrapper.toolbar-active .comment-item.pinned {
 					background: rgba(139, 35, 50, 0.2);
 				}
 
@@ -642,9 +605,7 @@ export default function CommentItem({
 					flex: 0 0 auto;
 				}
 
-				.comment-wrapper.toolbar-active .comment-hover-time,
-				:global(.comment-interactive-row:hover) .comment-hover-time,
-				.comment-wrapper:hover .comment-hover-time {
+				.comment-wrapper.toolbar-active .comment-hover-time {
 					opacity: 1;
 				}
 
@@ -664,10 +625,7 @@ export default function CommentItem({
 					transition: opacity 0.15s ease;
 				}
 
-				.comment-wrapper.toolbar-active .comment-actions,
-				:global(.comment-interactive-row:hover) .comment-actions,
-				.comment-wrapper:hover .comment-actions,
-				.comment-wrapper:focus-within .comment-actions {
+				.comment-wrapper.toolbar-active .comment-actions {
 					opacity: 1;
 					pointer-events: auto;
 				}

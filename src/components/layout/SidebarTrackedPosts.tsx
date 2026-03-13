@@ -16,6 +16,13 @@ import {
 } from "@/lib/post-subscription-fallback";
 import { getBoardLabel } from "@/lib/post-board";
 import type { SidebarTrackedPost } from "@/types/sidebar";
+import {
+	applyTrackedPostNotification,
+	applyTrackedPostReadMarker,
+	mergeFallbackWithServerTrackedPosts,
+	mergeTrackedPosts,
+	normalizeVisibleTrackedPosts,
+} from "./sidebar-tracked-posts-state";
 
 interface SidebarTrackedPostsProps {
 	onNavigate?: () => void;
@@ -77,17 +84,6 @@ function buildFallbackTrackedPost(postId: number, item: SidebarTrackedPostsFallb
 	};
 }
 
-function sortTrackedPosts(rows: SidebarTrackedPost[]): SidebarTrackedPost[] {
-	return [...rows].sort((a, b) => {
-		const aTime = new Date(a.lastActivityAt).getTime();
-		const bTime = new Date(b.lastActivityAt).getTime();
-		if (aTime !== bTime) {
-			return bTime - aTime;
-		}
-		return b.postId - a.postId;
-	});
-}
-
 function parsePostId(payload: Record<string, unknown>): number | null {
 	const parsed = Number(payload.postId ?? 0);
 	if (!Number.isInteger(parsed) || parsed <= 0) {
@@ -96,19 +92,12 @@ function parsePostId(payload: Record<string, unknown>): number | null {
 	return parsed;
 }
 
-function mergeTrackedPosts(existing: SidebarTrackedPost[], incoming: SidebarTrackedPost[]): SidebarTrackedPost[] {
-	const map = new Map<number, SidebarTrackedPost>();
-	for (const row of existing) {
-		map.set(row.postId, row);
+function parseCommentId(payload: Record<string, unknown>): number | null {
+	const parsed = Number(payload.commentId ?? 0);
+	if (!Number.isInteger(parsed) || parsed <= 0) {
+		return null;
 	}
-	for (const row of incoming) {
-		map.set(row.postId, row);
-	}
-	return sortTrackedPosts(Array.from(map.values()));
-}
-
-function normalizeVisibleTrackedPosts(rows: SidebarTrackedPost[]): SidebarTrackedPost[] {
-	return sortTrackedPosts(rows.filter((item) => item.isSubscribed && item.sourceFlags.subscribed));
+	return parsed;
 }
 
 export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsProps) {
@@ -126,10 +115,20 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 	const [pendingTogglePostIds, setPendingTogglePostIds] = useState<number[]>([]);
 	const hasShownFetchErrorToastRef = useRef(false);
 	const fallbackLocalItemsRef = useRef<SidebarTrackedPost[]>([]);
+	const refreshTimerRef = useRef<number | null>(null);
 
 	useEffect(() => {
 		fallbackLocalItemsRef.current = fallbackLocalItems;
 	}, [fallbackLocalItems]);
+
+	useEffect(
+		() => () => {
+			if (refreshTimerRef.current !== null) {
+				window.clearTimeout(refreshTimerRef.current);
+			}
+		},
+		[]
+	);
 
 	useEffect(() => {
 		if (!sessionUserId) {
@@ -175,7 +174,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			}
 			const payload = (await response.json()) as SidebarTrackedPostsResponse;
 			const rows = Array.isArray(payload.items) ? payload.items : [];
-			setItems(normalizeVisibleTrackedPosts(mergeTrackedPosts(rows, fallbackLocalItemsRef.current)));
+			setItems(mergeFallbackWithServerTrackedPosts(fallbackLocalItemsRef.current, rows));
 			setNextCursor(payload.page?.nextCursor ?? null);
 			setHasMore(Boolean(payload.page?.hasMore));
 			hasShownFetchErrorToastRef.current = false;
@@ -190,6 +189,16 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			setIsInitialLoading(false);
 		}
 	}, [sessionUserId, showToast]);
+
+	const scheduleRefreshTrackedPosts = useCallback(() => {
+		if (refreshTimerRef.current !== null) {
+			return;
+		}
+		refreshTimerRef.current = window.setTimeout(() => {
+			refreshTimerRef.current = null;
+			void refreshTrackedPosts();
+		}, 120);
+	}, [refreshTrackedPosts]);
 
 	const loadMoreTrackedPosts = useCallback(async () => {
 		if (!sessionUserId || !hasMore || !nextCursor || isLoadingMore) {
@@ -390,24 +399,23 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			if (!postId) {
 				return;
 			}
-			setItems((previous) => {
-				let changed = false;
-				const updated = previous.map((item) => {
-					if (item.postId !== postId) {
-						return item;
-					}
-					changed = true;
-					return {
-						...item,
-						newCommentCount: item.newCommentCount + 1,
-						lastActivityAt: new Date().toISOString(),
-					};
-				});
-				if (!changed) {
-					return previous;
-				}
-				return sortTrackedPosts(updated);
-			});
+			const commentId = parseCommentId(payload);
+			const occurredAt = new Date().toISOString();
+			setFallbackLocalItems((previous) =>
+				applyTrackedPostNotification(previous, {
+					postId,
+					commentId,
+					occurredAt,
+				})
+			);
+			setItems((previous) =>
+				applyTrackedPostNotification(previous, {
+					postId,
+					commentId,
+					occurredAt,
+				})
+			);
+			scheduleRefreshTrackedPosts();
 		},
 		[REALTIME_EVENTS.POST_READ_MARKER_UPDATED]: (payload) => {
 			const postId = parsePostId(payload);
@@ -419,16 +427,18 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			if (!Number.isFinite(totalCommentCount) || !Number.isFinite(lastReadCommentCount)) {
 				return;
 			}
-			const unreadCount = Math.max(totalCommentCount - lastReadCommentCount, 0);
+			setFallbackLocalItems((previous) =>
+				applyTrackedPostReadMarker(previous, {
+					postId,
+					totalCommentCount,
+					lastReadCommentCount,
+				})
+			);
 			setItems((previous) =>
-				previous.map((item) => {
-					if (item.postId !== postId) {
-						return item;
-					}
-					return {
-						...item,
-						newCommentCount: unreadCount,
-					};
+				applyTrackedPostReadMarker(previous, {
+					postId,
+					totalCommentCount,
+					lastReadCommentCount,
 				})
 			);
 		},
