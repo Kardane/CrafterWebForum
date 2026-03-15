@@ -5,6 +5,7 @@ const findManyMock = vi.fn();
 const updateManyMock = vi.fn();
 const updateMock = vi.fn();
 const transactionMock = vi.fn();
+const postFindManyMock = vi.fn();
 
 const ensureWebPushConfiguredMock = vi.fn();
 const sendWebPushMock = vi.fn();
@@ -18,6 +19,9 @@ vi.mock("@/lib/prisma", () => ({
 		},
 		pushSubscription: {
 			update: vi.fn(),
+		},
+		post: {
+			findMany: postFindManyMock,
 		},
 		$transaction: transactionMock,
 	},
@@ -37,12 +41,14 @@ describe("POST /api/jobs/push-dispatch", () => {
 		updateManyMock.mockReset();
 		updateMock.mockReset();
 		transactionMock.mockReset();
+		postFindManyMock.mockReset();
 		ensureWebPushConfiguredMock.mockReset();
 		sendWebPushMock.mockReset();
 		process.env.CRON_SECRET = "secret";
 		updateManyMock.mockResolvedValue({ count: 1 });
 		updateMock.mockResolvedValue({});
 		transactionMock.mockResolvedValue([]);
+		postFindManyMock.mockResolvedValue([]);
 	});
 
 	it("returns 401 without cron authorization", async () => {
@@ -74,7 +80,13 @@ describe("POST /api/jobs/push-dispatch", () => {
 				subscriptionId: 100,
 				channel: "web_push",
 				attemptCount: 0,
-				notification: { id: 10, type: "mention_comment", postId: 3, commentId: 4 },
+				notification: {
+					id: 10,
+					type: "mention_comment",
+					message: "alice님이 회원님을 멘션했음",
+					postId: 3,
+					commentId: 4,
+				},
 				subscription: {
 					id: 100,
 					endpoint: "https://example.com",
@@ -84,6 +96,7 @@ describe("POST /api/jobs/push-dispatch", () => {
 				},
 			},
 		]);
+		postFindManyMock.mockResolvedValue([{ id: 3, title: "멘션 테스트 글" }]);
 		sendWebPushMock.mockResolvedValue({ ok: true });
 
 		const { POST } = await import("@/app/api/jobs/push-dispatch/route");
@@ -94,6 +107,14 @@ describe("POST /api/jobs/push-dispatch", () => {
 		const res = await POST(req);
 		expect(res.status).toBe(200);
 		expect(sendWebPushMock).toHaveBeenCalledTimes(1);
+		expect(sendWebPushMock).toHaveBeenCalledWith(
+			expect.any(Object),
+			expect.stringContaining("\"title\":\"멘션 알림 · 멘션 테스트 글\"")
+		);
+		expect(sendWebPushMock).toHaveBeenCalledWith(
+			expect.any(Object),
+			expect.stringContaining("\"body\":\"alice님이 회원님을 멘션했음\"")
+		);
 		expect(updateMock).toHaveBeenCalled();
 	});
 

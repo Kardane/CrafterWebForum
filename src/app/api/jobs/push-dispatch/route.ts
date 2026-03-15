@@ -13,6 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_ATTEMPT_COUNT = 5;
+const MAX_PUSH_BODY_LENGTH = 120;
 
 function toErrorMessage(error: unknown): string {
 	if (error instanceof Error) {
@@ -56,6 +57,41 @@ function isAuthorizedCron(request: NextRequest): boolean {
 	return timingSafeEqual(authDigest, expectedDigest);
 }
 
+function truncatePushBody(value: string): string {
+	if (value.length <= MAX_PUSH_BODY_LENGTH) {
+		return value;
+	}
+	return `${value.slice(0, MAX_PUSH_BODY_LENGTH - 1).trimEnd()}…`;
+}
+
+function buildPushPresentation(input: {
+	type: string;
+	message: string | null;
+	postTitle: string | null;
+}): { title: string; body: string } {
+	const postTitle = input.postTitle?.trim() || null;
+	const message = input.message?.trim() || null;
+
+	if (input.type === "mention_comment") {
+		return {
+			title: postTitle ? `멘션 알림 · ${postTitle}` : "새 멘션 알림",
+			body: truncatePushBody(message ?? "회원님을 멘션한 새 댓글이 도착했음"),
+		};
+	}
+
+	if (input.type === "post_comment") {
+		return {
+			title: postTitle ? `새 댓글 · ${postTitle}` : "구독 글 새 댓글 알림",
+			body: truncatePushBody(message ?? "구독 중인 글에 새 댓글이 도착했음"),
+		};
+	}
+
+	return {
+		title: postTitle ? `새 알림 · ${postTitle}` : "새 알림",
+		body: truncatePushBody(message ?? "새 알림이 도착했음"),
+	};
+}
+
 async function handleDispatch(request: NextRequest) {
 	if (!isAuthorizedCron(request)) {
 		return NextResponse.json({ error: "unauthorized" }, { status: 401 });
@@ -83,6 +119,7 @@ async function handleDispatch(request: NextRequest) {
 					select: {
 						id: true,
 						type: true,
+						message: true,
 						postId: true,
 						commentId: true,
 					},
@@ -98,6 +135,27 @@ async function handleDispatch(request: NextRequest) {
 				},
 			},
 		});
+		const postIds = Array.from(
+			new Set(
+				candidates
+					.map((candidate) => candidate.notification.postId)
+					.filter((postId): postId is number => typeof postId === "number" && postId > 0)
+			)
+		);
+		const posts = postIds.length
+			? await prisma.post.findMany({
+					where: {
+						id: {
+							in: postIds,
+						},
+					},
+					select: {
+						id: true,
+						title: true,
+					},
+			  })
+			: [];
+		const postTitleById = new Map(posts.map((post) => [post.id, post.title]));
 
 		let processed = 0;
 		let sent = 0;
@@ -135,6 +193,11 @@ async function handleDispatch(request: NextRequest) {
 				continue;
 			}
 
+			const presentation = buildPushPresentation({
+				type: candidate.notification.type,
+				message: candidate.notification.message ?? null,
+				postTitle: candidate.notification.postId ? postTitleById.get(candidate.notification.postId) ?? null : null,
+			});
 			const payload = JSON.stringify({
 				notificationId: candidate.notification.id,
 				type: candidate.notification.type,
@@ -142,8 +205,8 @@ async function handleDispatch(request: NextRequest) {
 					postId: candidate.notification.postId,
 					commentId: candidate.notification.commentId,
 				}),
-				title: "새 알림",
-				body: "새 알림이 도착했음",
+				title: presentation.title,
+				body: presentation.body,
 			});
 
 			const sendResult = await sendWebPush(
