@@ -4,6 +4,7 @@ import {
 	applyTrackedPostNotification,
 	applyTrackedPostReadMarker,
 	mergeFallbackWithServerTrackedPosts,
+	reconcileTrackedPostsWithServer,
 } from "@/components/layout/sidebar-tracked-posts-state";
 import type { SidebarTrackedPost } from "@/types/sidebar";
 
@@ -85,5 +86,33 @@ describe("sidebar-tracked-posts-state", () => {
 
 		expect(updated[0]?.newCommentCount).toBe(2);
 		expect(updated[0]?.commentCount).toBe(3);
+	});
+
+	it("서버 재조회 unread가 더 작아도 optimistic unread를 유지해야 함", () => {
+		const merged = reconcileTrackedPostsWithServer(
+			[
+				buildTrackedPost({
+					commentCount: 4,
+					newCommentCount: 1,
+					latestCommentId: 99,
+					lastActivityAt: "2026-03-07T00:00:00.000Z",
+				}),
+			],
+			[
+				buildTrackedPost({
+					commentCount: 4,
+					newCommentCount: 0,
+					latestCommentId: 50,
+					lastActivityAt: "2026-03-06T23:59:00.000Z",
+				}),
+			]
+		);
+
+		expect(merged[0]).toMatchObject({
+			commentCount: 4,
+			newCommentCount: 1,
+			latestCommentId: 99,
+			lastActivityAt: "2026-03-07T00:00:00.000Z",
+		});
 	});
 });

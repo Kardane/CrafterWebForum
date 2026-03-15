@@ -33,6 +33,30 @@ export function mergeFallbackWithServerTrackedPosts(
 	return normalizeVisibleTrackedPosts(mergeTrackedPosts(fallbackRows, serverRows));
 }
 
+export function reconcileTrackedPostsWithServer(
+	existingRows: SidebarTrackedPost[],
+	serverRows: SidebarTrackedPost[]
+): SidebarTrackedPost[] {
+	const existingByPostId = new Map(existingRows.map((row) => [row.postId, row]));
+	return normalizeVisibleTrackedPosts(
+		serverRows.map((serverRow) => {
+			const existingRow = existingByPostId.get(serverRow.postId);
+			if (!existingRow || existingRow.newCommentCount <= serverRow.newCommentCount) {
+				return serverRow;
+			}
+			const existingActivityAt = new Date(existingRow.lastActivityAt).getTime();
+			const serverActivityAt = new Date(serverRow.lastActivityAt).getTime();
+			return {
+				...serverRow,
+				commentCount: Math.max(existingRow.commentCount, serverRow.commentCount),
+				newCommentCount: existingRow.newCommentCount,
+				latestCommentId: existingRow.latestCommentId ?? serverRow.latestCommentId,
+				lastActivityAt: existingActivityAt > serverActivityAt ? existingRow.lastActivityAt : serverRow.lastActivityAt,
+			};
+		})
+	);
+}
+
 export function applyTrackedPostNotification(
 	rows: SidebarTrackedPost[],
 	input: { postId: number; commentId: number | null; occurredAt: string }

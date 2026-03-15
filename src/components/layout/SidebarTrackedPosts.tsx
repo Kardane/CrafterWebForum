@@ -22,6 +22,7 @@ import {
 	mergeFallbackWithServerTrackedPosts,
 	mergeTrackedPosts,
 	normalizeVisibleTrackedPosts,
+	reconcileTrackedPostsWithServer,
 } from "./sidebar-tracked-posts-state";
 
 interface SidebarTrackedPostsProps {
@@ -174,7 +175,12 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			}
 			const payload = (await response.json()) as SidebarTrackedPostsResponse;
 			const rows = Array.isArray(payload.items) ? payload.items : [];
-			setItems(mergeFallbackWithServerTrackedPosts(fallbackLocalItemsRef.current, rows));
+			setItems((previous) =>
+				reconcileTrackedPostsWithServer(
+					mergeFallbackWithServerTrackedPosts(fallbackLocalItemsRef.current, previous),
+					rows
+				)
+			);
 			setNextCursor(payload.page?.nextCursor ?? null);
 			setHasMore(Boolean(payload.page?.hasMore));
 			hasShownFetchErrorToastRef.current = false;
@@ -458,7 +464,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 				<div className="px-2 py-4 text-xs text-text-muted">구독 중인 포스트가 아직 없음</div>
 			) : null}
 
-			<div className="space-y-1 overflow-y-auto pr-1">
+			<div className="space-y-1 pr-1">
 				{items.map((item) => {
 					const isPending = pendingSet.has(item.postId);
 					const targetHref = item.latestCommentId

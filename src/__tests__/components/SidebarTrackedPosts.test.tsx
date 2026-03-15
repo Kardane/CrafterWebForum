@@ -346,4 +346,105 @@ describe("SidebarTrackedPosts", () => {
 			expect(link).toHaveAttribute("href", "/posts/1?commentId=99#comment-99");
 		});
 	});
+
+	it("post_comment realtime 이후 서버 재조회 unread가 0이어도 노란 하이라이트를 유지해야 함", async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						items: [{ ...trackedPost, commentCount: 3, newCommentCount: 0, latestCommentId: 50 }],
+						page: { nextCursor: null, hasMore: false },
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } }
+				)
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						items: [{ ...trackedPost, commentCount: 4, newCommentCount: 0, latestCommentId: 50 }],
+						page: { nextCursor: null, hasMore: false },
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } }
+				)
+			);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
+		render(<SidebarTrackedPosts />);
+
+		const title = await screen.findByText("alpha");
+
+		await act(async () => {
+			realtimeState.handlers["notification.created"]?.({
+				type: "post_comment",
+				postId: 1,
+				commentId: 99,
+			});
+			await Promise.resolve();
+		});
+
+		await waitFor(() => {
+			expect(screen.getByText("1")).toBeTruthy();
+		});
+
+		await waitFor(() => {
+			const container = title.closest(".flex.items-start.gap-2.rounded.border");
+			expect(container).toHaveClass("bg-yellow-500/10");
+			const link = screen.getByRole("link", { name: /alpha/i });
+			expect(link).toHaveAttribute("href", "/posts/1?commentId=99#comment-99");
+		});
+	});
+
+	it("읽음 이벤트를 받으면 하이라이트를 해제해야 함", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					items: [{ ...trackedPost, commentCount: 4, newCommentCount: 1, latestCommentId: 99 }],
+					page: { nextCursor: null, hasMore: false },
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			)
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
+		render(<SidebarTrackedPosts />);
+
+		const title = await screen.findByText("alpha");
+
+		await act(async () => {
+			realtimeState.handlers["post.readMarker.updated"]?.({
+				postId: 1,
+				totalCommentCount: 4,
+				lastReadCommentCount: 4,
+			});
+			await Promise.resolve();
+		});
+
+		await waitFor(() => {
+			const container = title.closest(".flex.items-start.gap-2.rounded.border");
+			expect(container).not.toHaveClass("bg-yellow-500/10");
+		});
+	});
+
+	it("구독 목록 내부에는 별도 스크롤 클래스가 없어야 함", async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					items: [trackedPost],
+					page: { nextCursor: null, hasMore: false },
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			)
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
+		const { container } = render(<SidebarTrackedPosts />);
+
+		await screen.findByText("alpha");
+
+		expect(container.querySelector(".overflow-y-auto")).toBeNull();
+	});
 });
