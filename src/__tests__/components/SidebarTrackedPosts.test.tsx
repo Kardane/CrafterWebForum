@@ -213,6 +213,40 @@ describe("SidebarTrackedPosts", () => {
 		expect(JSON.parse(window.localStorage.getItem("sidebarTrackedPostsFallback:7") ?? "[]")).toHaveLength(1);
 	});
 
+	it("fallback 로컬 구독 목록은 서버 응답이 비어 있어도 refresh 후 유지해야 함", async () => {
+		window.localStorage.setItem(
+			"sidebarTrackedPostsFallback:7",
+			JSON.stringify([
+				{
+					...trackedPost,
+					lastActivityAt: "2026-03-05T00:00:00.000Z",
+				},
+			])
+		);
+
+		const fetchMock = vi.fn().mockResolvedValue(
+			new Response(
+				JSON.stringify({
+					items: [],
+					page: { nextCursor: null, hasMore: false },
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			)
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
+		render(<SidebarTrackedPosts />);
+
+		await waitFor(() => {
+			expect(screen.getByText("alpha")).toBeTruthy();
+		});
+		expect(fetchMock).toHaveBeenCalledWith(
+			"/api/sidebar/tracked-posts?limit=30",
+			expect.objectContaining({ cache: "no-store" })
+		);
+	});
+
 	it("새 댓글이 있는 포스트는 노란색 하이라이트 클래스가 적용되어야 함", async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
 			new Response(

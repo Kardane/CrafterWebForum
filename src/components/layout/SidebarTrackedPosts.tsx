@@ -175,10 +175,11 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 			}
 			const payload = (await response.json()) as SidebarTrackedPostsResponse;
 			const rows = Array.isArray(payload.items) ? payload.items : [];
+			const mergedServerRows = mergeFallbackWithServerTrackedPosts(fallbackLocalItemsRef.current, rows);
 			setItems((previous) =>
 				reconcileTrackedPostsWithServer(
 					mergeFallbackWithServerTrackedPosts(fallbackLocalItemsRef.current, previous),
-					rows
+					mergedServerRows
 				)
 			);
 			setNextCursor(payload.page?.nextCursor ?? null);
