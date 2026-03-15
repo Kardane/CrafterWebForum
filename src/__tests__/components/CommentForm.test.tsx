@@ -1,10 +1,47 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/ui/useToast", () => ({
 	useToast: () => ({
 		showToast: vi.fn(),
 	}),
+}));
+
+vi.mock("@/components/poll/PollModal", () => ({
+	default: ({
+		isOpen,
+		onSubmit,
+	}: {
+		isOpen: boolean;
+		onSubmit: (pollData: {
+			question: string;
+			options: Array<{ id: number; text: string; votes: number }>;
+			settings: { duration_hours: number; allow_multi: boolean; created_at: string };
+			voters: Record<string, number[]>;
+		}) => void;
+	}) =>
+		isOpen ? (
+			<button
+				type="button"
+				onClick={() =>
+					onSubmit({
+						question: "질문",
+						options: [
+							{ id: 0, text: "A", votes: 0 },
+							{ id: 1, text: "B", votes: 0 },
+						],
+						settings: {
+							duration_hours: 24,
+							allow_multi: false,
+							created_at: "2026-03-15T00:00:00.000Z",
+						},
+						voters: {},
+					})
+				}
+			>
+				모의 투표 생성
+			</button>
+		) : null,
 }));
 
 describe("CommentForm", () => {
@@ -28,5 +65,19 @@ describe("CommentForm", () => {
 		await act(async () => {
 			await new Promise((resolve) => setTimeout(resolve, 60));
 		});
+	});
+
+	it("투표 생성 완료 시 raw text만 남기지 않고 즉시 onSubmit을 호출해야 함", async () => {
+		const onSubmit = vi.fn().mockResolvedValue(undefined);
+		const { default: CommentForm } = await import("@/components/comments/CommentForm");
+
+		render(<CommentForm onSubmit={onSubmit} postId={11} />);
+
+		fireEvent.click(screen.getByRole("button", { name: "" }));
+		fireEvent.click(screen.getByText("투표 만들기"));
+		fireEvent.click(screen.getByText("모의 투표 생성"));
+
+		await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+		expect(onSubmit.mock.calls[0][0]).toContain("[POLL_JSON]");
 	});
 });

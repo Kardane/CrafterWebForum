@@ -26,6 +26,11 @@ interface UpdateCommentResponse {
 	comment: { content: string; updatedAt: string };
 }
 
+interface VoteCommentResponse {
+	error?: string;
+	comment: { content: string; updatedAt: string };
+}
+
 // 댓글 고정 토글 API 응답 타입
 interface PinToggleResponse {
 	error?: string;
@@ -171,11 +176,33 @@ export function useCommentMutations({
 		[setComments, showToast]
 	);
 
+	const handleCommentVote = useCallback(
+		async (commentId: number, optionId: number) => {
+			if (!session?.user) {
+				showToast({ type: "error", message: "로그인이 필요함" });
+				throw new Error("unauthenticated");
+			}
+			const response = await fetch(`/api/comments/${commentId}/vote`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ optionId }),
+			});
+			const data = (await response.json()) as VoteCommentResponse;
+			if (!response.ok) {
+				showToast({ type: "error", message: "투표 처리 실패" });
+				throw new Error(data.error || "Failed to vote poll");
+			}
+			setComments((prev) => updateCommentInTree(prev, commentId, data.comment.content, data.comment.updatedAt));
+		},
+		[session, setComments, showToast]
+	);
+
 	return {
 		isLoading,
 		handleCommentCreate,
 		handleCommentUpdate,
 		handleCommentDeleteConfirmed,
 		handleCommentPinToggle,
+		handleCommentVote,
 	};
 }

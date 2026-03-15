@@ -347,9 +347,11 @@ export default function CommentForm({
 
 	const handlePollCreate = (pollData: PollData) => {
 		const pollString = serializePollData(pollData);
-		setContent((prev) => prev + (prev ? "\n" : "") + pollString);
 		setIsPollModalOpen(false);
 		setIsMenuOpen(false);
+		const nextContent = content ? `${content}\n${pollString}` : pollString;
+		setContent(nextContent);
+		void handleFormSubmit(nextContent);
 	};
 
 	const handleDragEnter = (event: DragEvent<HTMLFormElement>) => {

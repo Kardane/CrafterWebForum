@@ -261,6 +261,7 @@ export default function CommentSection({
 		handleCommentUpdate,
 		handleCommentDeleteConfirmed,
 		handleCommentPinToggle,
+		handleCommentVote,
 	} = useCommentMutations({
 		postId,
 		session,
@@ -705,6 +706,7 @@ export default function CommentSection({
 										onReplyRequest={handleReplyRequest}
 										onEdit={handleCommentUpdate}
 										onPin={handleCommentPinToggle}
+										onVote={handleCommentVote}
 										onDelete={(cId, event) => {
 											if (event?.shiftKey) void handleCommentDeleteConfirmed(cId, pendingDeleteId);
 											else setPendingDeleteId(cId);

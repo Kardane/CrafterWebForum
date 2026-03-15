@@ -109,7 +109,7 @@ export default function PollModal({ isOpen, onClose, onSubmit }: PollModalProps)
 					<label className="text-xs font-semibold text-text-secondary">답변</label>
 					<div className="space-y-2">
 						{options.map((option, index) => (
-							<div key={`${index}-${option}`} className="flex gap-2">
+							<div key={index} className="flex gap-2">
 								<input
 									type="text"
 									className="input-base h-10 text-sm"

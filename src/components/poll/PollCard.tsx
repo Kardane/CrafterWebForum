@@ -1,6 +1,7 @@
 "use client";
 
 
+import { useState } from "react";
 import { useSession } from "next-auth/react";
 
 interface PollOption {
@@ -25,7 +26,7 @@ interface PollData {
 interface PollCardProps {
 	pollData: PollData;
 	commentId: number;
-	onVote: (optionId: number) => void;
+	onVote?: (optionId: number) => Promise<void> | void;
 }
 
 /**
@@ -34,6 +35,7 @@ interface PollCardProps {
 export default function PollCard({ pollData, onVote }: PollCardProps) {
 	const { data: session } = useSession();
 	const userId = session?.user?.id?.toString() || "";
+	const [isVoting, setIsVoting] = useState(false);
 
 	// 사용자 투표 정보
 	const userVotes = pollData.voters[userId] || [];
@@ -59,7 +61,7 @@ export default function PollCard({ pollData, onVote }: PollCardProps) {
 	}
 
 	// 투표 핸들러
-	const handleVote = (optionId: number) => {
+	const handleVote = async (optionId: number) => {
 		if (!session?.user) {
 			alert("로그인이 필요합니다");
 			return;
@@ -68,7 +70,15 @@ export default function PollCard({ pollData, onVote }: PollCardProps) {
 			alert("투표가 종료되었습니다");
 			return;
 		}
-		onVote(optionId);
+		if (!onVote || isVoting) {
+			return;
+		}
+		setIsVoting(true);
+		try {
+			await onVote(optionId);
+		} finally {
+			setIsVoting(false);
+		}
 	};
 
 	// HTML 이스케이프
@@ -95,8 +105,8 @@ export default function PollCard({ pollData, onVote }: PollCardProps) {
 					return (
 						<div
 							key={opt.id}
-							className={`poll-card-option ${isVoted ? "voted" : ""}`}
-							onClick={() => handleVote(opt.id)}
+							className={`poll-card-option ${isVoted ? "voted" : ""} ${isVoting ? "disabled" : ""}`}
+							onClick={() => void handleVote(opt.id)}
 						>
 							{/* 프로그레스 바 */}
 							<div
@@ -159,6 +169,11 @@ export default function PollCard({ pollData, onVote }: PollCardProps) {
 
 				.poll-card-option:hover {
 					border-color: var(--accent);
+				}
+
+				.poll-card-option.disabled {
+					cursor: wait;
+					opacity: 0.7;
 				}
 
 				.poll-card-option.voted {
