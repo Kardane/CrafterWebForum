@@ -1,8 +1,6 @@
 name: Push Dispatch Scheduler
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
