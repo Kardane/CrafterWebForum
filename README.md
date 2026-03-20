@@ -88,6 +88,7 @@ Linux/WSL helper wrappers are now project-root relative
 - 아키텍처 리뷰: `보고서/ARCHITECTURE_REVIEW.md`
 - 최근 작업 인계 문서: `보고서/HANDSOFF.md`
 - 푸시 운영 점검: `보고서/PUSH_NOTIFICATION_OPERATION_CHECKLIST.md`
+- 개인 호스팅 cron 푸시 디스패치 설정: `보고서/CRON_PUSH_DISPATCH_SETUP.md`
 - 브라우저 종료 푸시 검증: `보고서/BROWSER_CLOSED_PUSH_TEST_SCENARIO.md`
 
 ## 8) Windows legacy script
@@ -131,6 +132,7 @@ CRON_SECRET=...
 - 푸시 payload에는 민감정보를 넣지 않고 `notificationId`/`targetUrl` 중심으로 처리
 - 내 정보(`/profile`)에서 푸시 구독 버튼/구독 정보(권한, 현재 브라우저 구독, 활성 구독 목록) 확인 가능
 - 운영 점검 절차는 `보고서/PUSH_NOTIFICATION_OPERATION_CHECKLIST.md` 기준
+- 개인 호스팅 cron 전환은 `보고서/CRON_PUSH_DISPATCH_SETUP.md` 기준
 - 브라우저 종료 상태 수동 검증은 `보고서/BROWSER_CLOSED_PUSH_TEST_SCENARIO.md` 기준
 
 Turso 운영 점검
