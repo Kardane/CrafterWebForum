@@ -1,7 +1,7 @@
 # CrafterWebForum 작업 지식베이스
 
-**생성:** 2026-03-10
-**커밋:** `bbadaf0`
+**생성:** 2026-03-20
+**커밋:** `f913f74`
 **브랜치:** `master`
 
 ## 개요
@@ -20,7 +20,7 @@ CrafterWebForum/
 ├── scripts/                 # 로컬 setup, 마이그레이션, 배포 점검
 ├── e2e/                     # Playwright E2E
 ├── prisma/schema.prisma     # SQLite 기준 스키마 원본
-└── 보고서/                  # 아키텍처 참고 문서. `ARCHITECTURE_REVIEW.md`만 활성 참고 대상
+└── 보고서/                  # 아키텍처/운영/핸드오프 문서
 ```
 
 ## 우선 탐색 위치
@@ -35,6 +35,7 @@ CrafterWebForum/
 | 링크 프리뷰/보안 | `src/lib/link-preview/`, `src/lib/network-guard.ts` | 외부 URL 처리 전 보안 가드 필수 |
 | 실시간/푸시 | `src/lib/realtime/`, `src/lib/push.ts`, `.github/workflows/push-dispatch.yml` | 브라우저 + 스케줄러 둘 다 관여 |
 | 로컬/배포 점검 | `scripts/setup-local.mjs`, `scripts/check-deploy-readiness.mjs`, `README.md` | Turso/Blob/env 검증 흐름 |
+| 인계 문서 | `보고서/HANDSOFF.md`, `보고서/ARCHITECTURE_REVIEW.md` | 최근 변경 맥락과 운영 주의점 먼저 확인 |
 
 ## 코드 맵
 
@@ -44,6 +45,8 @@ CrafterWebForum/
 | `GET` / `POST` | route | `src/app/api/posts/route.ts` | 포스트 목록/작성 API |
 | `MainLayout` | component | `src/components/layout/MainLayout.tsx` | 헤더/사이드바/도구 모음 배치 |
 | `CommentSection` | component | `src/components/comments/CommentSection.tsx` | 댓글 스트림, 실시간, 스크롤, read marker 중심 |
+| `CommentForm` | component | `src/components/comments/CommentForm.tsx` | draft, 업로드, poll, submit 경로 집중 |
+| `CommentItem` | component | `src/components/comments/CommentItem.tsx` | hover 툴바, edit/delete/reply/poll 렌더 |
 | `listPosts` | service | `src/lib/services/posts-service.ts` | 피드 검색/캐시/overlay 집계 |
 | `getPostDetail` | service | `src/lib/services/post-detail-service.ts` | 상세/댓글 초기 트리/읽음 동기화 |
 | `listSidebarTrackedPosts` | service | `src/lib/services/sidebar-tracked-posts-service.ts` | 사이드바 추적 포스트 계산 |
@@ -59,7 +62,8 @@ CrafterWebForum/
 - 루트 lint는 `보고서/`, `AGENTS.md`, `.agent/`, `legacy/`, `src/generated/` 무시.
 - 로컬 기본 DB는 `file:./dev.db`. 프로덕션은 Turso(libsql) 가정.
 - 배포 전 DB/푸시 준비 상태 확인은 `npm run check:deploy -- --with-db` 기준.
-- `보고서/ARCHITECTURE_REVIEW.md`는 활성 참고 문서지만 `보고서/신문고사이트.md`는 제거된 기능 기록임.
+- `보고서/ARCHITECTURE_REVIEW.md`, `보고서/HANDSOFF.md`는 활성 참고 문서.
+- `보고서/신문고사이트.md`는 제거된 기능 기록임.
 
 ## 이 프로젝트 안티패턴
 
@@ -68,6 +72,7 @@ CrafterWebForum/
 - 외부 URL, 링크 프리뷰, 서버 주소 검사에서 `network-guard` 우회 금지.
 - 푸시/구독/사이드바 로직 수정 시 stale schema fallback(`db-schema-guard`) 무시 금지.
 - 테스트 없이 댓글/구독/알림 경로 리팩터링 금지. 회귀 범위 큼.
+- 로컬 SQLite가 최신 Prisma 스키마와 다를 수 있다는 가정 없이 `Post.board` 같은 컬럼을 바로 믿는 패턴 금지.
 - `scripts/migrate-*` 계열을 dry-run 없이 바로 실DB에 적용하는 패턴 금지.
 
 ## 자주 쓰는 명령
@@ -86,6 +91,7 @@ npm run check:deploy -- --with-db
 ## 노트
 
 - Playwright는 Chromium만 사용.
+- 알림 E2E는 브라우저 라이브러리, `.env.local`, 로컬 테스트 계정/포스트 시드가 맞아야 재현됨.
 - `setup-local.mjs`가 `.env.local` 생성, `NEXTAUTH_SECRET` 자동 생성, Prisma setup, Playwright 설치까지 체인 실행.
 - 한글 경로 `보고서/` 존재. 도구/스크립트 작성 시 UTF-8 경로 처리 주의.
 - `auth/profile`, `auth/password`, `auth/reauth` 일부 구 API는 `410 gone` 반환하는 호환 레이어 유지.

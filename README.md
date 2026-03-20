@@ -83,7 +83,14 @@ Linux/WSL helper wrappers are now project-root relative
 - `./run_test_wsl.sh`
 - `./npm_wsl.sh`
 
-## 7) Windows legacy script
+## 7) 주요 문서
+
+- 아키텍처 리뷰: `보고서/ARCHITECTURE_REVIEW.md`
+- 최근 작업 인계 문서: `보고서/HANDSOFF.md`
+- 푸시 운영 점검: `보고서/PUSH_NOTIFICATION_OPERATION_CHECKLIST.md`
+- 브라우저 종료 푸시 검증: `보고서/BROWSER_CLOSED_PUSH_TEST_SCENARIO.md`
+
+## 8) Windows legacy script
 
 Windows PowerShell bootstrap is still available for compatibility
 
@@ -91,11 +98,11 @@ Windows PowerShell bootstrap is still available for compatibility
 npm run setup:win
 ```
 
-## 8) 서버 신문고 기능
+## 9) 서버 신문고 기능
 
 - 2026-03 기준 신문고 기능은 본 프로젝트에서 제거됨
 
-## 9) Web Push + GitHub Actions Scheduler 알림 전달
+## 10) Web Push + GitHub Actions Scheduler 알림 전달
 
 - 브라우저 종료 상태 알림 전달을 위해 Web Push + Service Worker + Outbox 디스패치 경로를 사용
 - 구독 API
@@ -123,6 +130,8 @@ CRON_SECRET=...
 - `PUSH_DISPATCH_URL` GitHub Actions secret에 프로덕션 엔드포인트 URL 설정 필요
 - 푸시 payload에는 민감정보를 넣지 않고 `notificationId`/`targetUrl` 중심으로 처리
 - 내 정보(`/profile`)에서 푸시 구독 버튼/구독 정보(권한, 현재 브라우저 구독, 활성 구독 목록) 확인 가능
+- 운영 점검 절차는 `보고서/PUSH_NOTIFICATION_OPERATION_CHECKLIST.md` 기준
+- 브라우저 종료 상태 수동 검증은 `보고서/BROWSER_CLOSED_PUSH_TEST_SCENARIO.md` 기준
 
 Turso 운영 점검
 
@@ -144,13 +153,19 @@ DATABASE_URL="$TURSO_DATABASE_URL" TURSO_AUTH_TOKEN="$TURSO_AUTH_TOKEN" npx pris
 - 닉네임 기반 관리자 자동 승격 정책 제거 (`isPrivilegedNickname`는 항상 false 반환)
 - `POST /api/auth/callback/credentials` 로그인 시도에 레이트리밋(`authLogin`) 적용
 
+알림 E2E 참고
+
+- `e2e/notifications.spec.ts`는 멘션 알림, 포스트 구독 댓글 알림, push dispatch 체인을 검증
+- 실행 전 `.env.local`의 `E2E_NOTIFICATION_USER_A_*`, `E2E_NOTIFICATION_USER_B_*`, `E2E_NOTIFICATION_POST_ID`, `CRON_SECRET` 확인 필요
+- 로컬 DB와 Prisma 스키마가 다를 수 있으므로 E2E 계정/포스트 시드 상태를 함께 점검하는 것이 안전
+
 성능 최적화 (P1)
 
 - `GET /api/admin/stats`는 일별 추세 계산 시 전량 `findMany` 대신 DB 집계(`strftime + COUNT`)를 사용
 - `POST /api/posts/[id]/comments`의 멘션 후처리는 `notificationDelivery`를 행별 upsert 대신 `createMany` 배치 적재
 - `GET /api/posts/[id]/comments`는 `limit/cursor` 쿼리 파라미터로 루트 댓글 커서 페이지네이션 지원
 
-## 10) 댓글 삭제 권한
+## 11) 댓글 삭제 권한
 
 - 댓글 삭제 API(`DELETE /api/comments/[id]`)는 작성자 또는 관리자만 허용
 - 비인증: `401`, 비권한: `403`, 대상 없음: `404`
