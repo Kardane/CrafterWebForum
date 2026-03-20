@@ -146,6 +146,40 @@ describe("CommentSection composer dock", () => {
 		expect(dock?.style.right).toBe("300px");
 	});
 
+	it("모바일에서는 헤더 인셋 대신 전체 폭 기준으로 composer-dock을 유지해야 함", async () => {
+		const rafCallbacks: FrameRequestCallback[] = [];
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+			rafCallbacks.push(cb);
+			return rafCallbacks.length;
+		});
+		vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+		Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+		vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(() => ({
+			left: 48,
+			right: 342,
+			top: 0,
+			bottom: 0,
+			width: 294,
+			height: 40,
+			x: 48,
+			y: 0,
+			toJSON: () => ({}),
+		}) as DOMRect);
+
+		const { container } = render(<CommentSection postId={1} initialComments={[]} />);
+		await act(async () => {
+			for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
+				cb(0);
+			}
+		});
+
+		const dock = container.querySelector(".composer-dock") as HTMLDivElement | null;
+		expect(dock).toBeTruthy();
+		expect(dock?.style.left).toBe("");
+		expect(dock?.style.right).toBe("");
+	});
+
 	it("retries comment jump after initial fresh reload brings target comment", async () => {
 		const rafCallbacks: FrameRequestCallback[] = [];
 		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {

@@ -89,4 +89,22 @@ describe("PostStickyHeader", () => {
 
 		expect(screen.getAllByRole("link")[0]).toHaveAttribute("href", "/");
 	});
+
+	it("모바일용 고정 헤더 래퍼와 스페이서를 렌더링해야 함", () => {
+		const { container } = render(
+			<PostStickyHeader
+				postId={1}
+				title="테스트"
+				authorName="작성자"
+				createdAt={new Date().toISOString()}
+				commentCount={0}
+				initialLikes={0}
+				initialLiked={false}
+				initialSubscribed={false}
+			/>
+		);
+
+		expect(container.querySelector(".h-\\[60px\\].md\\:hidden")).toBeTruthy();
+		expect(container.querySelector(".fixed.inset-x-0.top-0.z-\\[70\\]")).toBeTruthy();
+	});
 });

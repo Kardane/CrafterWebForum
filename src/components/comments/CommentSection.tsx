@@ -499,6 +499,10 @@ export default function CommentSection({
 			if (!nextHeader) {
 				return;
 			}
+			if (window.innerWidth <= 768) {
+				setComposerDockInsets((prev) => (prev === null ? prev : null));
+				return;
+			}
 			const rect = nextHeader.getBoundingClientRect();
 			const left = Math.max(0, Math.floor(rect.left));
 			const right = Math.max(0, Math.floor(window.innerWidth - rect.right));

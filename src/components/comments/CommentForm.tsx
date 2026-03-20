@@ -558,6 +558,8 @@ export default function CommentForm({
 					border: none;
 					border-radius: 10px;
 					box-shadow: none;
+					width: 100%;
+					max-width: 100%;
 				}
 
 				.comment-form.inline {
@@ -643,6 +645,8 @@ export default function CommentForm({
 						display: flex;
 						align-items: flex-end;
 						gap: 8px;
+						width: 100%;
+						min-width: 0;
 					}
 
 					.comment-form.edit-mode .form-input-wrapper {
@@ -651,7 +655,7 @@ export default function CommentForm({
 
 				.plus-btn-wrapper {
 					position: relative;
-					flex-shrink: 0;
+					flex: 0 0 auto;
 				}
 
 				.plus-btn {
@@ -712,7 +716,9 @@ export default function CommentForm({
 				}
 
 				.comment-textarea {
-					flex: 1;
+					flex: 1 1 auto;
+					width: 100%;
+					min-width: 0;
 					padding: 10px 12px;
 					background: var(--bg-tertiary);
 					border: 1px solid var(--border);
@@ -743,6 +749,7 @@ export default function CommentForm({
 				}
 
 					.submit-btn {
+						flex: 0 0 auto;
 						padding: 0 12px;
 						height: 34px;
 						background: var(--color-accent, #8b2332);
@@ -791,6 +798,10 @@ export default function CommentForm({
 				}
 
 					@media (max-width: 640px) {
+					.comment-form.composer {
+						padding: 0 4px;
+					}
+
 					.form-input-wrapper {
 						gap: 6px;
 					}

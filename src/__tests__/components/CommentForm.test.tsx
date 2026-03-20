@@ -80,4 +80,16 @@ describe("CommentForm", () => {
 		await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
 		expect(onSubmit.mock.calls[0][0]).toContain("[POLL_JSON]");
 	});
+
+	it("composer variant는 모바일 폭을 위해 textarea와 액션 행을 같이 렌더링해야 함", async () => {
+		const onSubmit = vi.fn().mockResolvedValue(undefined);
+		const { default: CommentForm } = await import("@/components/comments/CommentForm");
+
+		const { container } = render(<CommentForm onSubmit={onSubmit} variant="composer" postId={11} />);
+
+		expect(container.querySelector(".comment-form.composer")).toBeTruthy();
+		expect(container.querySelector(".form-input-wrapper")).toBeTruthy();
+		expect(container.querySelector(".comment-textarea")).toBeTruthy();
+		expect(container.querySelector(".submit-btn")).toBeTruthy();
+	});
 });

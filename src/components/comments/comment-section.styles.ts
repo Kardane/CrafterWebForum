@@ -225,7 +225,7 @@ export const commentSectionStyles = `
 		}
 
 		.composer-dock {
-			padding: 0 12px 16px 12px;
+			padding: 0 12px calc(12px + 72px) 12px;
 		}
 	}
 `;
