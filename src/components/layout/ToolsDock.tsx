@@ -193,7 +193,9 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 					onClick={() => setIsMobileModalOpen(true)}
 					className={classNames(
 						"fixed right-4 z-[95] inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg transition-colors hover:bg-bg-tertiary md:hidden",
-						isPostDetailPage ? "bottom-[calc(env(safe-area-inset-bottom)+7rem)]" : "bottom-5"
+						isPostDetailPage
+							? "bottom-[calc(env(safe-area-inset-bottom)+var(--comment-composer-height,0px)+12px)]"
+							: "bottom-5"
 					)}
 					title="도구 모음"
 				>

@@ -53,7 +53,9 @@ describe("ToolsDock", () => {
 
 		render(<ToolsDock isVisible />);
 
-		expect(screen.getByTitle("도구 모음").className).toContain("bottom-[calc(env(safe-area-inset-bottom)+7rem)]");
+		expect(screen.getByTitle("도구 모음").className).toContain(
+			"bottom-[calc(env(safe-area-inset-bottom)+var(--comment-composer-height,0px)+12px)]"
+		);
 	});
 
 	it("접힌 데스크톱 상태에서는 실제 핸들 버튼만 보여야 함", async () => {

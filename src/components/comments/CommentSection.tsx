@@ -529,6 +529,27 @@ export default function CommentSection({
 		};
 	}, []);
 
+	useEffect(() => {
+		const composerShell = composerShellRef.current;
+		if (!composerShell) {
+			return;
+		}
+
+		const updateComposerHeight = () => {
+			const nextHeight = Math.ceil(composerShell.getBoundingClientRect().height);
+			document.documentElement.style.setProperty("--comment-composer-height", `${Math.max(nextHeight, 0)}px`);
+		};
+
+		updateComposerHeight();
+		const observer = new ResizeObserver(updateComposerHeight);
+		observer.observe(composerShell);
+
+		return () => {
+			observer.disconnect();
+			document.documentElement.style.removeProperty("--comment-composer-height");
+		};
+	}, []);
+
 	// --- 핸들러 ---
 	const handleReplyRequest = (commentId: number, nickname: string, preview: string) => {
 		setReplyTarget({ parentId: commentId, nickname, preview });
