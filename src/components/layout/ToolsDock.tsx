@@ -66,6 +66,7 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 	const [isMobileModalOpen, setIsMobileModalOpen] = useState(false);
 	const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 	const [isDesktopOpen, setIsDesktopOpen] = useState(false);
+	const [mobileComposerOffset, setMobileComposerOffset] = useState<number | null>(null);
 	const isComposerPage = pathname.includes("/new") || /^\/posts\/[^/]+\/edit(?:\/|$)/.test(pathname);
 	const isPostDetailPage = /^\/posts\/[^/]+(?:\/|$)/.test(pathname) && !/^\/posts\/[^/]+\/edit(?:\/|$)/.test(pathname);
 
@@ -105,6 +106,54 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 			window.removeEventListener("keydown", handleKeyDown);
 		};
 	}, [isDesktopOpen, isVisible]);
+
+	useEffect(() => {
+		if (!isVisible || !isPostDetailPage) {
+			setMobileComposerOffset(null);
+			return;
+		}
+
+		let observer: ResizeObserver | null = null;
+		let rafId: number | null = null;
+
+		const measure = () => {
+			if (window.innerWidth >= 768) {
+				setMobileComposerOffset(null);
+				return;
+			}
+			const composer = document.getElementById("comment-composer");
+			if (!(composer instanceof HTMLElement)) {
+				setMobileComposerOffset(null);
+				return;
+			}
+			const nextOffset = Math.ceil(composer.getBoundingClientRect().height) + 16;
+			setMobileComposerOffset((prev) => (prev === nextOffset ? prev : nextOffset));
+		};
+
+		const scheduleMeasure = () => {
+			if (rafId !== null) {
+				window.cancelAnimationFrame(rafId);
+			}
+			rafId = window.requestAnimationFrame(measure);
+		};
+
+		scheduleMeasure();
+		window.addEventListener("resize", scheduleMeasure);
+
+		const composer = document.getElementById("comment-composer");
+		if (composer && typeof ResizeObserver !== "undefined") {
+			observer = new ResizeObserver(scheduleMeasure);
+			observer.observe(composer);
+		}
+
+		return () => {
+			if (rafId !== null) {
+				window.cancelAnimationFrame(rafId);
+			}
+			window.removeEventListener("resize", scheduleMeasure);
+			observer?.disconnect();
+		};
+	}, [isPostDetailPage, isVisible]);
 
 	if (!isVisible) {
 		return null;
@@ -191,12 +240,17 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 				<button
 					type="button"
 					onClick={() => setIsMobileModalOpen(true)}
-					className={classNames(
-						"fixed right-4 z-[95] inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg transition-colors hover:bg-bg-tertiary md:hidden",
+					className="fixed right-4 z-[95] inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg transition-colors hover:bg-bg-tertiary md:hidden"
+					style={
 						isPostDetailPage
-							? "bottom-[calc(env(safe-area-inset-bottom)+var(--comment-composer-height,0px)+12px)]"
-							: "bottom-5"
-					)}
+							? {
+								bottom:
+									mobileComposerOffset !== null
+										? `calc(env(safe-area-inset-bottom) + ${mobileComposerOffset}px)`
+										: "calc(env(safe-area-inset-bottom) + 16px)",
+							}
+							: undefined
+					}
 					title="도구 모음"
 				>
 					<Wrench size={18} />

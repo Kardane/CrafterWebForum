@@ -1,5 +1,5 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const usePathnameMock = vi.fn();
 
@@ -28,7 +28,29 @@ vi.mock("@/lib/sidebar-tool-links", () => ({
 	buildSidebarToolLinks: () => [{ id: 1, title: "GitHub", url: "https://github.com", icon_url: "" }],
 }));
 
+class ResizeObserverMock {
+	constructor(private readonly callback: ResizeObserverCallback) {}
+
+	observe() {
+		this.callback([], this as unknown as ResizeObserver);
+	}
+
+	unobserve() {}
+
+	disconnect() {}
+}
+
 describe("ToolsDock", () => {
+	const originalResizeObserver = globalThis.ResizeObserver;
+	const originalInnerWidth = window.innerWidth;
+
+	afterEach(() => {
+		Object.defineProperty(globalThis, "ResizeObserver", { value: originalResizeObserver, configurable: true });
+		Object.defineProperty(window, "innerWidth", { value: originalInnerWidth, configurable: true });
+		document.getElementById("comment-composer")?.remove();
+		vi.restoreAllMocks();
+	});
+
 	it("hides the mobile floating button on composer pages", async () => {
 		usePathnameMock.mockReturnValue("/posts/new");
 		const { default: ToolsDock } = await import("@/components/layout/ToolsDock");
@@ -49,13 +71,32 @@ describe("ToolsDock", () => {
 
 	it("포스트 상세에서는 모바일 floating 버튼을 댓글 composer 위로 띄워야 함", async () => {
 		usePathnameMock.mockReturnValue("/posts/959");
+		Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+		const composer = document.createElement("div");
+		composer.id = "comment-composer";
+		vi.spyOn(composer, "getBoundingClientRect").mockReturnValue({
+			left: 0,
+			right: 390,
+			top: 0,
+			bottom: 180,
+			width: 390,
+			height: 180,
+			x: 0,
+			y: 0,
+			toJSON: () => ({}),
+		} as DOMRect);
+		document.body.appendChild(composer);
 		const { default: ToolsDock } = await import("@/components/layout/ToolsDock");
 
 		render(<ToolsDock isVisible />);
 
-		expect(screen.getByTitle("도구 모음").className).toContain(
-			"bottom-[calc(env(safe-area-inset-bottom)+var(--comment-composer-height,0px)+12px)]"
+		await waitFor(() =>
+			expect(screen.getByTitle("도구 모음")).toHaveStyle({
+				bottom: "calc(env(safe-area-inset-bottom) + 196px)",
+			})
 		);
+		composer.remove();
 	});
 
 	it("접힌 데스크톱 상태에서는 실제 핸들 버튼만 보여야 함", async () => {

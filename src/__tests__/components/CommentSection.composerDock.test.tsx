@@ -91,7 +91,6 @@ describe("CommentSection composer dock", () => {
 		Object.defineProperty(globalThis, "ResizeObserver", { value: originalResizeObserver, configurable: true });
 		Object.defineProperty(window, "innerWidth", { value: originalInnerWidth, configurable: true });
 		window.history.replaceState(null, "", "/");
-		document.documentElement.style.removeProperty("--comment-composer-height");
 		scrollToBottomMock.mockReset();
 		scrollToCommentElementMock.mockReset();
 		vi.restoreAllMocks();
@@ -179,53 +178,6 @@ describe("CommentSection composer dock", () => {
 		expect(dock).toBeTruthy();
 		expect(dock?.style.left).toBe("");
 		expect(dock?.style.right).toBe("");
-	});
-
-	it("composer 높이를 css 변수로 노출해야 함", async () => {
-		const rafCallbacks: FrameRequestCallback[] = [];
-		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
-			rafCallbacks.push(cb);
-			return rafCallbacks.length;
-		});
-		vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
-		Object.defineProperty(window, "innerWidth", { value: 390, configurable: true });
-		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
-		vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
-			const element = this as HTMLElement;
-			if (element.id === "comment-composer") {
-				return {
-					left: 0,
-					right: 390,
-					top: 0,
-					bottom: 188,
-					width: 390,
-					height: 188,
-					x: 0,
-					y: 0,
-					toJSON: () => ({}),
-				} as DOMRect;
-			}
-			return {
-				left: 48,
-				right: 342,
-				top: 0,
-				bottom: 40,
-				width: 294,
-				height: 40,
-				x: 48,
-				y: 0,
-				toJSON: () => ({}),
-			} as DOMRect;
-		});
-
-		render(<CommentSection postId={1} initialComments={[]} />);
-		await act(async () => {
-			for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
-				cb(0);
-			}
-		});
-
-		expect(document.documentElement.style.getPropertyValue("--comment-composer-height")).toBe("188px");
 	});
 
 	it("retries comment jump after initial fresh reload brings target comment", async () => {
