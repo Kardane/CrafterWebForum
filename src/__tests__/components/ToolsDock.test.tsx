@@ -47,6 +47,15 @@ describe("ToolsDock", () => {
 		expect(screen.getByTitle("도구 모음")).toBeInTheDocument();
 	});
 
+	it("포스트 상세에서는 모바일 floating 버튼을 댓글 composer 위로 띄워야 함", async () => {
+		usePathnameMock.mockReturnValue("/posts/959");
+		const { default: ToolsDock } = await import("@/components/layout/ToolsDock");
+
+		render(<ToolsDock isVisible />);
+
+		expect(screen.getByTitle("도구 모음").className).toContain("bottom-[calc(env(safe-area-inset-bottom)+7rem)]");
+	});
+
 	it("접힌 데스크톱 상태에서는 실제 핸들 버튼만 보여야 함", async () => {
 		usePathnameMock.mockReturnValue("/develope");
 		const { default: ToolsDock } = await import("@/components/layout/ToolsDock");

@@ -67,6 +67,7 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 	const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 	const [isDesktopOpen, setIsDesktopOpen] = useState(false);
 	const isComposerPage = pathname.includes("/new") || /^\/posts\/[^/]+\/edit(?:\/|$)/.test(pathname);
+	const isPostDetailPage = /^\/posts\/[^/]+(?:\/|$)/.test(pathname) && !/^\/posts\/[^/]+\/edit(?:\/|$)/.test(pathname);
 
 	useEffect(() => {
 		const refreshLinks = () => {
@@ -190,7 +191,10 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 				<button
 					type="button"
 					onClick={() => setIsMobileModalOpen(true)}
-					className="fixed bottom-5 right-4 z-[95] inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg transition-colors hover:bg-bg-tertiary md:hidden"
+					className={classNames(
+						"fixed right-4 z-[95] inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-bg-secondary text-text-primary shadow-lg transition-colors hover:bg-bg-tertiary md:hidden",
+						isPostDetailPage ? "bottom-[calc(env(safe-area-inset-bottom)+7rem)]" : "bottom-5"
+					)}
 					title="도구 모음"
 				>
 					<Wrench size={18} />
