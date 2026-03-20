@@ -265,4 +265,39 @@ describe("POST /api/posts", () => {
 		);
 	});
 
+	it("develope 생성도 legacy post metadata column 누락 시 fallback create로 성공해야 함", async () => {
+		authMock.mockResolvedValue({ user: { id: "5" } });
+		postCreateMock
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.board"))
+			.mockResolvedValueOnce({ id: 880 });
+		postSubscriptionUpsertMock.mockResolvedValue({ userId: 5, postId: 880 });
+
+		const { POST } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				title: "레거시 개발 글",
+				content: "본문",
+				board: "develope",
+				tags: ["guide"],
+			}),
+		});
+
+		const res = await POST(req as never);
+		expect(res.status).toBe(200);
+		expect(postCreateMock).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				data: {
+					title: "레거시 개발 글",
+					content: "본문",
+					tags: "[\"guide\"]",
+					authorId: 5,
+				},
+				select: { id: true },
+			})
+		);
+	});
+
 });

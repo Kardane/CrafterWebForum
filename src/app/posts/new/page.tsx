@@ -19,6 +19,19 @@ interface UploadPayload {
 	error?: string;
 }
 
+function getPostCreateErrorMessage(errorCode: string | undefined): string {
+	switch (errorCode) {
+		case "pending_approval":
+			return "승인 대기 중이라 포스트를 작성할 수 없음";
+		case "validation_error":
+			return "제목, 내용, 태그를 다시 확인해줘";
+		case "internal_server_error":
+			return "포스트 작성 중 서버 오류 발생";
+		default:
+			return "포스트 생성 실패";
+	}
+}
+
 export default function NewPostPage() {
 	const router = useRouter();
 	const { data: session } = useSession();
@@ -219,13 +232,14 @@ export default function NewPostPage() {
 				body: JSON.stringify({
 					title,
 					content,
+					board: "develope",
 					tags: selectedTags,
 				}),
 			});
 
 			const data = (await response.json()) as { postId?: number; error?: string };
 			if (!response.ok || !data.postId) {
-				throw new Error(data.error || "포스트 생성 실패");
+				throw new Error(getPostCreateErrorMessage(data.error));
 			}
 
 			clearDraft();
