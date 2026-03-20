@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import "@/styles/globals.css";
@@ -31,6 +32,15 @@ export default function RootLayout({
 
 	return (
 		<html lang="ko">
+			<head>
+				{!isProduction && (
+					<Script
+						src="//unpkg.com/react-grab/dist/index.global.js"
+						crossOrigin="anonymous"
+						strategy="beforeInteractive"
+					/>
+				)}
+			</head>
 			<body className="antialiased bg-bg-primary text-text-primary">
 				<SessionProvider>
 					<ToastProvider>
