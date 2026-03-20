@@ -802,8 +802,32 @@ export default function CommentForm({
 						padding: 0 4px;
 					}
 
+					.comment-form.composer .form-input-wrapper {
+						display: grid;
+						grid-template-columns: minmax(0, 1fr) auto;
+						grid-template-areas:
+							"tools tools"
+							"textarea submit";
+						align-items: end;
+					}
+
 					.form-input-wrapper {
 						gap: 6px;
+					}
+
+					.comment-form.composer .plus-btn-wrapper {
+						grid-area: tools;
+						margin-bottom: 4px;
+						justify-self: start;
+					}
+
+					.comment-form.composer .comment-textarea {
+						grid-area: textarea;
+					}
+
+					.comment-form.composer .submit-btn {
+						grid-area: submit;
+						align-self: end;
 					}
 
 					.plus-btn {

@@ -92,4 +92,17 @@ describe("CommentForm", () => {
 		expect(container.querySelector(".comment-textarea")).toBeTruthy();
 		expect(container.querySelector(".submit-btn")).toBeTruthy();
 	});
+
+	it("composer variant는 모바일에서 도구모음 버튼 줄을 textarea 위로 올리는 스타일을 포함해야 함", async () => {
+		const onSubmit = vi.fn().mockResolvedValue(undefined);
+		const { default: CommentForm } = await import("@/components/comments/CommentForm");
+
+		const { container } = render(<CommentForm onSubmit={onSubmit} variant="composer" postId={11} />);
+		const styleText = container.querySelector("style")?.textContent ?? "";
+
+		expect(styleText).toContain('grid-template-areas:');
+		expect(styleText).toContain('"tools tools"');
+		expect(styleText).toContain('"textarea submit"');
+		expect(styleText).toContain(".comment-form.composer .plus-btn-wrapper");
+	});
 });
