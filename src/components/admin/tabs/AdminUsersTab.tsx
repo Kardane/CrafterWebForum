@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { ko } from "date-fns/locale";
 import { MoreHorizontal, Check, X, Shield, Ban, Trash2 } from "lucide-react";
-import { AdminUserRow } from "@/types/admin";
+import { AdminCreateUserPayload, AdminUserRow } from "@/types/admin";
 import { Modal } from "@/components/ui/Modal";
 import {
 	fetchAdminJson,
@@ -15,6 +15,7 @@ import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 type PatchPayload = { role?: "admin" | "user"; isBanned?: 0 | 1 };
 type UserStatus = "정상" | "승인대기" | "차단";
+const PASSWORD_POLICY_TEXT = "비밀번호는 8자 이상이며 숫자 또는 특수문자를 포함해야 함";
 
 function formatDate24Hour(date: string | null) {
 	if (!date) return "-";
@@ -64,6 +65,13 @@ export default function AdminUsersTab() {
 	const [error, setError] = useState<string | null>(null);
 	const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
 	const [isActionLoading, setIsActionLoading] = useState(false);
+	const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+	const [createNickname, setCreateNickname] = useState("");
+	const [createPassword, setCreatePassword] = useState("");
+	const [createPasswordConfirm, setCreatePasswordConfirm] = useState("");
+	const [createSignupNote, setCreateSignupNote] = useState("");
+	const [createError, setCreateError] = useState<string | null>(null);
+	const [isCreateLoading, setIsCreateLoading] = useState(false);
 
 	const selectedUser = useMemo(
 		() => users.find((user) => user.id === selectedUserId) ?? null,
@@ -117,6 +125,62 @@ export default function AdminUsersTab() {
 		await fetchAdminResponse(`/api/admin/users/${id}`, { method: "DELETE" });
 	};
 
+	const createUser = async (payload: AdminCreateUserPayload) => {
+		await fetchAdminResponse("/api/admin/users", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(payload),
+		});
+	};
+
+	const resetCreateForm = () => {
+		setCreateNickname("");
+		setCreatePassword("");
+		setCreatePasswordConfirm("");
+		setCreateSignupNote("");
+		setCreateError(null);
+	};
+
+	const handleCreateSubmit = async () => {
+		const nickname = createNickname.trim();
+		if (!nickname) {
+			setCreateError("닉네임을 입력해줘");
+			return;
+		}
+		if (createPassword !== createPasswordConfirm) {
+			setCreateError("비밀번호 확인이 일치하지 않음");
+			return;
+		}
+
+		setIsCreateLoading(true);
+		try {
+			await createUser({
+				nickname,
+				password: createPassword,
+				signupNote: createSignupNote.trim(),
+			});
+			await loadUsers();
+			resetCreateForm();
+			setIsCreateModalOpen(false);
+		} catch (e) {
+			if ((e as Error).message === "AUTH_REQUIRED") {
+				return;
+			}
+			const message = (e as Error).message;
+			if (message === "nickname_already_exists") {
+				setCreateError("이미 존재하는 닉네임임");
+			} else if (message === "invalid_password_policy") {
+				setCreateError(PASSWORD_POLICY_TEXT);
+			} else if (message === "validation_error") {
+				setCreateError("입력값을 다시 확인해줘");
+			} else {
+				setCreateError("유저 생성에 실패함");
+			}
+		} finally {
+			setIsCreateLoading(false);
+		}
+	};
+
 	const runAction = async (action: () => Promise<void>, closeAfterAction = true) => {
 		setIsActionLoading(true);
 		try {
@@ -140,7 +204,19 @@ export default function AdminUsersTab() {
 
 	return (
 		<div>
-			<h2 className="mb-4 text-xl font-semibold">유저</h2>
+			<div className="mb-4 flex items-center justify-between gap-3">
+				<h2 className="text-xl font-semibold">유저</h2>
+				<button
+					type="button"
+					className="btn btn-primary btn-sm"
+					onClick={() => {
+						resetCreateForm();
+						setIsCreateModalOpen(true);
+					}}
+				>
+					유저 생성
+				</button>
+			</div>
 			<div className="overflow-x-auto">
 				<table className="w-full border-collapse text-sm">
 					<thead>
@@ -187,6 +263,95 @@ export default function AdminUsersTab() {
 					</tbody>
 				</table>
 			</div>
+
+			<Modal
+				isOpen={isCreateModalOpen}
+				onClose={() => {
+					resetCreateForm();
+					setIsCreateModalOpen(false);
+				}}
+				title="관리자 직접 유저 생성"
+				variant="sidebarLike"
+				size="sm"
+				onEnter={() => void handleCreateSubmit()}
+			>
+				<div className="space-y-4">
+					<div className="text-xs text-text-muted">{PASSWORD_POLICY_TEXT}</div>
+					<div className="space-y-1.5">
+						<label className="text-sm font-medium text-text-secondary" htmlFor="admin-create-nickname">
+							닉네임
+						</label>
+						<input
+							id="admin-create-nickname"
+							value={createNickname}
+							onChange={(event) => setCreateNickname(event.target.value)}
+							className="input-base w-full"
+							maxLength={32}
+							placeholder="닉네임"
+						/>
+					</div>
+					<div className="space-y-1.5">
+						<label className="text-sm font-medium text-text-secondary" htmlFor="admin-create-password">
+							비밀번호
+						</label>
+						<input
+							id="admin-create-password"
+							type="password"
+							value={createPassword}
+							onChange={(event) => setCreatePassword(event.target.value)}
+							className="input-base w-full"
+							placeholder="비밀번호"
+						/>
+					</div>
+					<div className="space-y-1.5">
+						<label className="text-sm font-medium text-text-secondary" htmlFor="admin-create-password-confirm">
+							비밀번호 확인
+						</label>
+						<input
+							id="admin-create-password-confirm"
+							type="password"
+							value={createPasswordConfirm}
+							onChange={(event) => setCreatePasswordConfirm(event.target.value)}
+							className="input-base w-full"
+							placeholder="비밀번호 확인"
+						/>
+					</div>
+					<div className="space-y-1.5">
+						<label className="text-sm font-medium text-text-secondary" htmlFor="admin-create-signup-note">
+							가입 메모
+						</label>
+						<textarea
+							id="admin-create-signup-note"
+							value={createSignupNote}
+							onChange={(event) => setCreateSignupNote(event.target.value)}
+							className="input-base min-h-[88px] w-full"
+							placeholder="선택 입력"
+						/>
+					</div>
+					{createError && <p className="text-sm text-error">{createError}</p>}
+					<div className="flex justify-end gap-2">
+						<button
+							type="button"
+							className="btn btn-secondary btn-sm"
+							onClick={() => {
+								resetCreateForm();
+								setIsCreateModalOpen(false);
+							}}
+							disabled={isCreateLoading}
+						>
+							취소
+						</button>
+						<button
+							type="button"
+							className="btn btn-primary btn-sm"
+							onClick={() => void handleCreateSubmit()}
+							disabled={isCreateLoading}
+						>
+							{isCreateLoading ? "생성 중..." : "생성"}
+						</button>
+					</div>
+				</div>
+			</Modal>
 
 			<Modal
 				isOpen={selectedUser !== null}

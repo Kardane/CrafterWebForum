@@ -27,6 +27,12 @@ export interface AdminUserRow {
 	minecraftUuid: string | null;
 }
 
+export interface AdminCreateUserPayload {
+	nickname: string;
+	password: string;
+	signupNote?: string;
+}
+
 export interface AdminPostRow {
 	id: number;
 	title: string;
