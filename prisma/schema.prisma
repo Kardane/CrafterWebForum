@@ -258,3 +258,22 @@ model NotificationDelivery {
   @@index([status, nextAttemptAt])
   @@index([userId, channel, status])
 }
+
+model CommentSideEffectJob {
+  id               Int      @id @default(autoincrement())
+  commentId        Int      @unique
+  postId           Int
+  actorUserId      Int
+  actorNickname    String
+  content          String
+  status           String   @default("queued")
+  attemptCount     Int      @default(0)
+  nextAttemptAt    DateTime @default(now())
+  lastErrorCode    String?
+  lastErrorMessage String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status, nextAttemptAt])
+  @@index([postId, status])
+}

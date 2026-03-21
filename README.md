@@ -113,6 +113,8 @@ npm run setup:win
 - 디스패치 API (GitHub Actions scheduler 호출)
   - `GET /api/jobs/push-dispatch`
   - `POST /api/jobs/push-dispatch`
+  - `GET /api/jobs/comment-side-effects`
+  - `POST /api/jobs/comment-side-effects`
 - 워크플로우: `.github/workflows/push-dispatch.yml`
 - 스케줄: 5분 주기 (`*/5 * * * *`) + 수동 실행(`workflow_dispatch`)
 - 실패 시 최대 2회 재시도(총 3회 시도)
@@ -134,6 +136,7 @@ CRON_SECRET=...
 - 운영 점검 절차는 `보고서/PUSH_NOTIFICATION_OPERATION_CHECKLIST.md` 기준
 - 개인 호스팅 cron 전환은 `보고서/CRON_PUSH_DISPATCH_SETUP.md` 기준
 - 브라우저 종료 상태 수동 검증은 `보고서/BROWSER_CLOSED_PUSH_TEST_SCENARIO.md` 기준
+- 댓글 작성 후 멘션/구독 알림 반영은 `comment-side-effects` job worker가 처리하므로 약간 늦게 보일 수 있음
 
 Turso 운영 점검
 

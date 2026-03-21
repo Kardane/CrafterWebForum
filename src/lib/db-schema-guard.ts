@@ -44,6 +44,11 @@ export function isMissingNotificationDeliveryTableError(error: unknown): boolean
 	return hasMissingTablePattern(message, "notificationdelivery");
 }
 
+export function isMissingCommentSideEffectJobTableError(error: unknown): boolean {
+	const message = toErrorMessage(error).toLowerCase();
+	return hasMissingTablePattern(message, "commentsideeffectjob");
+}
+
 export function isMissingPostBoardColumnError(error: unknown): boolean {
 	const message = toErrorMessage(error).toLowerCase();
 	return hasMissingColumnPattern(message, "post", "board");

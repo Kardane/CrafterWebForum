@@ -5,8 +5,11 @@ import { buildCommentTree } from "@/lib/comments";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
 import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
-import { queueMentionNotificationsAndDeliveries } from "@/lib/comment-mention-notifications";
-import { queuePostSubscriptionNotificationsAndDeliveries } from "@/lib/comment-subscription-notifications";
+import {
+	enqueueCommentSideEffectJob,
+	isMissingCommentSideEffectJobTableError,
+	runCommentSideEffects,
+} from "@/lib/comment-side-effects";
 import { resolveActiveUserFromSession } from "@/lib/active-user";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { fetchCommentSubtreeRowsByRootIds } from "@/lib/comment-subtree-query";
@@ -205,6 +208,13 @@ export async function POST(
 	{ params }: { params: Promise<{ id: string }> }
 ) {
 	try {
+		const timing = {
+			load_post: 0,
+			validate_parent: 0,
+			write_comment: 0,
+			write_post_read: 0,
+			enqueue_side_effect_job: 0,
+		};
 		const { id } = await params;
 		const session = await auth();
 		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
@@ -231,7 +241,9 @@ export async function POST(
 		const content = parsedBody.data.content;
 		const normalizedParentId = parsedBody.data.parentId ?? null;
 
+		const loadPostStartedAt = Date.now();
 		const post = await loadCommentTargetPost(postId);
+		timing.load_post = Date.now() - loadPostStartedAt;
 
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
@@ -241,6 +253,7 @@ export async function POST(
 		}
 
 		if (normalizedParentId !== null) {
+			const validateParentStartedAt = Date.now();
 			const parentComment = await prisma.comment.findFirst({
 				where: {
 					id: normalizedParentId,
@@ -251,10 +264,12 @@ export async function POST(
 			if (!parentComment) {
 				return NextResponse.json({ error: "Parent comment not found" }, { status: 404 });
 			}
+			timing.validate_parent = Date.now() - validateParentStartedAt;
 		}
 
 		let comment;
 		let commentCount: number;
+		const writeCommentStartedAt = Date.now();
 		try {
 			const [createdComment, updatedPost] = await prisma.$transaction([
 				prisma.comment.create({
@@ -310,7 +325,9 @@ export async function POST(
 				},
 			});
 		}
+		timing.write_comment = Date.now() - writeCommentStartedAt;
 
+		const writePostReadStartedAt = Date.now();
 		await prisma.postRead.upsert({
 			where: {
 				userId_postId: {
@@ -328,6 +345,7 @@ export async function POST(
 				lastReadCommentCount: commentCount,
 			},
 		});
+		timing.write_post_read = Date.now() - writePostReadStartedAt;
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId,
@@ -336,47 +354,30 @@ export async function POST(
 		);
 
 		const actorNickname = activeUser.context.nickname || "누군가";
-		const mentionTargets = await queueMentionNotificationsAndDeliveries({
-			content,
-			actorUserId: sessionUserId,
-			actorNickname,
-			postId,
-			commentId: comment.id,
-		});
-
-		for (const target of mentionTargets) {
-			void broadcastRealtime({
-				topic: REALTIME_TOPICS.user(target.id),
-				event: REALTIME_EVENTS.NOTIFICATION_CREATED,
-				payload: {
-					type: "mention_comment",
-					postId,
-					commentId: comment.id,
-					actorNickname,
-					targetNickname: target.nickname,
-				},
+		const enqueueSideEffectStartedAt = Date.now();
+		let sideEffectMode: "job" | "inline_fallback" = "job";
+		try {
+			await enqueueCommentSideEffectJob({
+				commentId: comment.id,
+				postId,
+				actorUserId: sessionUserId,
+				actorNickname,
+				content,
+			});
+		} catch (error) {
+			if (!isMissingCommentSideEffectJobTableError(error)) {
+				throw error;
+			}
+			sideEffectMode = "inline_fallback";
+			await runCommentSideEffects({
+				commentId: comment.id,
+				postId,
+				actorUserId: sessionUserId,
+				actorNickname,
+				content,
 			});
 		}
-
-		const subscriptionTargets = await queuePostSubscriptionNotificationsAndDeliveries({
-			postId,
-			commentId: comment.id,
-			actorUserId: sessionUserId,
-			actorNickname,
-		});
-		for (const target of subscriptionTargets) {
-			void broadcastRealtime({
-				topic: REALTIME_TOPICS.user(target.id),
-				event: REALTIME_EVENTS.NOTIFICATION_CREATED,
-				payload: {
-					type: "post_comment",
-					postId,
-					commentId: comment.id,
-					actorNickname,
-					targetNickname: target.nickname,
-				},
-			});
-		}
+		timing.enqueue_side_effect_job = Date.now() - enqueueSideEffectStartedAt;
 
 		void broadcastRealtime({
 			topic: REALTIME_TOPICS.post(postId),
@@ -412,6 +413,13 @@ export async function POST(
 				lastReadCommentCount: commentCount,
 				totalCommentCount: commentCount,
 			},
+		});
+
+		console.info("[comment-write] completed", {
+			postId,
+			commentId: comment.id,
+			sideEffectMode,
+			...timing,
 		});
 
 		return NextResponse.json({

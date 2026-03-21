@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHash, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/prisma";
+import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import {
 	buildDeliveryDedupeKey,
 	ensureWebPushConfigured,
@@ -45,18 +45,6 @@ function toBatchSize(value: string | null): number {
 	return parsed;
 }
 
-function isAuthorizedCron(request: NextRequest): boolean {
-	const cronSecret = (process.env.CRON_SECRET ?? "").trim();
-	if (!cronSecret) {
-		return false;
-	}
-	const authorization = request.headers.get("authorization") ?? "";
-	const expected = `Bearer ${cronSecret}`;
-	const authDigest = createHash("sha256").update(authorization).digest();
-	const expectedDigest = createHash("sha256").update(expected).digest();
-	return timingSafeEqual(authDigest, expectedDigest);
-}
-
 function truncatePushBody(value: string): string {
 	if (value.length <= MAX_PUSH_BODY_LENGTH) {
 		return value;
@@ -93,7 +81,7 @@ function buildPushPresentation(input: {
 }
 
 async function handleDispatch(request: NextRequest) {
-	if (!isAuthorizedCron(request)) {
+	if (!isAuthorizedCronRequest(request)) {
 		return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 	}
 

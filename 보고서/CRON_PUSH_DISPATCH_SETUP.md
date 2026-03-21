@@ -5,7 +5,7 @@
 - 서버 운영이 익숙하지 않은 사람도 그대로 따라 하면 설정할 수 있게 만드는 문서
 
 ## 이 문서가 필요한 이유
-- 지금 푸시 디스패치 API는 `POST /api/jobs/push-dispatch`를 주기적으로 호출해줘야 동작함
+- 지금 운영 스케줄러는 `POST /api/jobs/comment-side-effects`와 `POST /api/jobs/push-dispatch`를 주기적으로 호출해줘야 동작함
 - GitHub Actions를 쓰면 보통 5분 주기라서 알림이 늦을 수 있음
 - 개인 서버의 `cron`을 쓰면 1분 주기로 더 자주 호출 가능함
 - 이미 서버 코드에 인증, 큐 처리, 재시도 로직이 있으니 스케줄러만 바꾸면 됨
@@ -13,7 +13,9 @@
 ## 이 문서의 기준 주소
 - 웹서비스 주소: `https://stevegalleryforum.vercel.app`
 - 개인 호스팅 서버 주소: `mcbrass.kro.kr`
-- 실제 호출 주소: `POST https://stevegalleryforum.vercel.app/api/jobs/push-dispatch?batch=100`
+- 실제 호출 주소
+  - `POST https://stevegalleryforum.vercel.app/api/jobs/comment-side-effects?batch=50`
+  - `POST https://stevegalleryforum.vercel.app/api/jobs/push-dispatch?batch=100`
 - 필수 헤더: `Authorization: Bearer <CRON_SECRET>`
 
 ## 먼저 알아둘 것
@@ -47,6 +49,10 @@ CRON_SECRET=...
 아래 명령을 `mcbrass.kro.kr` 서버에서 직접 실행:
 
 ```bash
+curl -sS -X POST "https://stevegalleryforum.vercel.app/api/jobs/comment-side-effects?batch=50" \
+  -H "Authorization: Bearer YOUR_CRON_SECRET" \
+  -H "Content-Type: application/json"
+
 curl -sS -X POST "https://stevegalleryforum.vercel.app/api/jobs/push-dispatch?batch=100" \
   -H "Authorization: Bearer YOUR_CRON_SECRET" \
   -H "Content-Type: application/json"
@@ -57,9 +63,9 @@ curl -sS -X POST "https://stevegalleryforum.vercel.app/api/jobs/push-dispatch?ba
 ```json
 {
   "ok": true,
-  "batchSize": 100,
+  "batchSize": 50,
   "processed": 0,
-  "sent": 0,
+  "completed": 0,
   "retried": 0,
   "dead": 0,
   "skipped": 0
@@ -121,6 +127,12 @@ SECRET_FILE="/opt/crafter/secrets/cron_secret"
 
 CRON_SECRET="$(cat "$SECRET_FILE")"
 
+curl -sS -X POST "${APP_URL}/api/jobs/comment-side-effects?batch=50" \
+  -H "Authorization: Bearer ${CRON_SECRET}" \
+  -H "Content-Type: application/json"
+
+echo
+
 curl -sS -X POST "${APP_URL}/api/jobs/push-dispatch?batch=100" \
   -H "Authorization: Bearer ${CRON_SECRET}" \
   -H "Content-Type: application/json"
@@ -134,7 +146,7 @@ sudo chmod 700 /opt/crafter/scripts/push-dispatch.sh
 
 중요
 - `APP_URL`은 반드시 `https://stevegalleryforum.vercel.app`로 둠
-- `batch=100`은 현재 기본 권장값임
+- `comment-side-effects`는 `batch=50`, `push-dispatch`는 `batch=100`이 현재 기본 권장값임
 - 스크립트 안에 `CRON_SECRET` 문자열을 직접 박아 넣지 않는 편이 좋음
 
 ## 4. 스크립트 수동 실행
@@ -194,9 +206,10 @@ tail -f /opt/crafter/logs/push-dispatch.log
 
 1. `/profile`에서 푸시 구독 켜기
 2. 다른 계정으로 댓글이나 멘션 만들기
-3. DB에서 `NotificationDelivery(status=queued)` 생성 확인
-4. 1분 안쪽으로 cron이 실행되면 `queued -> sent`로 바뀌는지 확인
-5. 브라우저를 닫은 상태에서도 실제 OS 푸시 알림이 오는지 확인
+3. DB에서 `CommentSideEffectJob(status=queued)` 생성 확인
+4. 1분 안쪽으로 cron이 실행되면 `queued -> done`으로 바뀌는지 확인
+5. 그다음 `NotificationDelivery(status=queued)`가 생성되고 `sent`로 바뀌는지 확인
+6. 브라우저를 닫은 상태에서도 실제 OS 푸시 알림이 오는지 확인
 
 이미 있는 검증 문서도 같이 보면 됨.
 - `보고서/PUSH_NOTIFICATION_OPERATION_CHECKLIST.md`
@@ -221,6 +234,7 @@ tail -f /opt/crafter/logs/push-dispatch.log
 ### `db_schema_not_ready`
 - 원인: 푸시 관련 테이블이 아직 준비되지 않음
 - 확인할 것:
+  - `CommentSideEffectJob`
   - `PushSubscription`
   - `Notification`
   - `NotificationDelivery`
@@ -236,6 +250,7 @@ tail -n 50 /opt/crafter/logs/push-dispatch.log
 ## 9. 운영 팁
 - `CRON_SECRET`은 코드, README, 공개 저장소에 적지 않는 게 맞음
 - 서버 시간이 틀어져 있으면 재시도 시각 계산이 꼬일 수 있으니 시간 동기화가 필요함
+- 댓글은 먼저 저장되고 알림은 worker가 뒤에서 처리하므로, 댓글 작성 직후 알림 배지가 약간 늦게 보이는 건 정상일 수 있음
 - 푸시가 많이 밀리면 `batch=100`으로 부족할 수 있음. 그때만 배치 크기 조정 검토
 - 1분 주기로 돌려도 서버 내부 재시도 로직은 별도로 살아 있음
 - 만료된 구독은 전송 중 `404`나 `410`이 나오면 자동 비활성화될 수 있음
@@ -262,7 +277,7 @@ tail -n 50 /opt/crafter/logs/push-dispatch.log
 5. `chmod 600`, `chmod 700` 적용
 6. 스크립트 단독 실행 확인
 7. `crontab -e`로 1분 주기 등록
-8. `tail -f /opt/crafter/logs/push-dispatch.log`로 로그 확인
+8. `tail -f /opt/crafter/logs/push-dispatch.log`로 worker 로그 확인
 9. 실제 댓글/멘션으로 푸시 수신 확인
 
 여기까지 되면 개인 호스팅 cron 전환은 끝임.

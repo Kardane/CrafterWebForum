@@ -14,9 +14,11 @@ const notificationFindManyMock = vi.fn();
 const pushSubscriptionFindManyMock = vi.fn();
 const postSubscriptionFindManyMock = vi.fn();
 const notificationDeliveryCreateManyMock = vi.fn();
+const commentSideEffectJobCreateMock = vi.fn();
 const transactionMock = vi.fn();
 const resolveActiveUserFromSessionMock = vi.fn();
 const fetchCommentSubtreeRowsByRootIdsMock = vi.fn();
+const broadcastRealtimeMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -50,6 +52,9 @@ vi.mock("@/lib/prisma", () => ({
 		notificationDelivery: {
 			createMany: notificationDeliveryCreateManyMock,
 		},
+		commentSideEffectJob: {
+			create: commentSideEffectJobCreateMock,
+		},
 		postRead: {
 			upsert: postReadUpsertMock,
 		},
@@ -63,6 +68,10 @@ vi.mock("@/lib/active-user", () => ({
 
 vi.mock("@/lib/comment-subtree-query", () => ({
 	fetchCommentSubtreeRowsByRootIds: fetchCommentSubtreeRowsByRootIdsMock,
+}));
+
+vi.mock("@/lib/realtime/server-broadcast", () => ({
+	broadcastRealtime: broadcastRealtimeMock,
 }));
 
 function buildCommentRow(input: {
@@ -108,9 +117,11 @@ describe("POST /api/posts/[id]/comments", () => {
 		pushSubscriptionFindManyMock.mockReset();
 		postSubscriptionFindManyMock.mockReset();
 		notificationDeliveryCreateManyMock.mockReset();
+		commentSideEffectJobCreateMock.mockReset();
 		transactionMock.mockReset();
 		resolveActiveUserFromSessionMock.mockReset();
 		fetchCommentSubtreeRowsByRootIdsMock.mockReset();
+		broadcastRealtimeMock.mockReset();
 		resolveActiveUserFromSessionMock.mockResolvedValue({
 			ok: true,
 			context: { userId: 10, role: "user", nickname: "actor", isApproved: 1, isBanned: 0 },
@@ -124,6 +135,7 @@ describe("POST /api/posts/[id]/comments", () => {
 		pushSubscriptionFindManyMock.mockResolvedValue([]);
 		postSubscriptionFindManyMock.mockResolvedValue([]);
 		notificationDeliveryCreateManyMock.mockResolvedValue({ count: 0 });
+		commentSideEffectJobCreateMock.mockResolvedValue({ id: 900, commentId: 101 });
 	});
 
 	it("returns paginated comment tree when cursor pagination is requested", async () => {
@@ -210,20 +222,13 @@ describe("POST /api/posts/[id]/comments", () => {
 		expect(commentCreateMock).toHaveBeenCalled();
 	});
 
-	it("batches mention notification delivery queue writes", async () => {
+	it("queues comment side effect job instead of inline notifications", async () => {
 		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1, nickname: "actor" } });
 		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null, tags: null });
 		commentCreateMock.mockResolvedValue(
 			buildCommentRow({ id: 101, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "@alice hi" })
 		);
 		postUpdateMock.mockResolvedValue({ commentCount: 5 });
-		userFindManyMock.mockResolvedValue([
-			{ id: 20, nickname: "alice" },
-			{ id: 10, nickname: "actor" },
-		]);
-		notificationCreateManyMock.mockResolvedValue({ count: 1 });
-		notificationFindManyMock.mockResolvedValue([{ id: 501, userId: 20 }]);
-		pushSubscriptionFindManyMock.mockResolvedValue([{ id: 33, userId: 20 }]);
 
 		const { POST } = await import("@/app/api/posts/[id]/comments/route");
 		const req = new Request("http://localhost/api/posts/12/comments", {
@@ -236,7 +241,55 @@ describe("POST /api/posts/[id]/comments", () => {
 
 		expect(res.status).toBe(200);
 		expect(transactionMock).toHaveBeenCalledTimes(1);
-		expect(notificationDeliveryCreateManyMock).toHaveBeenCalledTimes(1);
+		expect(commentSideEffectJobCreateMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				data: expect.objectContaining({
+					commentId: 101,
+					postId: 12,
+					actorUserId: 10,
+					actorNickname: "actor",
+					content: "@alice hi",
+					status: "queued",
+				}),
+			})
+		);
+		expect(notificationCreateManyMock).not.toHaveBeenCalled();
+		expect(notificationDeliveryCreateManyMock).not.toHaveBeenCalled();
+	});
+
+	it("falls back to inline notifications when CommentSideEffectJob table is missing", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1, nickname: "actor" } });
+		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null, tags: null });
+		commentCreateMock.mockResolvedValue(
+			buildCommentRow({ id: 102, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "@alice hello" })
+		);
+		postUpdateMock.mockResolvedValue({ commentCount: 6 });
+		commentSideEffectJobCreateMock.mockRejectedValue(
+			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.CommentSideEffectJob")
+		);
+		userFindManyMock.mockResolvedValue([{ id: 20, nickname: "alice" }]);
+		postSubscriptionFindManyMock.mockResolvedValue([{ userId: 30, user: { nickname: "watcher" } }]);
+		notificationCreateManyMock.mockResolvedValue({ count: 2 });
+		notificationFindManyMock.mockResolvedValue([
+			{ id: 501, userId: 20 },
+			{ id: 601, userId: 30 },
+		]);
+		pushSubscriptionFindManyMock.mockResolvedValue([
+			{ id: 33, userId: 20 },
+			{ id: 41, userId: 30 },
+		]);
+
+		const { POST } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ content: "@alice hello" }),
+		});
+
+		const res = await POST(req as never, { params: Promise.resolve({ id: "12" }) });
+
+		expect(res.status).toBe(200);
+		expect(notificationCreateManyMock).toHaveBeenCalled();
 		expect(notificationDeliveryCreateManyMock).toHaveBeenCalledWith(
 			expect.objectContaining({
 				data: expect.arrayContaining([
@@ -245,47 +298,7 @@ describe("POST /api/posts/[id]/comments", () => {
 						userId: 20,
 						subscriptionId: 33,
 						channel: "web_push",
-						status: "queued",
 					}),
-				]),
-			})
-		);
-	});
-
-	it("queues post subscription notifications for subscribed users", async () => {
-		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1, nickname: "actor" } });
-		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null, tags: null });
-		commentCreateMock.mockResolvedValue(
-			buildCommentRow({ id: 102, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "hello" })
-		);
-		postUpdateMock.mockResolvedValue({ commentCount: 6 });
-		postSubscriptionFindManyMock.mockResolvedValue([{ userId: 30, user: { nickname: "watcher" } }]);
-		notificationCreateManyMock.mockResolvedValue({ count: 1 });
-		notificationFindManyMock.mockResolvedValue([{ id: 601, userId: 30 }]);
-		pushSubscriptionFindManyMock.mockResolvedValue([{ id: 41, userId: 30 }]);
-
-		const { POST } = await import("@/app/api/posts/[id]/comments/route");
-		const req = new Request("http://localhost/api/posts/12/comments", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ content: "hello" }),
-		});
-
-		const res = await POST(req as never, { params: Promise.resolve({ id: "12" }) });
-
-		expect(res.status).toBe(200);
-		expect(postSubscriptionFindManyMock).toHaveBeenCalledWith(
-			expect.objectContaining({
-				where: expect.objectContaining({
-					postId: 12,
-					userId: { not: 10 },
-				}),
-			})
-		);
-		expect(notificationCreateManyMock).toHaveBeenCalled();
-		expect(notificationDeliveryCreateManyMock).toHaveBeenCalledWith(
-			expect.objectContaining({
-				data: expect.arrayContaining([
 					expect.objectContaining({
 						notificationId: 601,
 						userId: 30,
@@ -304,6 +317,9 @@ describe("POST /api/posts/[id]/comments", () => {
 			buildCommentRow({ id: 103, postId: 12, authorId: 10, parentId: null, nickname: "actor", content: "hello" })
 		);
 		postUpdateMock.mockResolvedValue({ commentCount: 7 });
+		commentSideEffectJobCreateMock.mockRejectedValue(
+			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.CommentSideEffectJob")
+		);
 		postSubscriptionFindManyMock.mockRejectedValue(
 			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.PostSubscription")
 		);
