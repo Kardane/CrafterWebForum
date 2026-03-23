@@ -133,4 +133,36 @@ describe("useCommentScroll", () => {
 		expect(windowScrollToMock).not.toHaveBeenCalled();
 		expect(clearPostDetailScrollStateMock).toHaveBeenCalledWith(11);
 	});
+
+	it("일반 포스트 진입에서는 저장된 상세 스크롤보다 댓글 맨 아래 이동이 우선이어야 함", async () => {
+		readPostDetailScrollStateMock.mockReturnValue({
+			anchorCommentId: 7,
+			scrollY: 120,
+		});
+		const scrollIntoViewMock = vi.fn();
+		const windowScrollToMock = vi.fn();
+		Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+			configurable: true,
+			value: scrollIntoViewMock,
+		});
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+			cb(0);
+			return 1;
+		});
+		vi.spyOn(window, "scrollTo").mockImplementation(windowScrollToMock as typeof window.scrollTo);
+
+		const view = render(<TestHarness postId={11} />);
+		const stream = await waitFor(() => view.getByTestId("stream") as HTMLDivElement);
+
+		await act(async () => {
+			await Promise.resolve();
+		});
+
+		await waitFor(() => {
+			expect(stream.scrollTo).toHaveBeenCalledWith({ top: 480, behavior: "auto" });
+		});
+		expect(clearPostDetailScrollStateMock).toHaveBeenCalledWith(11);
+		expect(windowScrollToMock).toHaveBeenCalledWith({ top: document.documentElement.scrollHeight, behavior: "auto" });
+		expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "auto", block: "end" });
+	});
 });

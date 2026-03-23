@@ -300,4 +300,34 @@ describe("POST /api/posts", () => {
 		);
 	});
 
+	it("keeps post creation working when authored auto-subscription hits legacy schema mismatch", async () => {
+		authMock.mockResolvedValue({ user: { id: "5" } });
+		postCreateMock.mockResolvedValue({ id: 990 });
+		postSubscriptionUpsertMock.mockRejectedValue(
+			new Error("SQLITE_ERROR: ON CONFLICT clause does not match any PRIMARY KEY or UNIQUE constraint")
+		);
+
+		const { POST } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				title: "신문고 생성",
+				content: "내용",
+				board: "sinmungo",
+				serverAddress: "mc.example.com:25565",
+				tags: [],
+			}),
+		});
+
+		const res = await POST(req as never);
+		const body = await res.json();
+		expect(res.status).toBe(200);
+		expect(body).toEqual({
+			success: true,
+			message: "created",
+			postId: 990,
+		});
+	});
+
 });

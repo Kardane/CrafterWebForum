@@ -39,6 +39,17 @@ export function isMissingPostSubscriptionTableError(error: unknown): boolean {
 	return hasMissingTablePattern(message, "postsubscription");
 }
 
+export function isRecoverablePostSubscriptionWriteError(error: unknown): boolean {
+	const message = toErrorMessage(error).toLowerCase();
+	return (
+		isMissingPostSubscriptionTableError(error) ||
+		hasMissingColumnPattern(message, "postsubscription", "updatedat") ||
+		hasMissingColumnPattern(message, "postsubscription", "userid") ||
+		hasMissingColumnPattern(message, "postsubscription", "postid") ||
+		message.includes("on conflict clause does not match any primary key or unique constraint")
+	);
+}
+
 export function isMissingNotificationDeliveryTableError(error: unknown): boolean {
 	const message = toErrorMessage(error).toLowerCase();
 	return hasMissingTablePattern(message, "notificationdelivery");

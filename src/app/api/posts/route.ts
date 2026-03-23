@@ -10,7 +10,7 @@ import { resolveActiveUserFromSession } from "@/lib/active-user";
 import {
 	isMissingPostCommentCountColumnError,
 	isMissingPostBoardMetadataColumnError,
-	isMissingPostSubscriptionTableError,
+	isRecoverablePostSubscriptionWriteError,
 } from "@/lib/db-schema-guard";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { z } from "zod";
@@ -170,10 +170,10 @@ export async function POST(request: NextRequest) {
 				},
 			});
 		} catch (error) {
-			if (!isMissingPostSubscriptionTableError(error)) {
+			if (!isRecoverablePostSubscriptionWriteError(error)) {
 				throw error;
 			}
-			console.warn("[API] POST /api/posts post subscription table missing; skipping authored auto-subscription");
+			console.warn("[API] POST /api/posts authored auto-subscription unavailable; skipping");
 		}
 		safeRevalidateTags(
 			getPostMutationTags({

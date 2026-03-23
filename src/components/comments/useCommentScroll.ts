@@ -8,7 +8,6 @@
 import { type RefObject, useCallback, useEffect, useRef } from "react";
 import {
 	clearPostDetailScrollState,
-	readPostDetailScrollState,
 	savePostDetailScrollState,
 } from "@/lib/scroll-restore";
 import { DETAIL_SCROLL_SAVE_DELAY_MS, parseCommentIdFromElementId } from "@/lib/comment-tree-ops";
@@ -29,7 +28,6 @@ export function useCommentScroll({
 }: UseCommentScrollOptions) {
 	const highlightTimerRef = useRef<number | null>(null);
 	const scrollSaveTimerRef = useRef<number | null>(null);
-	const restoreAppliedRef = useRef(false);
 	const restoreCheckedRef = useRef(false);
 	const latestJumpAppliedRef = useRef(false);
 
@@ -138,7 +136,6 @@ export function useCommentScroll({
 
 	// postId 변경 시 복원 플래그 리셋
 	useEffect(() => {
-		restoreAppliedRef.current = false;
 		restoreCheckedRef.current = false;
 		latestJumpAppliedRef.current = false;
 	}, [postId]);
@@ -155,26 +152,7 @@ export function useCommentScroll({
 			return;
 		}
 
-		const saved = readPostDetailScrollState(postId);
-		let restored = false;
-		if (saved) {
-			restoreAppliedRef.current = true;
-			restored = true;
-			if (saved.anchorCommentId !== null && ensureCommentVisible(saved.anchorCommentId)) {
-				requestAnimationFrame(() => {
-					const target = document.getElementById(`comment-${saved.anchorCommentId}`);
-					target?.scrollIntoView({ behavior: "smooth", block: "center" });
-				});
-			} else {
-				window.scrollTo({ top: saved.scrollY, behavior: "auto" });
-			}
-			clearPostDetailScrollState(postId);
-		}
-
-		if (restored) {
-			latestJumpAppliedRef.current = true;
-			return;
-		}
+		clearPostDetailScrollState(postId);
 
 		if (!latestJumpAppliedRef.current) {
 			latestJumpAppliedRef.current = true;
