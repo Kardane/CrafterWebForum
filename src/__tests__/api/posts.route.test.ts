@@ -26,9 +26,10 @@ vi.mock("@/lib/active-user", () => ({
 
 describe("POST /api/posts", () => {
 	beforeEach(() => {
-	authMock.mockReset();
-	postCreateMock.mockReset();
-	postSubscriptionUpsertMock.mockReset();
+		vi.restoreAllMocks();
+		authMock.mockReset();
+		postCreateMock.mockReset();
+		postSubscriptionUpsertMock.mockReset();
 	resolveActiveUserFromSessionMock.mockReset();
 	resolveActiveUserFromSessionMock.mockResolvedValue({
 		ok: true,
@@ -301,6 +302,7 @@ describe("POST /api/posts", () => {
 	});
 
 	it("keeps post creation working when authored auto-subscription hits legacy schema mismatch", async () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
 		authMock.mockResolvedValue({ user: { id: "5" } });
 		postCreateMock.mockResolvedValue({ id: 990 });
 		postSubscriptionUpsertMock.mockRejectedValue(
@@ -328,6 +330,74 @@ describe("POST /api/posts", () => {
 			message: "created",
 			postId: 990,
 		});
+		expect(warnSpy).toHaveBeenCalledWith(
+			"[API] POST /api/posts stage=auto_subscribe_author authored auto-subscription unavailable; skipping"
+		);
+	});
+
+	it("keeps sinmungo creation working when authored auto-subscription hits NOT NULL legacy mismatch", async () => {
+		const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+		authMock.mockResolvedValue({ user: { id: "5" } });
+		postCreateMock.mockResolvedValue({ id: 991 });
+		postSubscriptionUpsertMock.mockRejectedValue(
+			new Error("SQLITE_CONSTRAINT: NOT NULL constraint failed: PostSubscription.updatedAt")
+		);
+
+		const { POST } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				title: "신문고 생성",
+				content: "내용",
+				board: "sinmungo",
+				serverAddress: "mc.example.com:25565",
+				tags: [],
+			}),
+		});
+
+		const res = await POST(req as never);
+		await expect(res.json()).resolves.toEqual({
+			success: true,
+			message: "created",
+			postId: 991,
+		});
+		expect(warnSpy).toHaveBeenCalledWith(
+			"[API] POST /api/posts stage=auto_subscribe_author authored auto-subscription unavailable; skipping"
+		);
+	});
+
+	it("logs create_post_legacy_fallback stage when tags column is missing and fallback cannot preserve sinmungo metadata", async () => {
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+		authMock.mockResolvedValue({ user: { id: "5" } });
+		postCreateMock
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.board"))
+			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: table Post has no column named tags"));
+
+		const { POST } = await import("@/app/api/posts/route");
+		const req = new Request("http://localhost/api/posts", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				title: "신문고 생성",
+				content: "내용",
+				board: "sinmungo",
+				serverAddress: "mc.example.com:25565",
+				tags: [],
+			}),
+		});
+
+		const res = await POST(req as never);
+		await expect(res.json()).resolves.toEqual({ error: "internal_server_error" });
+		expect(res.status).toBe(500);
+		expect(errorSpy).toHaveBeenCalledWith(
+			"[API] POST /api/posts schema_fix_required stage=create_post_legacy_fallback tags column missing; cannot preserve sinmungo metadata",
+			expect.any(Error)
+		);
+		expect(errorSpy).toHaveBeenCalledWith(
+			"[API] POST /api/posts error stage=create_post_legacy_fallback:",
+			expect.any(Error)
+		);
 	});
 
 });

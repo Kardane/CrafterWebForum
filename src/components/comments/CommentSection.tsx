@@ -79,6 +79,11 @@ interface PinnedCommentItem {
 	preview: string;
 }
 
+interface ReloadCommentsOptions {
+	mode?: "full" | "latest-window";
+	syncToBottomAfterLoad?: boolean;
+}
+
 type RenderRow =
 	| { type: "date-divider"; key: string; label: string }
 	| { type: "read-marker"; key: string }
@@ -126,6 +131,7 @@ export default function CommentSection({
 	const initialUrlCommentJumpHandledRef = useRef(false);
 	const initialFreshReloadHandledRef = useRef(false);
 	const pendingInitialTargetCommentIdRef = useRef<number | null>(null);
+	const pendingBottomSyncAfterReloadRef = useRef(false);
 
 	// --- 파생 데이터 ---
 	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
@@ -171,20 +177,49 @@ export default function CommentSection({
 		[flattenedComments.length, readMarkerState?.lastReadCommentCount]
 	);
 
-	const reloadComments = useCallback(async () => {
+	const reloadComments = useCallback(async (options: ReloadCommentsOptions = {}) => {
+		const mode = options.mode ?? "full";
+		const query =
+			mode === "latest-window"
+				? `?limit=${Math.max(1, commentsPage.limit || initialCommentsPage?.limit || 12)}`
+				: "";
 		try {
-			const response = await fetch(`/api/posts/${postId}/comments`, { cache: "no-store" });
+			const response = await fetch(`/api/posts/${postId}/comments${query}`, { cache: "no-store" });
 			if (!response.ok) {
 				return;
 			}
-			const data = (await response.json()) as { comments?: Comment[] };
+			const data = (await response.json()) as {
+				comments?: Comment[];
+				page?: {
+					limit?: number;
+					nextCursor?: number | null;
+					hasMore?: boolean;
+				};
+			};
 			if (Array.isArray(data.comments)) {
+				if (options.syncToBottomAfterLoad) {
+					pendingBottomSyncAfterReloadRef.current = true;
+				}
 				setComments(data.comments);
+				if (data.page) {
+					setCommentsPage((prev) => ({
+						limit:
+							typeof data.page?.limit === "number" && Number.isInteger(data.page.limit) && data.page.limit > 0
+								? data.page.limit
+								: prev.limit,
+						nextCursor:
+							typeof data.page?.nextCursor === "number" || data.page?.nextCursor === null
+								? (data.page.nextCursor ?? null)
+								: prev.nextCursor,
+						hasMore:
+							typeof data.page?.hasMore === "boolean" ? data.page.hasMore : prev.hasMore,
+					}));
+				}
 			}
 		} catch {
 			return;
 		}
-	}, [postId]);
+	}, [commentsPage.limit, initialCommentsPage?.limit, postId]);
 
 	const pinnedComments = useMemo<PinnedCommentItem[]>(
 		() =>
@@ -336,14 +371,33 @@ export default function CommentSection({
 		}
 
 		initialFreshReloadHandledRef.current = true;
+		const refreshMode = targetCommentId === null ? "latest-window" : "full";
 		const rafId = window.requestAnimationFrame(() => {
-			void reloadComments();
+			void reloadComments({
+				mode: refreshMode,
+				syncToBottomAfterLoad: targetCommentId === null,
+			});
 		});
 
 		return () => {
 			window.cancelAnimationFrame(rafId);
 		};
 	}, [initialComments, readMarker?.lastReadCommentCount, readMarker?.totalCommentCount, reloadComments]);
+
+	useEffect(() => {
+		if (!pendingBottomSyncAfterReloadRef.current || flattenedComments.length === 0) {
+			return;
+		}
+
+		pendingBottomSyncAfterReloadRef.current = false;
+		const rafId = window.requestAnimationFrame(() => {
+			scrollToBottom("auto");
+		});
+
+		return () => {
+			window.cancelAnimationFrame(rafId);
+		};
+	}, [flattenedComments, scrollToBottom]);
 
 	useEffect(() => {
 		if (initialUrlCommentJumpHandledRef.current || flattenedComments.length === 0) {

@@ -245,6 +245,78 @@ describe("CommentSection composer dock", () => {
 		});
 	});
 
+	it("plain detail unread refresh에서는 최신 페이지로 다시 불러오고 최종적으로 맨 아래를 다시 맞춰야 함", async () => {
+		const rafCallbacks: FrameRequestCallback[] = [];
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+			rafCallbacks.push(cb);
+			return rafCallbacks.length;
+		});
+		vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+		window.history.replaceState(null, "", "/posts/1");
+
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				comments: [
+					{
+						id: 10,
+						content: "latest root",
+						createdAt: "2026-03-10T00:10:00.000Z",
+						updatedAt: "2026-03-10T00:10:00.000Z",
+						isPinned: false,
+						parentId: null,
+						isPostAuthor: false,
+						author: { id: 1, nickname: "writer", minecraftUuid: null, role: "user" },
+						replies: [],
+					},
+				],
+				page: {
+					limit: 12,
+					nextCursor: 10,
+					hasMore: true,
+				},
+			}),
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(
+			<CommentSection
+				postId={1}
+				initialComments={[
+					{
+						id: 9,
+						content: "initial root",
+						createdAt: "2026-03-10T00:09:00.000Z",
+						updatedAt: "2026-03-10T00:09:00.000Z",
+						isPinned: false,
+						parentId: null,
+						isPostAuthor: false,
+						author: { id: 1, nickname: "writer", minecraftUuid: null, role: "user" },
+						replies: [],
+					},
+				]}
+				initialCommentsPage={{ limit: 12, nextCursor: 9, hasMore: true }}
+				readMarker={{ lastReadCommentCount: 0, totalCommentCount: 20 }}
+			/>
+		);
+
+		for (let i = 0; i < 5; i += 1) {
+			await act(async () => {
+				for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
+					cb(0);
+				}
+				await Promise.resolve();
+			});
+		}
+
+		expect(fetchMock).toHaveBeenCalledWith("/api/posts/1/comments?limit=12", { cache: "no-store" });
+		await waitFor(() => {
+			expect(scrollToBottomMock).toHaveBeenCalledWith("auto");
+		});
+		expect(scrollToCommentElementMock).not.toHaveBeenCalled();
+	});
+
 	it("renders comment rows with the full-width interactive row class", () => {
 		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
 		const { container } = render(

@@ -10,6 +10,7 @@ import { resolveActiveUserFromSession } from "@/lib/active-user";
 import {
 	isMissingPostCommentCountColumnError,
 	isMissingPostBoardMetadataColumnError,
+	isMissingPostTagsColumnError,
 	isRecoverablePostSubscriptionWriteError,
 } from "@/lib/db-schema-guard";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
@@ -89,6 +90,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+	let failureStage = "auth";
 	try {
 		const session = await auth();
 		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
@@ -97,6 +99,7 @@ export async function POST(request: NextRequest) {
 		}
 		const sessionUserId = activeUser.context.userId;
 
+		failureStage = "parse_body";
 		const parsedBody = postCreateBodySchema.safeParse(
 			await readJsonBody(request, { maxBytes: 256 * 1024 })
 		);
@@ -122,6 +125,7 @@ export async function POST(request: NextRequest) {
 
 		let post;
 		try {
+			failureStage = "create_post_primary";
 			post = await prisma.post.create({
 				data: {
 					title,
@@ -140,20 +144,32 @@ export async function POST(request: NextRequest) {
 			if (!isMissingPostBoardMetadataColumnError(error) && !isMissingPostCommentCountColumnError(error)) {
 				throw error;
 			}
-			console.warn("[API] POST /api/posts legacy post columns missing; storing board metadata in tags only");
-			post = await prisma.post.create({
-				data: {
-					title,
-					content,
-					tags: storedTags,
-					authorId: sessionUserId,
-				},
-				select: {
-					id: true,
-				},
-			});
+			console.warn("[API] POST /api/posts stage=create_post_primary legacy post columns missing; storing board metadata in tags only");
+			try {
+				failureStage = "create_post_legacy_fallback";
+				post = await prisma.post.create({
+					data: {
+						title,
+						content,
+						tags: storedTags,
+						authorId: sessionUserId,
+					},
+					select: {
+						id: true,
+					},
+				});
+			} catch (fallbackError) {
+				if (isMissingPostTagsColumnError(fallbackError)) {
+					console.error(
+						"[API] POST /api/posts schema_fix_required stage=create_post_legacy_fallback tags column missing; cannot preserve sinmungo metadata",
+						fallbackError
+					);
+				}
+				throw fallbackError;
+			}
 		}
 		try {
+			failureStage = "auto_subscribe_author";
 			await prisma.postSubscription.upsert({
 				where: {
 					userId_postId: {
@@ -173,8 +189,9 @@ export async function POST(request: NextRequest) {
 			if (!isRecoverablePostSubscriptionWriteError(error)) {
 				throw error;
 			}
-			console.warn("[API] POST /api/posts authored auto-subscription unavailable; skipping");
+			console.warn("[API] POST /api/posts stage=auto_subscribe_author authored auto-subscription unavailable; skipping");
 		}
+		failureStage = "revalidate";
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId: post.id,
@@ -191,7 +208,7 @@ export async function POST(request: NextRequest) {
 		if (error instanceof JsonBodyError) {
 			return NextResponse.json({ error: error.code }, { status: error.status });
 		}
-		console.error("[API] POST /api/posts error:", error);
+		console.error(`[API] POST /api/posts error stage=${failureStage}:`, error);
 		return NextResponse.json({ error: "internal_server_error" }, { status: 500 });
 	}
 }

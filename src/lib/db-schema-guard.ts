@@ -34,6 +34,16 @@ function hasMissingColumnPattern(message: string, tableName: string, columnName:
 	);
 }
 
+function hasNullConstraintPattern(message: string, tableName: string, columnName: string): boolean {
+	return (
+		message.includes(`not null constraint failed: ${tableName}.${columnName}`) ||
+		message.includes(`not null constraint failed: main.${tableName}.${columnName}`) ||
+		(message.includes("null constraint violation") &&
+			message.includes(tableName) &&
+			message.includes(columnName))
+	);
+}
+
 export function isMissingPostSubscriptionTableError(error: unknown): boolean {
 	const message = toErrorMessage(error).toLowerCase();
 	return hasMissingTablePattern(message, "postsubscription");
@@ -44,8 +54,11 @@ export function isRecoverablePostSubscriptionWriteError(error: unknown): boolean
 	return (
 		isMissingPostSubscriptionTableError(error) ||
 		hasMissingColumnPattern(message, "postsubscription", "updatedat") ||
+		hasNullConstraintPattern(message, "postsubscription", "updatedat") ||
+		hasNullConstraintPattern(message, "postsubscription", "createdat") ||
 		hasMissingColumnPattern(message, "postsubscription", "userid") ||
 		hasMissingColumnPattern(message, "postsubscription", "postid") ||
+		message.includes("unique constraint failed: postsubscription.userid, postsubscription.postid") ||
 		message.includes("on conflict clause does not match any primary key or unique constraint")
 	);
 }
