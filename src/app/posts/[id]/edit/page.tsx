@@ -8,6 +8,7 @@ import ComposerPageLayout from "@/components/editor/ComposerPageLayout";
 import MarkdownHelpModal from "@/components/comments/MarkdownHelpModal";
 import { useToast } from "@/components/ui/useToast";
 import { POST_TAGS } from "@/constants/post-tags";
+import { type PostBoardType, normalizeBoardType } from "@/lib/post-board";
 import { toSessionUserId } from "@/lib/session-user";
 import { parseUploadJsonResponse } from "@/lib/upload-response";
 import { uploadImageFromBrowser, uploadVideoFromBrowser } from "@/lib/client-video-upload";
@@ -31,6 +32,8 @@ interface PostDetailPayload {
 		content: string;
 		tags: string[];
 		author_id: number;
+		board?: string | null;
+		serverAddress?: string | null;
 	};
 	error?: string;
 }
@@ -46,6 +49,8 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 	const [title, setTitle] = useState("");
 	const [content, setContent] = useState("");
 	const [selectedTags, setSelectedTags] = useState<string[]>([]);
+	const [postBoard, setPostBoard] = useState<PostBoardType>("develope");
+	const [serverAddress, setServerAddress] = useState("");
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isUploading, setIsUploading] = useState(false);
@@ -92,6 +97,8 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 				setTitle(payload.post.title);
 				setContent(payload.post.content);
 				setSelectedTags(Array.isArray(payload.post.tags) ? payload.post.tags : []);
+				setPostBoard(normalizeBoardType(payload.post.board));
+				setServerAddress(payload.post.serverAddress?.trim() ?? "");
 			} catch (error) {
 				console.error("Edit post load error:", error);
 				if (!cancelled) {
@@ -110,7 +117,7 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 		return () => {
 			cancelled = true;
 		};
-	}, [paramsPromise, router, session?.user?.id, showToast, status]);
+	}, [paramsPromise, session?.user?.id, status]);
 
 	const toggleTag = (tag: string) => {
 		if (selectedTags.includes(tag)) {
@@ -244,6 +251,10 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 			showToast({ type: "error", message: "제목과 내용을 입력해줘" });
 			return;
 		}
+		if (postBoard === "sinmungo" && !serverAddress.trim()) {
+			showToast({ type: "error", message: "서버 주소를 입력해줘" });
+			return;
+		}
 
 		if (!postId) {
 			showToast({ type: "error", message: "게시글 ID를 찾지 못함" });
@@ -260,6 +271,8 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 				body: JSON.stringify({
 					title,
 					content,
+					board: postBoard,
+					serverAddress: postBoard === "sinmungo" ? serverAddress.trim() : null,
 					tags: selectedTags,
 				}),
 			});
@@ -290,8 +303,20 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 		);
 	}
 
+	const isSinmungo = postBoard === "sinmungo";
+	const layoutTitle = isSinmungo ? "서버 신문고 수정" : "포스트 수정";
+	const layoutDescription = isSinmungo
+		? "기존 서버 신문고 내용을 수정"
+		: "기존 포스트를 새 포스트 작성 화면과 동일한 레이아웃에서 편집";
+	const backHref = isSinmungo ? "/sinmungo" : "/develope";
+	const titlePlaceholder = isSinmungo ? "신문고 제목을 입력" : "포스트 제목을 입력";
+	const contentPlaceholder = isSinmungo
+		? "운영 서버에서 발생한 문제를 구체적으로 남겨줘"
+		: "내용을 입력해줘\n이미지/파일은 첨부하거나 드래그해서 올릴 수 있음";
+	const submitLabel = "수정 완료";
+
 	return (
-		<ComposerPageLayout title="포스트 수정" description="기존 포스트를 새 포스트 작성 화면과 동일한 레이아웃에서 편집">
+		<ComposerPageLayout title={layoutTitle} description={layoutDescription} backHref={backHref}>
 			<form
 				onSubmit={handleSubmit}
 				className={`relative flex flex-col gap-5 ${isDragActive ? "ring-2 ring-accent rounded-xl" : ""}`}
@@ -319,37 +344,54 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 						value={title}
 						onChange={(event) => setTitle(event.target.value)}
 						className="input-base"
-						placeholder="포스트 제목을 입력"
+						placeholder={titlePlaceholder}
 						maxLength={100}
 						required
 					/>
 				</div>
 
-				<div className="space-y-2">
-					<div className="flex items-center justify-between">
-						<label className="text-sm font-semibold text-text-secondary">태그</label>
-						<span className="text-xs text-text-muted">{selectedTags.length} / 5</span>
+				{isSinmungo ? (
+					<div className="space-y-2">
+						<label htmlFor="serverAddress" className="text-sm font-semibold text-text-secondary">
+							서버 주소
+						</label>
+						<input
+							id="serverAddress"
+							type="text"
+							value={serverAddress}
+							onChange={(event) => setServerAddress(event.target.value)}
+							className="input-base"
+							placeholder="mc.example.com:25565"
+							required
+						/>
 					</div>
-					<div className="flex flex-wrap gap-2 rounded-lg border border-border bg-bg-tertiary/80 p-3">
-						{POST_TAGS.map((tag) => {
-							const isSelected = selectedTags.includes(tag);
-							return (
-								<button
-									key={tag}
-									type="button"
-									onClick={() => toggleTag(tag)}
-									className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
-										isSelected
-											? "border-accent bg-accent text-white"
-											: "border-border bg-bg-secondary text-text-secondary hover:bg-bg-primary hover:text-text-primary"
-									}`}
-								>
-									{tag}
-								</button>
-							);
-						})}
+				) : (
+					<div className="space-y-2">
+						<div className="flex items-center justify-between">
+							<label className="text-sm font-semibold text-text-secondary">태그</label>
+							<span className="text-xs text-text-muted">{selectedTags.length} / 5</span>
+						</div>
+						<div className="flex flex-wrap gap-2 rounded-lg border border-border bg-bg-tertiary/80 p-3">
+							{POST_TAGS.map((tag) => {
+								const isSelected = selectedTags.includes(tag);
+								return (
+									<button
+										key={tag}
+										type="button"
+										onClick={() => toggleTag(tag)}
+										className={`rounded-full border px-3 py-1.5 text-sm transition-colors ${
+											isSelected
+												? "border-accent bg-accent text-white"
+												: "border-border bg-bg-secondary text-text-secondary hover:bg-bg-primary hover:text-text-primary"
+										}`}
+									>
+										{tag}
+									</button>
+								);
+							})}
+						</div>
 					</div>
-				</div>
+				)}
 
 				<div className="space-y-2">
 					<div className="flex flex-wrap items-center justify-between gap-2">
@@ -381,7 +423,7 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 						value={content}
 						onChange={(event) => setContent(event.target.value)}
 						className="input-base min-h-[360px] resize-y py-3 font-mono leading-relaxed"
-						placeholder="내용을 입력해줘\n이미지/파일은 첨부하거나 드래그해서 올릴 수 있음"
+						placeholder={contentPlaceholder}
 						required
 					/>
 				</div>
@@ -389,7 +431,7 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 				<div className="mt-1 flex items-center justify-end gap-2 border-t border-border pt-4">
 					<button
 						type="button"
-						onClick={() => router.push(postId ? `/posts/${postId}` : "/")}
+						onClick={() => router.push(postId ? `/posts/${postId}` : backHref)}
 						className="btn btn-secondary"
 					>
 						취소
@@ -399,7 +441,7 @@ export default function EditPostPage({ params: paramsPromise }: EditPostPageProp
 						disabled={isSubmitting || isUploading}
 						className="btn btn-primary"
 					>
-						{isSubmitting ? "수정 중" : "수정 완료"}
+						{isSubmitting ? "수정 중" : submitLabel}
 					</button>
 				</div>
 

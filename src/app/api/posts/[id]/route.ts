@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getPostDetail } from "@/lib/services/post-detail-service";
 import { createServerTimingHeader } from "@/lib/server-timing";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
-import { isReservedPostTag, normalizeBoardType, toStoredTags } from "@/lib/post-board";
+import { isReservedPostTag, normalizeBoardType, parsePostTagMetadata, toStoredTags } from "@/lib/post-board";
 import { resolveActiveUserFromSession } from "@/lib/active-user";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { isMissingPostBoardMetadataColumnError } from "@/lib/db-schema-guard";
@@ -29,6 +29,49 @@ const postUpdateBodySchema = z.object({
 	serverAddress: z.string().trim().optional().nullable(),
 	tags: z.array(z.string()).optional().default([]),
 });
+
+async function getEditablePost(postId: number) {
+	try {
+		return await prisma.post.findFirst({
+			where: {
+				id: postId,
+				deletedAt: null,
+			},
+			select: {
+				id: true,
+				authorId: true,
+				tags: true,
+				board: true,
+				serverAddress: true,
+			},
+		});
+	} catch (error) {
+		if (!isMissingPostBoardMetadataColumnError(error)) {
+			throw error;
+		}
+		console.warn("[API] PATCH /api/posts/[id] post board columns missing; falling back to tag metadata for edit");
+		const legacyPost = await prisma.post.findFirst({
+			where: {
+				id: postId,
+				deletedAt: null,
+			},
+			select: {
+				id: true,
+				authorId: true,
+				tags: true,
+			},
+		});
+		if (!legacyPost) {
+			return null;
+		}
+		const metadata = parsePostTagMetadata(legacyPost.tags, null, null);
+		return {
+			...legacyPost,
+			board: metadata.board,
+			serverAddress: metadata.serverAddress,
+		};
+	}
+}
 
 export async function GET(
 	request: NextRequest,
@@ -116,12 +159,7 @@ export async function PATCH(
 		}
 		const { title, content, tags } = parsedBody.data;
 
-		const post = await prisma.post.findFirst({
-			where: {
-				id: postId,
-				deletedAt: null,
-			},
-		});
+		const post = await getEditablePost(postId);
 
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });

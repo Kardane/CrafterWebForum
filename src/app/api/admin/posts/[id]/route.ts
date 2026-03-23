@@ -22,6 +22,17 @@ const restorePostBodySchema = z.object({
 	action: z.literal("restore"),
 });
 
+function selectArchiveTarget(postId: number) {
+	return prisma.post.findFirst({
+		where: { id: postId },
+		select: {
+			id: true,
+			tags: true,
+			deletedAt: true,
+		},
+	});
+}
+
 export async function PATCH(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> }
@@ -43,7 +54,7 @@ export async function PATCH(
 			return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 		}
 
-		const post = await prisma.post.findUnique({ where: { id: postId } });
+		const post = await selectArchiveTarget(postId);
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
@@ -92,7 +103,7 @@ export async function DELETE(
 			new URL(request.url).searchParams.get("permanent")
 		);
 
-		const post = await prisma.post.findUnique({ where: { id: postId } });
+		const post = await selectArchiveTarget(postId);
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
