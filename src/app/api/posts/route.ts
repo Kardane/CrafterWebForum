@@ -42,6 +42,28 @@ const postCreateBodySchema = z.object({
 		),
 });
 
+async function createLegacyPostWithRawInsert(input: {
+	title: string;
+	content: string;
+	authorId: number;
+	tags: string;
+}) {
+	return prisma.$transaction(async (tx) => {
+		await tx.$executeRaw`
+			INSERT INTO "Post" ("title", "content", "authorId", "tags")
+			VALUES (${input.title}, ${input.content}, ${input.authorId}, ${input.tags})
+		`;
+		const rows = await tx.$queryRaw<Array<{ id: number | bigint }>>`
+			SELECT last_insert_rowid() AS id
+		`;
+		const insertedId = Number(rows[0]?.id ?? 0);
+		if (!Number.isInteger(insertedId) || insertedId <= 0) {
+			throw new Error("legacy_post_insert_failed");
+		}
+		return { id: insertedId };
+	});
+}
+
 export async function GET(req: NextRequest) {
 	const requestStart = performance.now();
 	try {
@@ -147,16 +169,11 @@ export async function POST(request: NextRequest) {
 			console.warn("[API] POST /api/posts stage=create_post_primary legacy post columns missing; storing board metadata in tags only");
 			try {
 				failureStage = "create_post_legacy_fallback";
-				post = await prisma.post.create({
-					data: {
-						title,
-						content,
-						tags: storedTags,
-						authorId: sessionUserId,
-					},
-					select: {
-						id: true,
-					},
+				post = await createLegacyPostWithRawInsert({
+					title,
+					content,
+					tags: storedTags,
+					authorId: sessionUserId,
 				});
 			} catch (fallbackError) {
 				if (isMissingPostTagsColumnError(fallbackError)) {

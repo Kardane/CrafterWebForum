@@ -4,6 +4,9 @@ const authMock = vi.fn();
 const postCreateMock = vi.fn();
 const postSubscriptionUpsertMock = vi.fn();
 const resolveActiveUserFromSessionMock = vi.fn();
+const transactionMock = vi.fn();
+const rawExecuteMock = vi.fn();
+const rawQueryMock = vi.fn();
 
 vi.mock("@/auth", () => ({
 	auth: authMock,
@@ -17,6 +20,7 @@ vi.mock("@/lib/prisma", () => ({
 		postSubscription: {
 			upsert: postSubscriptionUpsertMock,
 		},
+		$transaction: transactionMock,
 	},
 }));
 
@@ -30,11 +34,20 @@ describe("POST /api/posts", () => {
 		authMock.mockReset();
 		postCreateMock.mockReset();
 		postSubscriptionUpsertMock.mockReset();
-	resolveActiveUserFromSessionMock.mockReset();
-	resolveActiveUserFromSessionMock.mockResolvedValue({
-		ok: true,
-		context: { userId: 5, role: "user", nickname: "tester", isApproved: 1, isBanned: 0 },
-	});
+		transactionMock.mockReset();
+		rawExecuteMock.mockReset();
+		rawQueryMock.mockReset();
+		transactionMock.mockImplementation(async (callback: (tx: { $executeRaw: typeof rawExecuteMock; $queryRaw: typeof rawQueryMock }) => unknown) =>
+			callback({
+				$executeRaw: rawExecuteMock,
+				$queryRaw: rawQueryMock,
+			})
+		);
+		resolveActiveUserFromSessionMock.mockReset();
+		resolveActiveUserFromSessionMock.mockResolvedValue({
+			ok: true,
+			context: { userId: 5, role: "user", nickname: "tester", isApproved: 1, isBanned: 0 },
+		});
 	});
 
 	it("returns 401 when unauthenticated", async () => {
@@ -232,9 +245,9 @@ describe("POST /api/posts", () => {
 
 	it("falls back when Post.commentCount column is missing during sinmungo creation", async () => {
 		authMock.mockResolvedValue({ user: { id: "5" } });
-		postCreateMock
-			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: table Post has no column named commentCount"))
-			.mockResolvedValueOnce({ id: 779 });
+		postCreateMock.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: table Post has no column named commentCount"));
+		rawExecuteMock.mockResolvedValue(1);
+		rawQueryMock.mockResolvedValue([{ id: 779 }]);
 		postSubscriptionUpsertMock.mockResolvedValue({ userId: 5, postId: 779 });
 
 		const { POST } = await import("@/app/api/posts/route");
@@ -252,25 +265,22 @@ describe("POST /api/posts", () => {
 
 		const res = await POST(req as never);
 		expect(res.status).toBe(200);
-		expect(postCreateMock).toHaveBeenNthCalledWith(
-			2,
-			expect.objectContaining({
-				data: {
-					title: "구버전 신문고",
-					content: "운영 문제",
-					tags: '["__sys:server:mc.legacy.kr","__sys:board:ombudsman"]',
-					authorId: 5,
-				},
-				select: { id: true },
-			})
-		);
+		expect(postCreateMock).toHaveBeenCalledTimes(1);
+		expect(transactionMock).toHaveBeenCalledTimes(1);
+		expect(rawQueryMock).toHaveBeenCalledTimes(1);
+		const [sqlParts, title, content, authorId, tags] = rawExecuteMock.mock.calls[0];
+		expect(Array.from(sqlParts as TemplateStringsArray).join(" ")).toContain('INSERT INTO "Post"');
+		expect(title).toBe("구버전 신문고");
+		expect(content).toBe("운영 문제");
+		expect(authorId).toBe(5);
+		expect(tags).toBe('["__sys:server:mc.legacy.kr","__sys:board:ombudsman"]');
 	});
 
 	it("develope 생성도 legacy post metadata column 누락 시 fallback create로 성공해야 함", async () => {
 		authMock.mockResolvedValue({ user: { id: "5" } });
-		postCreateMock
-			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.board"))
-			.mockResolvedValueOnce({ id: 880 });
+		postCreateMock.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.board"));
+		rawExecuteMock.mockResolvedValue(1);
+		rawQueryMock.mockResolvedValue([{ id: 880 }]);
 		postSubscriptionUpsertMock.mockResolvedValue({ userId: 5, postId: 880 });
 
 		const { POST } = await import("@/app/api/posts/route");
@@ -287,18 +297,14 @@ describe("POST /api/posts", () => {
 
 		const res = await POST(req as never);
 		expect(res.status).toBe(200);
-		expect(postCreateMock).toHaveBeenNthCalledWith(
-			2,
-			expect.objectContaining({
-				data: {
-					title: "레거시 개발 글",
-					content: "본문",
-					tags: "[\"guide\"]",
-					authorId: 5,
-				},
-				select: { id: true },
-			})
-		);
+		expect(postCreateMock).toHaveBeenCalledTimes(1);
+		expect(transactionMock).toHaveBeenCalledTimes(1);
+		const [sqlParts, title, content, authorId, tags] = rawExecuteMock.mock.calls[0];
+		expect(Array.from(sqlParts as TemplateStringsArray).join(" ")).toContain('INSERT INTO "Post"');
+		expect(title).toBe("레거시 개발 글");
+		expect(content).toBe("본문");
+		expect(authorId).toBe(5);
+		expect(tags).toBe("[\"guide\"]");
 	});
 
 	it("keeps post creation working when authored auto-subscription hits legacy schema mismatch", async () => {
@@ -370,9 +376,8 @@ describe("POST /api/posts", () => {
 	it("logs create_post_legacy_fallback stage when tags column is missing and fallback cannot preserve sinmungo metadata", async () => {
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
 		authMock.mockResolvedValue({ user: { id: "5" } });
-		postCreateMock
-			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.board"))
-			.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: table Post has no column named tags"));
+		postCreateMock.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: no such column: main.Post.board"));
+		rawExecuteMock.mockRejectedValueOnce(new Error("SQLITE_UNKNOWN: SQLite error: table Post has no column named tags"));
 
 		const { POST } = await import("@/app/api/posts/route");
 		const req = new Request("http://localhost/api/posts", {
