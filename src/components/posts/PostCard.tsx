@@ -112,6 +112,7 @@ export default function PostCard({
 							height={96}
 							className="w-full h-full object-cover"
 							loading="lazy"
+							sizes="96px"
 						/>
 					</div>
 				)}

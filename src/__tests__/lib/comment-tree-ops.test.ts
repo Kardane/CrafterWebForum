@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
 	appendReplyToThread,
+	mergeLatestWindowComments,
 	updateCommentInTree,
 	removeCommentFromTree,
 	updateCommentPinnedInTree,
@@ -134,6 +135,70 @@ describe("updateCommentPinnedInTree", () => {
 		const result = updateCommentPinnedInTree([root], 1, false);
 
 		expect(result[0].isPinned).toBe(false);
+	});
+});
+
+describe("mergeLatestWindowComments", () => {
+	it("latest window의 새 루트 댓글과 답글을 기존 트리에 병합", () => {
+		const existing = [
+			makeComment({
+				id: 1,
+				replies: [makeComment({ id: 2, parentId: 1 })],
+			}),
+		];
+		const incoming = [
+			makeComment({
+				id: 1,
+				replies: [
+					makeComment({ id: 2, parentId: 1 }),
+					makeComment({ id: 3, parentId: 1 }),
+				],
+			}),
+			makeComment({ id: 4 }),
+		];
+
+		const result = mergeLatestWindowComments(existing, incoming);
+
+		expect(result.shouldFallbackToFullReload).toBe(false);
+		expect(result.didChange).toBe(true);
+		expect(result.comments).toHaveLength(2);
+		expect(result.comments[0].replies.map((reply) => reply.id)).toEqual([2, 3]);
+		expect(result.comments[1].id).toBe(4);
+	});
+
+	it("병합할 새 댓글이 없으면 no-op이어야 함", () => {
+		const existing = [
+			makeComment({
+				id: 1,
+				replies: [makeComment({ id: 2, parentId: 1 })],
+			}),
+		];
+		const incoming = [
+			makeComment({
+				id: 1,
+				replies: [makeComment({ id: 2, parentId: 1 })],
+			}),
+		];
+
+		const result = mergeLatestWindowComments(existing, incoming);
+
+		expect(result.shouldFallbackToFullReload).toBe(false);
+		expect(result.didChange).toBe(false);
+		expect(result.comments).toEqual(existing);
+	});
+
+	it("parent를 찾을 수 없는 최신 window 구조면 full reload fallback을 요구해야 함", () => {
+		const existing = [makeComment({ id: 1 })];
+		const incoming = [
+			makeComment({
+				id: 1,
+				replies: [makeComment({ id: 3, parentId: 999 })],
+			}),
+		];
+
+		const result = mergeLatestWindowComments(existing, incoming);
+
+		expect(result.shouldFallbackToFullReload).toBe(true);
 	});
 });
 

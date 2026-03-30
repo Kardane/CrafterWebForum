@@ -19,6 +19,7 @@ export default function SafeImage({ src, alt, unoptimized = true, loader, ...pro
 			unoptimized={unoptimized}
 			src={normalizedSrc}
 			alt={alt}
+			decoding={props.decoding ?? "async"}
 			{...props}
 		/>
 	);

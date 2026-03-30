@@ -18,6 +18,8 @@ interface ShouldRefreshCommentsOnMountInput {
 	targetCommentId: number | null;
 }
 
+export type CommentMountRefreshMode = "none" | "full" | "latest-window";
+
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
@@ -149,10 +151,14 @@ export function shouldRefreshCommentsOnMount({
 	lastReadCommentCount,
 	totalCommentCount,
 	targetCommentId,
-}: ShouldRefreshCommentsOnMountInput): boolean {
+}: ShouldRefreshCommentsOnMountInput): CommentMountRefreshMode {
 	if (targetCommentId !== null && !hasCommentId(initialComments, targetCommentId)) {
-		return true;
+		return "full";
 	}
 
-	return totalCommentCount > lastReadCommentCount;
+	if (totalCommentCount > lastReadCommentCount) {
+		return "latest-window";
+	}
+
+	return "none";
 }

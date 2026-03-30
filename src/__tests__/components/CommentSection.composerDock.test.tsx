@@ -83,6 +83,31 @@ class ResizeObserverMock {
 	disconnect() {}
 }
 
+function installIdleSupport() {
+	const idleQueue: IdleRequestCallback[] = [];
+	vi.stubGlobal(
+		"requestIdleCallback",
+		vi.fn((callback: IdleRequestCallback) => {
+			idleQueue.push(callback);
+			return idleQueue.length;
+		})
+	);
+	vi.stubGlobal("cancelIdleCallback", vi.fn());
+	return {
+		async flushIdle() {
+			await act(async () => {
+				for (const callback of idleQueue.splice(0, idleQueue.length)) {
+					callback({
+						didTimeout: false,
+						timeRemaining: () => 50,
+					} as IdleDeadline);
+				}
+				await Promise.resolve();
+			});
+		},
+	};
+}
+
 describe("CommentSection composer dock", () => {
 	const originalResizeObserver = globalThis.ResizeObserver;
 	const originalInnerWidth = window.innerWidth;
@@ -246,6 +271,7 @@ describe("CommentSection composer dock", () => {
 	});
 
 	it("plain detail unread refresh에서는 최신 페이지로 다시 불러오고 최종적으로 맨 아래를 다시 맞춰야 함", async () => {
+		const idle = installIdleSupport();
 		const rafCallbacks: FrameRequestCallback[] = [];
 		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
 			rafCallbacks.push(cb);
@@ -301,6 +327,9 @@ describe("CommentSection composer dock", () => {
 			/>
 		);
 
+		expect(fetchMock).not.toHaveBeenCalled();
+
+		await idle.flushIdle();
 		for (let i = 0; i < 5; i += 1) {
 			await act(async () => {
 				for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
@@ -315,6 +344,66 @@ describe("CommentSection composer dock", () => {
 			expect(scrollToBottomMock).toHaveBeenCalledWith("auto");
 		});
 		expect(scrollToCommentElementMock).not.toHaveBeenCalled();
+	});
+
+	it("latest-window refresh가 no-op이면 맨 아래 재동기화를 다시 요청하지 않아야 함", async () => {
+		const idle = installIdleSupport();
+		const rafCallbacks: FrameRequestCallback[] = [];
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+			rafCallbacks.push(cb);
+			return rafCallbacks.length;
+		});
+		vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+		window.history.replaceState(null, "", "/posts/1");
+
+		const initialComments = [
+			{
+				id: 9,
+				content: "initial root",
+				createdAt: "2026-03-10T00:09:00.000Z",
+				updatedAt: "2026-03-10T00:09:00.000Z",
+				isPinned: false,
+				parentId: null,
+				isPostAuthor: false,
+				author: { id: 1, nickname: "writer", minecraftUuid: null, role: "user" },
+				replies: [],
+			},
+		];
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				comments: initialComments,
+				page: {
+					limit: 12,
+					nextCursor: 9,
+					hasMore: true,
+				},
+			}),
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(
+			<CommentSection
+				postId={1}
+				initialComments={initialComments}
+				initialCommentsPage={{ limit: 12, nextCursor: 9, hasMore: true }}
+				readMarker={{ lastReadCommentCount: 0, totalCommentCount: 20 }}
+			/>
+		);
+
+		await idle.flushIdle();
+		for (let i = 0; i < 5; i += 1) {
+			await act(async () => {
+				for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
+					cb(0);
+				}
+				await Promise.resolve();
+			});
+		}
+
+		expect(fetchMock).toHaveBeenCalledWith("/api/posts/1/comments?limit=12", { cache: "no-store" });
+		expect(scrollToBottomMock).not.toHaveBeenCalled();
 	});
 
 	it("renders comment rows with the full-width interactive row class", () => {

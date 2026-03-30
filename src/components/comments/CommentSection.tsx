@@ -32,6 +32,7 @@ import {
 	toReplyPreview,
 	type FlattenedStreamComment,
 } from "@/lib/comment-stream";
+import { scheduleIdleTask } from "@/lib/idle-task";
 import { extractMentionNicknames } from "@/lib/mentions";
 import { toSessionUserId } from "@/lib/session-user";
 import { text } from "@/lib/system-text";
@@ -41,6 +42,7 @@ import {
 	LATEST_CHUNK_SIZE,
 	THREAD_COLLAPSE_THRESHOLD,
 	getReadMarkerIndex,
+	mergeLatestWindowComments,
 	removeCommentFromTree,
 	updateCommentInTree,
 	updateCommentPinnedInTree,
@@ -106,6 +108,7 @@ export default function CommentSection({
 		buildInitialCommentViewState(initialComments, readMarker?.lastReadCommentCount ?? 0)
 	);
 	const [comments, setComments] = useState<Comment[]>(initialComments);
+	const commentsRef = useRef(initialComments);
 	const [commentsPage, setCommentsPage] = useState<{
 		limit: number;
 		nextCursor: number | null;
@@ -132,6 +135,13 @@ export default function CommentSection({
 	const initialFreshReloadHandledRef = useRef(false);
 	const pendingInitialTargetCommentIdRef = useRef<number | null>(null);
 	const pendingBottomSyncAfterReloadRef = useRef(false);
+	const setCommentsState = useCallback((nextComments: Comment[] | ((prev: Comment[]) => Comment[])) => {
+		setComments((prev) => {
+			const resolved = typeof nextComments === "function" ? nextComments(prev) : nextComments;
+			commentsRef.current = resolved;
+			return resolved;
+		});
+	}, []);
 
 	// --- 파생 데이터 ---
 	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
@@ -197,29 +207,53 @@ export default function CommentSection({
 				};
 			};
 			if (Array.isArray(data.comments)) {
-				if (options.syncToBottomAfterLoad) {
-					pendingBottomSyncAfterReloadRef.current = true;
+				if (mode === "latest-window") {
+					const mergeResult = mergeLatestWindowComments(commentsRef.current, data.comments);
+					if (mergeResult.shouldFallbackToFullReload) {
+						void reloadComments({
+							mode: "full",
+							syncToBottomAfterLoad: options.syncToBottomAfterLoad,
+						});
+						return;
+					}
+					if (mergeResult.didChange) {
+						if (options.syncToBottomAfterLoad) {
+							pendingBottomSyncAfterReloadRef.current = true;
+						}
+						setCommentsState(mergeResult.comments);
+					}
+				} else {
+					if (options.syncToBottomAfterLoad) {
+						pendingBottomSyncAfterReloadRef.current = true;
+					}
+					setCommentsState(data.comments);
 				}
-				setComments(data.comments);
 				if (data.page) {
-					setCommentsPage((prev) => ({
-						limit:
-							typeof data.page?.limit === "number" && Number.isInteger(data.page.limit) && data.page.limit > 0
-								? data.page.limit
-								: prev.limit,
-						nextCursor:
-							typeof data.page?.nextCursor === "number" || data.page?.nextCursor === null
-								? (data.page.nextCursor ?? null)
-								: prev.nextCursor,
-						hasMore:
-							typeof data.page?.hasMore === "boolean" ? data.page.hasMore : prev.hasMore,
-					}));
+					setCommentsPage((prev) => {
+						const nextState = {
+							limit:
+								typeof data.page?.limit === "number" && Number.isInteger(data.page.limit) && data.page.limit > 0
+									? data.page.limit
+									: prev.limit,
+							nextCursor:
+								typeof data.page?.nextCursor === "number" || data.page?.nextCursor === null
+									? (data.page.nextCursor ?? null)
+									: prev.nextCursor,
+							hasMore:
+								typeof data.page?.hasMore === "boolean" ? data.page.hasMore : prev.hasMore,
+						};
+						return nextState.limit === prev.limit &&
+							nextState.nextCursor === prev.nextCursor &&
+							nextState.hasMore === prev.hasMore
+							? prev
+							: nextState;
+					});
 				}
 			}
 		} catch {
 			return;
 		}
-	}, [commentsPage.limit, initialCommentsPage?.limit, postId]);
+	}, [commentsPage.limit, initialCommentsPage?.limit, postId, setCommentsState]);
 
 	const pinnedComments = useMemo<PinnedCommentItem[]>(
 		() =>
@@ -300,7 +334,7 @@ export default function CommentSection({
 	} = useCommentMutations({
 		postId,
 		session,
-		setComments,
+		setComments: setCommentsState,
 		setReplyTarget,
 		setExpandedThreadRoots,
 		setPendingDeleteId,
@@ -358,24 +392,30 @@ export default function CommentSection({
 		}
 
 		const targetCommentId = parseTargetCommentIdFromLocation();
-		if (
-			!shouldRefreshCommentsOnMount({
-				initialComments,
-				lastReadCommentCount: readMarker?.lastReadCommentCount ?? 0,
-				totalCommentCount: readMarker?.totalCommentCount ?? 0,
-				targetCommentId,
-			})
-		) {
+		const refreshMode = shouldRefreshCommentsOnMount({
+			initialComments,
+			lastReadCommentCount: readMarker?.lastReadCommentCount ?? 0,
+			totalCommentCount: readMarker?.totalCommentCount ?? 0,
+			targetCommentId,
+		});
+		if (refreshMode === "none") {
 			initialFreshReloadHandledRef.current = true;
 			return;
 		}
 
 		initialFreshReloadHandledRef.current = true;
-		const refreshMode = targetCommentId === null ? "latest-window" : "full";
+		if (refreshMode === "latest-window") {
+			return scheduleIdleTask(() => {
+				void reloadComments({
+					mode: "latest-window",
+					syncToBottomAfterLoad: true,
+				});
+			});
+		}
 		const rafId = window.requestAnimationFrame(() => {
 			void reloadComments({
-				mode: refreshMode,
-				syncToBottomAfterLoad: targetCommentId === null,
+				mode: "full",
+				syncToBottomAfterLoad: false,
 			});
 		});
 
@@ -457,7 +497,7 @@ export default function CommentSection({
 				void reloadComments();
 				return;
 			}
-			setComments((prev) => {
+			setCommentsState((prev) => {
 				if (hasCommentId(prev, nextComment.id)) {
 					return prev;
 				}
@@ -474,7 +514,7 @@ export default function CommentSection({
 		[REALTIME_EVENTS.COMMENT_UPDATED]: (payload) => {
 			const nextComment = parseRealtimeComment(payload);
 			if (nextComment) {
-				setComments((prev) => updateCommentInTree(prev, nextComment.id, nextComment.content, nextComment.updatedAt));
+				setCommentsState((prev) => updateCommentInTree(prev, nextComment.id, nextComment.content, nextComment.updatedAt));
 				return;
 			}
 			const commentId = Number(payload.commentId ?? 0);
@@ -484,7 +524,7 @@ export default function CommentSection({
 				void reloadComments();
 				return;
 			}
-			setComments((prev) => updateCommentInTree(prev, commentId, content, updatedAt));
+			setCommentsState((prev) => updateCommentInTree(prev, commentId, content, updatedAt));
 		},
 		[REALTIME_EVENTS.COMMENT_DELETED]: (payload) => {
 			const commentId = Number(payload.commentId ?? 0);
@@ -492,7 +532,7 @@ export default function CommentSection({
 				void reloadComments();
 				return;
 			}
-			setComments((prev) => removeCommentFromTree(prev, commentId));
+			setCommentsState((prev) => removeCommentFromTree(prev, commentId));
 		},
 		[REALTIME_EVENTS.COMMENT_PINNED_CHANGED]: (payload) => {
 			const commentId = Number(payload.commentId ?? 0);
@@ -501,7 +541,7 @@ export default function CommentSection({
 				void reloadComments();
 				return;
 			}
-			setComments((prev) => updateCommentPinnedInTree(prev, commentId, isPinned));
+			setCommentsState((prev) => updateCommentPinnedInTree(prev, commentId, isPinned));
 		},
 		[REALTIME_EVENTS.COMMENT_TYPING_CHANGED]: (payload) => {
 			const actorUserId = Number(payload.userId ?? 0);

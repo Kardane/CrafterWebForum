@@ -23,7 +23,7 @@ function makeComment(id: number, replies: Comment[] = []): Comment {
 }
 
 describe("shouldRefreshCommentsOnMount", () => {
-	it("returns true when unread comments exist", () => {
+	it("일반 상세에서 unread 댓글 차이만 있으면 latest-window refresh를 반환해야 함", () => {
 		expect(
 			shouldRefreshCommentsOnMount({
 				initialComments: [makeComment(1)],
@@ -31,10 +31,10 @@ describe("shouldRefreshCommentsOnMount", () => {
 				totalCommentCount: 2,
 				targetCommentId: null,
 			})
-		).toBe(true);
+		).toBe("latest-window");
 	});
 
-	it("returns true when target comment is missing from initial payload", () => {
+	it("target comment가 초기 payload에 없으면 full refresh를 반환해야 함", () => {
 		expect(
 			shouldRefreshCommentsOnMount({
 				initialComments: [makeComment(1)],
@@ -42,10 +42,10 @@ describe("shouldRefreshCommentsOnMount", () => {
 				totalCommentCount: 1,
 				targetCommentId: 99,
 			})
-		).toBe(true);
+		).toBe("full");
 	});
 
-	it("returns false when payload already contains target and unread count is synced", () => {
+	it("payload가 이미 최신 상태면 refresh를 하지 않아야 함", () => {
 		expect(
 			shouldRefreshCommentsOnMount({
 				initialComments: [makeComment(1, [makeComment(99)])],
@@ -53,6 +53,6 @@ describe("shouldRefreshCommentsOnMount", () => {
 				totalCommentCount: 2,
 				targetCommentId: 99,
 			})
-		).toBe(false);
+		).toBe("none");
 	});
 });
