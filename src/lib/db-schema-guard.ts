@@ -27,6 +27,8 @@ function hasMissingColumnPattern(message: string, tableName: string, columnName:
 		message.includes(`table '${tableName}' has no column named '${columnName}'`) ||
 		message.includes(`table \`${tableName}\` has no column named \`${columnName}\``) ||
 		message.includes(`column \"${columnName}\" does not exist`) ||
+		message.includes(`column \`${columnName}\` does not exist`) ||
+		message.includes(`the column \`${columnName}\` does not exist in the current database`) ||
 		message.includes(`unknown column '${columnName}'`) ||
 		(message.includes(tableName) && message.includes(columnName) && message.includes("no such column")) ||
 		(message.includes(tableName) && message.includes(columnName) && message.includes("has no column named")) ||

@@ -105,4 +105,54 @@ describe("PATCH /api/posts/[id]", () => {
 			},
 		});
 	});
+
+	it("Prisma current database board 컬럼 오류도 신문고 수정 fallback을 타야 함", async () => {
+		postFindFirstMock
+			.mockRejectedValueOnce(new Error("The column `board` does not exist in the current database."))
+			.mockResolvedValueOnce({
+				id: 22,
+				authorId: 5,
+				tags: '["__sys:server:mc.legacy.kr","__sys:board:ombudsman"]',
+			});
+		postUpdateMock
+			.mockRejectedValueOnce(new Error("The column `board` does not exist in the current database."))
+			.mockResolvedValueOnce({});
+
+		const { PATCH } = await import("@/app/api/posts/[id]/route");
+		const req = new Request("http://localhost/api/posts/22", {
+			method: "PATCH",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				title: "수정된 신문고",
+				content: "수정 본문",
+				board: "sinmungo",
+				serverAddress: "mc.fixed.kr",
+				tags: [],
+			}),
+		});
+
+		const res = await PATCH(req as never, { params: Promise.resolve({ id: "22" }) });
+
+		expect(res.status).toBe(200);
+		expect(postFindFirstMock).toHaveBeenNthCalledWith(2, {
+			where: {
+				id: 22,
+				deletedAt: null,
+			},
+			select: {
+				id: true,
+				authorId: true,
+				tags: true,
+			},
+		});
+		expect(postUpdateMock).toHaveBeenNthCalledWith(2, {
+			where: { id: 22 },
+			data: {
+				title: "수정된 신문고",
+				content: "수정 본문",
+				tags: '["__sys:server:mc.fixed.kr","__sys:board:ombudsman"]',
+				updatedAt: expect.any(Date),
+			},
+		});
+	});
 });
