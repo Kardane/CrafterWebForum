@@ -52,6 +52,29 @@ test.describe("posts", () => {
 		await expect(await getBottomGap(page)).toBeLessThan(320);
 	});
 
+	test("logged-in detail page renders content before idle bootstrap requests eventually start", async ({ page }) => {
+		await login(page, postsEnv.userNickname, postsEnv.userPassword);
+
+		let unreadCountRequests = 0;
+		let trackedPostsRequests = 0;
+		page.on("request", (request) => {
+			const url = request.url();
+			if (url.includes("/api/notifications?countOnly=1")) {
+				unreadCountRequests += 1;
+			}
+			if (url.includes("/api/sidebar/tracked-posts?limit=30")) {
+				trackedPostsRequests += 1;
+			}
+		});
+
+		await page.goto(`/posts/${postsEnv.postId}`);
+		await expect(page.locator(".post-content")).toBeVisible();
+
+		await expect
+			.poll(() => unreadCountRequests + trackedPostsRequests, { timeout: 4000 })
+			.toBeGreaterThan(0);
+	});
+
 	test("approved user can create sinmungo post without internal server error", async ({ page }) => {
 		await login(page, postsEnv.userNickname, postsEnv.userPassword);
 

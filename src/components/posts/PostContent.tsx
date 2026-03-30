@@ -6,7 +6,6 @@ import { MouseEvent, useEffect, useMemo, useRef } from "react";
 import { useImageLightbox } from "@/components/ui/ImageLightboxProvider";
 import {
 	buildPostMetaChips,
-	collectExternalLinkCards,
 	renderMeta,
 	renderPreviewCard,
 	shouldHideExternalCardImage,
@@ -134,6 +133,33 @@ function buildPostMetaQueryKey(rawIds: string[]) {
 	return normalizedIds.join(",");
 }
 
+function collectExternalLinkCardsFromElements(cards: HTMLAnchorElement[]) {
+	const cardsByPostId = new Map<string, HTMLAnchorElement[]>();
+	const cardsByPreviewUrl = new Map<string, HTMLAnchorElement[]>();
+
+	for (const card of cards) {
+		const postId = card.dataset.postId;
+		if (postId) {
+			const postIdCards = cardsByPostId.get(postId) ?? [];
+			postIdCards.push(card);
+			cardsByPostId.set(postId, postIdCards);
+		}
+
+		const previewUrl = card.dataset.previewUrl;
+		if (!previewUrl) {
+			continue;
+		}
+		const previewCards = cardsByPreviewUrl.get(previewUrl) ?? [];
+		previewCards.push(card);
+		cardsByPreviewUrl.set(previewUrl, previewCards);
+	}
+
+	return {
+		cardsByPostId,
+		cardsByPreviewUrl,
+	};
+}
+
 export default function PostContent({ content }: PostContentProps) {
 	const contentRef = useRef<HTMLDivElement>(null);
 	const postCardMetaCacheRef = useRef<Map<string, string[]>>(new Map());
@@ -147,9 +173,14 @@ export default function PostContent({ content }: PostContentProps) {
 	}, [content]);
 
 	useEffect(() => {
+		const root = contentRef.current;
+		if (!root) {
+			return;
+		}
 		const highlightWindow = window as WindowWithHighlightJs;
-		if (highlightWindow.hljs) {
-			contentRef.current?.querySelectorAll("pre code").forEach((block) => {
+		const codeBlocks = root.querySelectorAll("pre code");
+		if (highlightWindow.hljs && codeBlocks.length > 0) {
+			codeBlocks.forEach((block) => {
 				highlightWindow.hljs?.highlightElement(block);
 			});
 		}
@@ -161,9 +192,15 @@ export default function PostContent({ content }: PostContentProps) {
 			return;
 		}
 		let isDisposed = false;
-		let hydrationQueued = false;
-		let hydrationInFlight = false;
 		const controller = new AbortController();
+		const hydratedCards = new WeakSet<HTMLAnchorElement>();
+		const observedCards = new WeakSet<HTMLAnchorElement>();
+		const pendingCards = new Set<HTMLAnchorElement>();
+		const initialCards = Array.from(root.querySelectorAll<HTMLAnchorElement>(".external-link-card"));
+		if (initialCards.length === 0) {
+			return;
+		}
+
 		const waitForNextFrame = () => new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
 		const renderCardsIncrementally = async (
 			cards: HTMLAnchorElement[],
@@ -183,8 +220,14 @@ export default function PostContent({ content }: PostContentProps) {
 				}
 			}
 		};
-		const hydrateExternalCards = async () => {
-			const { cardsByPostId, cardsByPreviewUrl } = collectExternalLinkCards(root);
+		const hydrateExternalCards = async (cards: HTMLAnchorElement[]) => {
+			const cardsToHydrate = cards.filter((card) => !hydratedCards.has(card));
+			if (cardsToHydrate.length === 0) {
+				return;
+			}
+			cardsToHydrate.forEach((card) => hydratedCards.add(card));
+
+			const { cardsByPostId, cardsByPreviewUrl } = collectExternalLinkCardsFromElements(cardsToHydrate);
 			const postMetaFallback = ["카테고리: 내부링크", "메타데이터 조회 실패"];
 			const uncachedPostIds: string[] = [];
 
@@ -318,20 +361,12 @@ export default function PostContent({ content }: PostContentProps) {
 		};
 
 		const scheduleHydration = () => {
-			if (isDisposed || hydrationQueued) {
+			if (isDisposed || pendingCards.size === 0) {
 				return;
 			}
-			hydrationQueued = true;
-			window.requestAnimationFrame(() => {
-				hydrationQueued = false;
-				if (isDisposed || hydrationInFlight) {
-					return;
-				}
-				hydrationInFlight = true;
-				void hydrateExternalCards().finally(() => {
-					hydrationInFlight = false;
-				});
-			});
+			const cards = Array.from(pendingCards);
+			pendingCards.clear();
+			void hydrateExternalCards(cards);
 		};
 
 		const hasExternalCardNode = (node: Node) => {
@@ -341,15 +376,65 @@ export default function PostContent({ content }: PostContentProps) {
 			return node.matches(".external-link-card") || Boolean(node.querySelector(".external-link-card"));
 		};
 
-		scheduleHydration();
-		const observer = new MutationObserver((mutations) => {
-			if (
-				mutations.some((mutation) =>
-					Array.from(mutation.addedNodes).some(hasExternalCardNode) ||
-					Array.from(mutation.removedNodes).some(hasExternalCardNode)
-				)
-			) {
+		const observeCard = (card: HTMLAnchorElement) => {
+			if (observedCards.has(card)) {
+				return;
+			}
+			observedCards.add(card);
+			if (!intersectionObserver) {
+				pendingCards.add(card);
 				scheduleHydration();
+				return;
+			}
+			intersectionObserver.observe(card);
+		};
+
+		const registerExternalCards = (cards: HTMLAnchorElement[]) => {
+			cards.forEach((card) => {
+				observeCard(card);
+			});
+		};
+
+		const intersectionObserver =
+			typeof IntersectionObserver === "function"
+				? new IntersectionObserver(
+						(entries, observer) => {
+							const nextCards: HTMLAnchorElement[] = [];
+							for (const entry of entries) {
+								if (!entry.isIntersecting || !(entry.target instanceof HTMLAnchorElement)) {
+									continue;
+								}
+								nextCards.push(entry.target);
+								observer.unobserve(entry.target);
+							}
+							if (nextCards.length === 0) {
+								return;
+							}
+							nextCards.forEach((card) => pendingCards.add(card));
+							scheduleHydration();
+						},
+						{ rootMargin: "300px 0px" }
+				  )
+				: null;
+
+		registerExternalCards(initialCards);
+		const observer = new MutationObserver((mutations) => {
+			const addedCards: HTMLAnchorElement[] = [];
+			for (const mutation of mutations) {
+				for (const node of Array.from(mutation.addedNodes)) {
+					if (!hasExternalCardNode(node)) {
+						continue;
+					}
+					if (node instanceof HTMLAnchorElement && node.matches(".external-link-card")) {
+						addedCards.push(node);
+					}
+					if (node instanceof Element) {
+						addedCards.push(...Array.from(node.querySelectorAll<HTMLAnchorElement>(".external-link-card")));
+					}
+				}
+			}
+			if (addedCards.length > 0) {
+				registerExternalCards(addedCards);
 			}
 		});
 		observer.observe(root, { childList: true, subtree: true });
@@ -410,6 +495,7 @@ export default function PostContent({ content }: PostContentProps) {
 		return () => {
 			isDisposed = true;
 			controller.abort();
+			intersectionObserver?.disconnect();
 			observer.disconnect();
 			root.removeEventListener("error", handleImageError, true);
 		};

@@ -8,6 +8,8 @@ const mockState = vi.hoisted(() => ({
 	handlers: {} as Record<string, (payload: Record<string, unknown>) => void>,
 }));
 
+type IdleTask = IdleRequestCallback;
+
 vi.mock("next-auth/react", () => ({
 	useSession: () => ({
 		data: mockState.sessionData,
@@ -77,6 +79,40 @@ function installNotificationMock(permission: NotificationPermission = "granted")
 	};
 }
 
+function installIdleSupport() {
+	const callbacks: IdleTask[] = [];
+	const requestIdleCallbackMock = vi.fn((callback: IdleTask) => {
+		callbacks.push(callback);
+		return callbacks.length;
+	});
+	const cancelIdleCallbackMock = vi.fn((handle: number) => {
+		callbacks.splice(handle - 1, 1);
+	});
+
+	vi.stubGlobal("requestIdleCallback", requestIdleCallbackMock);
+	vi.stubGlobal("cancelIdleCallback", cancelIdleCallbackMock);
+
+	const flushNextIdleTask = async () => {
+		const callback = callbacks.shift();
+		if (!callback) {
+			return;
+		}
+		await act(async () => {
+			callback({
+				didTimeout: false,
+				timeRemaining: () => 50,
+			} as IdleDeadline);
+			await Promise.resolve();
+		});
+	};
+
+	return {
+		requestIdleCallbackMock,
+		cancelIdleCallbackMock,
+		flushNextIdleTask,
+	};
+}
+
 async function renderProbe() {
 	const { useNotifications } = await import("@/components/notifications/useNotifications");
 
@@ -108,6 +144,7 @@ describe("useNotifications", () => {
 
 	it("loads unread count and subscribes browser push on mount when supported", async () => {
 		process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY = "AQAB";
+		const { requestIdleCallbackMock, flushNextIdleTask } = installIdleSupport();
 		const { registerMock, subscribeMock } = installPushSupport();
 		installNotificationMock("granted");
 
@@ -131,9 +168,18 @@ describe("useNotifications", () => {
 
 		await renderProbe();
 
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(requestIdleCallbackMock).toHaveBeenCalledTimes(1);
+
+		await flushNextIdleTask();
+
 		await waitFor(() => {
 			expect(screen.getByTestId("unread-count").textContent).toBe("2");
 		});
+		expect(registerMock).not.toHaveBeenCalled();
+
+		await flushNextIdleTask();
+
 		await waitFor(() => {
 			expect(registerMock).toHaveBeenCalledWith("/sw.js");
 			expect(subscribeMock).toHaveBeenCalledTimes(1);
@@ -149,6 +195,7 @@ describe("useNotifications", () => {
 	});
 
 	it("shows browser notification only for mention_comment when hidden and refreshes unread count", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const { createdMock } = installNotificationMock("granted");
 		Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
 		vi.spyOn(document, "hasFocus").mockReturnValue(false);
@@ -167,6 +214,11 @@ describe("useNotifications", () => {
 		vi.stubGlobal("fetch", fetchMock);
 
 		await renderProbe();
+		expect(fetchMock).not.toHaveBeenCalled();
+
+		Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+		document.dispatchEvent(new Event("visibilitychange"));
+		await flushNextIdleTask();
 
 		await waitFor(() => {
 			expect(screen.getByTestId("unread-count").textContent).toBe("1");
@@ -195,6 +247,7 @@ describe("useNotifications", () => {
 	});
 
 	it("does not show browser notification while page is visible and focused", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const { createdMock } = installNotificationMock("granted");
 
 		let unreadCount = 1;
@@ -211,6 +264,7 @@ describe("useNotifications", () => {
 		vi.stubGlobal("fetch", fetchMock);
 
 		await renderProbe();
+		await flushNextIdleTask();
 
 		await waitFor(() => {
 			expect(screen.getByTestId("unread-count").textContent).toBe("1");
@@ -233,6 +287,7 @@ describe("useNotifications", () => {
 	});
 
 	it("does not show browser notification for post_comment and applies direct unread count updates", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const { createdMock } = installNotificationMock("granted");
 		Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
 		vi.spyOn(document, "hasFocus").mockReturnValue(false);
@@ -251,6 +306,9 @@ describe("useNotifications", () => {
 		vi.stubGlobal("fetch", fetchMock);
 
 		await renderProbe();
+		Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+		document.dispatchEvent(new Event("visibilitychange"));
+		await flushNextIdleTask();
 
 		await waitFor(() => {
 			expect(screen.getByTestId("unread-count").textContent).toBe("1");

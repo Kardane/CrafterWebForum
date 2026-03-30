@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRealtimeBroadcast } from "@/lib/realtime/useRealtimeBroadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
+import { scheduleIdleTask } from "@/lib/idle-task";
 
 function base64UrlToArrayBuffer(base64Url: string): ArrayBuffer {
 	const padding = "=".repeat((4 - (base64Url.length % 4)) % 4);
@@ -133,14 +134,50 @@ export function useNotifications() {
 	}, []);
 
 	useEffect(() => {
-		const timer = window.setTimeout(() => {
-			void refreshUnreadCount();
-			void ensurePushSubscription();
-		}, 0);
-		return () => {
-			window.clearTimeout(timer);
+		if (!sessionUserId) {
+			setUnreadCount(0);
+			return;
+		}
+
+		let cancelled = false;
+		let cancelUnreadBootstrap = () => undefined;
+		let cancelPushBootstrap = () => undefined;
+
+		const bootstrap = () => {
+			cancelUnreadBootstrap = scheduleIdleTask(() => {
+				if (cancelled) {
+					return;
+				}
+				void refreshUnreadCount();
+				cancelPushBootstrap = scheduleIdleTask(() => {
+					if (!cancelled) {
+						void ensurePushSubscription();
+					}
+				});
+			});
 		};
-	}, [ensurePushSubscription, refreshUnreadCount]);
+
+		const handleVisibilityChange = () => {
+			if (document.visibilityState !== "visible") {
+				return;
+			}
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+			bootstrap();
+		};
+
+		if (document.visibilityState === "hidden") {
+			document.addEventListener("visibilitychange", handleVisibilityChange);
+		} else {
+			bootstrap();
+		}
+
+		return () => {
+			cancelled = true;
+			cancelUnreadBootstrap();
+			cancelPushBootstrap();
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
+		};
+	}, [ensurePushSubscription, refreshUnreadCount, sessionUserId]);
 
 	useRealtimeBroadcast(
 		sessionUserId ? REALTIME_TOPICS.user(sessionUserId) : null,

@@ -8,6 +8,9 @@ const { showToastMock, realtimeState } = vi.hoisted(() => ({
 		handlers: {} as Record<string, (payload: Record<string, unknown>) => void>,
 	},
 }));
+const pathnameState = vi.hoisted(() => ({
+	value: "/posts/1",
+}));
 
 vi.mock("next/link", () => ({
 	default: ({ children, href, ...props }: { children: ReactNode; href: string }) => (
@@ -18,7 +21,7 @@ vi.mock("next/link", () => ({
 }));
 
 vi.mock("next/navigation", () => ({
-	usePathname: () => "/posts/1",
+	usePathname: () => pathnameState.value,
 }));
 
 vi.mock("next-auth/react", () => ({
@@ -62,16 +65,64 @@ const trackedPost = {
 	latestCommentId: null,
 };
 
+type IdleTask = IdleRequestCallback;
+
+function installIdleSupport() {
+	const callbacks: IdleTask[] = [];
+	const requestIdleCallbackMock = vi.fn((callback: IdleTask) => {
+		callbacks.push(callback);
+		return callbacks.length;
+	});
+	const cancelIdleCallbackMock = vi.fn((handle: number) => {
+		callbacks.splice(handle - 1, 1);
+	});
+
+	vi.stubGlobal("requestIdleCallback", requestIdleCallbackMock);
+	vi.stubGlobal("cancelIdleCallback", cancelIdleCallbackMock);
+
+	const flushNextIdleTask = async () => {
+		const callback = callbacks.shift();
+		if (!callback) {
+			return;
+		}
+		await act(async () => {
+			callback({
+				didTimeout: false,
+				timeRemaining: () => 50,
+			} as IdleDeadline);
+			await Promise.resolve();
+		});
+	};
+
+	return {
+		requestIdleCallbackMock,
+		cancelIdleCallbackMock,
+		flushNextIdleTask,
+	};
+}
+
+async function renderSidebarTrackedPosts() {
+	const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
+	const view = render(<SidebarTrackedPosts />);
+	return {
+		SidebarTrackedPosts,
+		...view,
+	};
+}
+
 describe("SidebarTrackedPosts", () => {
 	afterEach(() => {
+		vi.useRealTimers();
 		vi.unstubAllGlobals();
 		vi.restoreAllMocks();
 		showToastMock.mockReset();
 		realtimeState.handlers = {};
+		pathnameState.value = "/posts/1";
 		window.localStorage.clear();
 	});
 
 	it("구독을 끄면 작성한 글이어도 서버 재조회 후 목록에서 제거해야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValueOnce(
@@ -97,11 +148,12 @@ describe("SidebarTrackedPosts", () => {
 					}),
 					{ status: 200, headers: { "Content-Type": "application/json" } }
 				)
-			);
+		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		render(<SidebarTrackedPosts />);
+		await renderSidebarTrackedPosts();
+		expect(fetchMock).not.toHaveBeenCalled();
+		await flushNextIdleTask();
 
 		await screen.findByText("alpha");
 
@@ -127,7 +179,53 @@ describe("SidebarTrackedPosts", () => {
 		});
 	});
 
+	it("초기 fetch는 idle 이후 시작하고 pathname 변경 재조회는 200ms debounce 해야 함", async () => {
+		vi.useFakeTimers();
+		const { requestIdleCallbackMock, flushNextIdleTask } = installIdleSupport();
+		const fetchMock = vi.fn().mockImplementation(() =>
+			Promise.resolve(
+				new Response(
+					JSON.stringify({
+						items: [trackedPost],
+						page: { nextCursor: null, hasMore: false },
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } }
+				)
+			)
+		);
+		vi.stubGlobal("fetch", fetchMock);
+
+		const view = await renderSidebarTrackedPosts();
+
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(requestIdleCallbackMock).toHaveBeenCalledTimes(1);
+
+		await flushNextIdleTask();
+		await act(async () => {
+			await Promise.resolve();
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+
+		pathnameState.value = "/posts/2";
+		await act(async () => {
+			view.rerender(<view.SidebarTrackedPosts />);
+		});
+
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		await act(async () => {
+			vi.advanceTimersByTime(199);
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(1);
+		await act(async () => {
+			vi.advanceTimersByTime(1);
+			await Promise.resolve();
+		});
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		vi.useRealTimers();
+	});
+
 	it("fallbackLocalOnly 응답에서도 구독을 끄면 즉시 제거해야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValueOnce(
@@ -144,11 +242,11 @@ describe("SidebarTrackedPosts", () => {
 					status: 200,
 					headers: { "Content-Type": "application/json" },
 				})
-			);
+		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		render(<SidebarTrackedPosts />);
+		await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		await screen.findByText("alpha");
 
@@ -161,6 +259,7 @@ describe("SidebarTrackedPosts", () => {
 	});
 
 	it("fallback 로컬 구독 목록은 새로 마운트해도 유지해야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const fetchMock = vi.fn().mockImplementation(() =>
 			Promise.resolve(
 				new Response(
@@ -174,8 +273,8 @@ describe("SidebarTrackedPosts", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		const firstView = render(<SidebarTrackedPosts />);
+		const firstView = await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		await waitFor(() => {
 			expect(fetchMock).toHaveBeenCalledWith(
@@ -205,7 +304,8 @@ describe("SidebarTrackedPosts", () => {
 		await screen.findByText("alpha");
 		firstView.unmount();
 
-		render(<SidebarTrackedPosts />);
+		await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		await waitFor(() => {
 			expect(screen.getByText("alpha")).toBeTruthy();
@@ -214,6 +314,7 @@ describe("SidebarTrackedPosts", () => {
 	});
 
 	it("fallback 로컬 구독 목록은 서버 응답이 비어 있어도 refresh 후 유지해야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		window.localStorage.setItem(
 			"sidebarTrackedPostsFallback:7",
 			JSON.stringify([
@@ -235,8 +336,8 @@ describe("SidebarTrackedPosts", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		render(<SidebarTrackedPosts />);
+		await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		await waitFor(() => {
 			expect(screen.getByText("alpha")).toBeTruthy();
@@ -248,6 +349,7 @@ describe("SidebarTrackedPosts", () => {
 	});
 
 	it("새 댓글이 있는 포스트는 노란색 하이라이트 클래스가 적용되어야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const fetchMock = vi.fn().mockResolvedValue(
 			new Response(
 				JSON.stringify({
@@ -262,8 +364,8 @@ describe("SidebarTrackedPosts", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		render(<SidebarTrackedPosts />);
+		await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		const noNewComments = await screen.findByText("no new comments");
 		const hasNewComments = await screen.findByText("has new comments");
@@ -276,6 +378,7 @@ describe("SidebarTrackedPosts", () => {
 	});
 
 	it("같은 포스트가 fallback과 서버에 함께 있으면 서버 최신 상태를 우선해야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		window.localStorage.setItem(
 			"sidebarTrackedPostsFallback:7",
 			JSON.stringify([
@@ -308,8 +411,8 @@ describe("SidebarTrackedPosts", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		render(<SidebarTrackedPosts />);
+		await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		await waitFor(() => {
 			const link = screen.getByRole("link", { name: /alpha/i });
@@ -320,6 +423,7 @@ describe("SidebarTrackedPosts", () => {
 	});
 
 	it("post_comment realtime 수신 후 즉시 갱신하고 1회 재조회로 최신 상태에 수렴해야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValueOnce(
@@ -356,8 +460,8 @@ describe("SidebarTrackedPosts", () => {
 			);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		render(<SidebarTrackedPosts />);
+		await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		await screen.findByText("alpha");
 
@@ -382,6 +486,7 @@ describe("SidebarTrackedPosts", () => {
 	});
 
 	it("post_comment realtime 이후 서버 재조회 unread가 0이어도 노란 하이라이트를 유지해야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValueOnce(
@@ -404,8 +509,8 @@ describe("SidebarTrackedPosts", () => {
 			);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		render(<SidebarTrackedPosts />);
+		await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		const title = await screen.findByText("alpha");
 
@@ -431,6 +536,7 @@ describe("SidebarTrackedPosts", () => {
 	});
 
 	it("읽음 이벤트를 받으면 하이라이트를 해제해야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const fetchMock = vi.fn().mockResolvedValue(
 			new Response(
 				JSON.stringify({
@@ -442,8 +548,8 @@ describe("SidebarTrackedPosts", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		render(<SidebarTrackedPosts />);
+		await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		const title = await screen.findByText("alpha");
 
@@ -463,6 +569,7 @@ describe("SidebarTrackedPosts", () => {
 	});
 
 	it("구독 목록 내부에는 별도 스크롤 클래스가 없어야 함", async () => {
+		const { flushNextIdleTask } = installIdleSupport();
 		const fetchMock = vi.fn().mockResolvedValue(
 			new Response(
 				JSON.stringify({
@@ -474,8 +581,8 @@ describe("SidebarTrackedPosts", () => {
 		);
 		vi.stubGlobal("fetch", fetchMock);
 
-		const { default: SidebarTrackedPosts } = await import("@/components/layout/SidebarTrackedPosts");
-		const { container } = render(<SidebarTrackedPosts />);
+		const { container } = await renderSidebarTrackedPosts();
+		await flushNextIdleTask();
 
 		await screen.findByText("alpha");
 

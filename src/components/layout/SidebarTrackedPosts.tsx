@@ -24,6 +24,7 @@ import {
 	normalizeVisibleTrackedPosts,
 	reconcileTrackedPostsWithServer,
 } from "./sidebar-tracked-posts-state";
+import { scheduleIdleTask } from "@/lib/idle-task";
 
 interface SidebarTrackedPostsProps {
 	onNavigate?: () => void;
@@ -117,6 +118,7 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 	const hasShownFetchErrorToastRef = useRef(false);
 	const fallbackLocalItemsRef = useRef<SidebarTrackedPost[]>([]);
 	const refreshTimerRef = useRef<number | null>(null);
+	const hasBootstrappedRef = useRef(false);
 
 	useEffect(() => {
 		fallbackLocalItemsRef.current = fallbackLocalItems;
@@ -335,8 +337,25 @@ export default function SidebarTrackedPosts({ onNavigate }: SidebarTrackedPostsP
 	);
 
 	useEffect(() => {
-		void refreshTrackedPosts();
-	}, [pathname, refreshTrackedPosts]);
+		if (!sessionUserId) {
+			hasBootstrappedRef.current = false;
+			return;
+		}
+
+		if (!hasBootstrappedRef.current) {
+			hasBootstrappedRef.current = true;
+			return scheduleIdleTask(() => {
+				void refreshTrackedPosts();
+			});
+		}
+
+		const timeoutId = window.setTimeout(() => {
+			void refreshTrackedPosts();
+		}, 200);
+		return () => {
+			window.clearTimeout(timeoutId);
+		};
+	}, [pathname, refreshTrackedPosts, sessionUserId]);
 
 	useEffect(() => {
 		if (!sessionUserId) {
