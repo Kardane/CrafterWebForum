@@ -136,8 +136,10 @@ export async function PATCH(
 	request: NextRequest,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
+	let failureStage = "params";
 	try {
 		const { id } = await params;
+		failureStage = "auth";
 		const session = await auth();
 		const activeUser = await resolveActiveUserFromSession(session);
 		if (!activeUser.ok) {
@@ -146,11 +148,13 @@ export async function PATCH(
 
 		const sessionUserId = activeUser.context.userId;
 
+		failureStage = "parse_id";
 		const postId = Number.parseInt(id, 10);
 		if (Number.isNaN(postId)) {
 			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
+		failureStage = "parse_body";
 		const parsedBody = postUpdateBodySchema.safeParse(
 			await readJsonBody(request, { maxBytes: 256 * 1024 })
 		);
@@ -159,6 +163,7 @@ export async function PATCH(
 		}
 		const { title, content, tags } = parsedBody.data;
 
+		failureStage = "load_post";
 		const post = await getEditablePost(postId);
 
 		if (!post) {
@@ -182,8 +187,10 @@ export async function PATCH(
 			serverAddress,
 		});
 		try {
+			failureStage = "update_post_primary";
 			await prisma.post.update({
 				where: { id: postId },
+				select: { id: true },
 				data: {
 					title,
 					content,
@@ -198,8 +205,10 @@ export async function PATCH(
 				throw error;
 			}
 			console.warn("[API] PATCH /api/posts/[id] post board columns missing; storing board metadata in tags only");
+			failureStage = "update_post_legacy_fallback";
 			await prisma.post.update({
 				where: { id: postId },
+				select: { id: true },
 				data: {
 					title,
 					content,
@@ -208,6 +217,7 @@ export async function PATCH(
 				},
 			});
 		}
+		failureStage = "revalidate";
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId,
@@ -220,7 +230,7 @@ export async function PATCH(
 		if (error instanceof JsonBodyError) {
 			return NextResponse.json({ error: error.code }, { status: error.status });
 		}
-		console.error("[API] PATCH /api/posts/[id] error:", error);
+		console.error(`[API] PATCH /api/posts/[id] error stage=${failureStage}:`, error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
