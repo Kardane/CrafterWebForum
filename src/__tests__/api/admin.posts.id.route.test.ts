@@ -33,6 +33,7 @@ describe("/api/admin/posts/[id]", () => {
 		postUpdateMock.mockReset();
 		postDeleteMock.mockReset();
 		safeRevalidateTagsMock.mockReset();
+		vi.restoreAllMocks();
 		requireAdminMock.mockResolvedValue({
 			session: { user: { id: "1", role: "admin" } },
 		});
@@ -65,6 +66,7 @@ describe("/api/admin/posts/[id]", () => {
 		expect(postUpdateMock).toHaveBeenCalledWith({
 			where: { id: 11 },
 			data: { deletedAt: expect.any(Date) },
+			select: { id: true },
 		});
 	});
 
@@ -97,6 +99,54 @@ describe("/api/admin/posts/[id]", () => {
 		expect(postUpdateMock).toHaveBeenCalledWith({
 			where: { id: 12 },
 			data: { deletedAt: null },
+			select: { id: true },
 		});
+	});
+
+	it("DELETE permanent도 legacy schema에서도 full row materialize 없이 삭제해야 함", async () => {
+		postFindFirstMock.mockResolvedValue({
+			id: 13,
+			tags: '["__sys:server:mc.sinmungo.kr","__sys:board:ombudsman"]',
+			deletedAt: new Date("2026-03-23T00:00:00.000Z"),
+		});
+		postDeleteMock.mockResolvedValue({ id: 13 });
+
+		const { DELETE } = await import("@/app/api/admin/posts/[id]/route");
+		const req = new Request("http://localhost/api/admin/posts/13?permanent=true", {
+			method: "DELETE",
+		});
+
+		const res = await DELETE(req, { params: Promise.resolve({ id: "13" }) });
+
+		expect(res.status).toBe(200);
+		expect(postDeleteMock).toHaveBeenCalledWith({
+			where: { id: 13 },
+			select: { id: true },
+		});
+	});
+
+	it("DELETE archive 실패 시 stage 로그를 남겨야 함", async () => {
+		const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+		postFindFirstMock.mockResolvedValue({
+			id: 14,
+			tags: '["__sys:server:mc.sinmungo.kr","__sys:board:ombudsman"]',
+			deletedAt: null,
+		});
+		postUpdateMock.mockRejectedValue(new Error("archive write failed"));
+
+		const { DELETE } = await import("@/app/api/admin/posts/[id]/route");
+		const req = new Request("http://localhost/api/admin/posts/14", {
+			method: "DELETE",
+		});
+
+		const res = await DELETE(req, { params: Promise.resolve({ id: "14" }) });
+		const data = (await res.json()) as { error?: string };
+
+		expect(res.status).toBe(500);
+		expect(data.error).toBe("Internal server error");
+		expect(consoleErrorSpy).toHaveBeenCalledWith(
+			"[API] DELETE /api/admin/posts/[id] error stage=archive:",
+			expect.any(Error)
+		);
 	});
 });

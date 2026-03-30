@@ -37,16 +37,19 @@ export async function PATCH(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
+	let failureStage = "auth";
 	try {
 		const admin = await requireAdmin();
 		if ("response" in admin) return admin.response;
 
+		failureStage = "parse_id";
 		const { id } = await params;
 		const postId = parsePostId(id);
 		if (!postId) {
 			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
 
+		failureStage = "parse_body";
 		const parsedBody = restorePostBodySchema.safeParse(
 			await readJsonBody(request, { maxBytes: 32 * 1024 })
 		);
@@ -54,6 +57,7 @@ export async function PATCH(
 			return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 		}
 
+		failureStage = "load_target";
 		const post = await selectArchiveTarget(postId);
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
@@ -62,10 +66,13 @@ export async function PATCH(
 			return NextResponse.json({ error: "Post is not archived" }, { status: 409 });
 		}
 
+		failureStage = "restore";
 		await prisma.post.update({
 			where: { id: postId },
 			data: { deletedAt: null },
+			select: { id: true },
 		});
+		failureStage = "revalidate";
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId,
@@ -81,7 +88,7 @@ export async function PATCH(
 		if (error instanceof JsonBodyError) {
 			return NextResponse.json({ error: error.code }, { status: error.status });
 		}
-		console.error("[API] PATCH /api/admin/posts/[id] error:", error);
+		console.error(`[API] PATCH /api/admin/posts/[id] error stage=${failureStage}:`, error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
@@ -90,29 +97,36 @@ export async function DELETE(
 	request: Request,
 	{ params }: { params: Promise<{ id: string }> }
 ) {
+	let failureStage = "auth";
 	try {
 		const admin = await requireAdmin();
 		if ("response" in admin) return admin.response;
 
+		failureStage = "parse_id";
 		const { id } = await params;
 		const postId = parsePostId(id);
 		if (!postId) {
 			return NextResponse.json({ error: "Invalid post ID" }, { status: 400 });
 		}
+		failureStage = "parse_permanent";
 		const isPermanent = parsePermanentFlag(
 			new URL(request.url).searchParams.get("permanent")
 		);
 
+		failureStage = "load_target";
 		const post = await selectArchiveTarget(postId);
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
 		}
 
 		if (!post.deletedAt) {
+			failureStage = "archive";
 			await prisma.post.update({
 				where: { id: postId },
 				data: { deletedAt: new Date() },
+				select: { id: true },
 			});
+			failureStage = "revalidate";
 			safeRevalidateTags(
 				getPostMutationTags({
 					postId,
@@ -132,7 +146,12 @@ export async function DELETE(
 			);
 		}
 
-		await prisma.post.delete({ where: { id: postId } });
+		failureStage = "permanent_delete";
+		await prisma.post.delete({
+			where: { id: postId },
+			select: { id: true },
+		});
+		failureStage = "revalidate";
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId,
@@ -144,7 +163,7 @@ export async function DELETE(
 		);
 		return NextResponse.json({ success: true, mode: "permanently_deleted" });
 	} catch (error) {
-		console.error("[API] DELETE /api/admin/posts/[id] error:", error);
+		console.error(`[API] DELETE /api/admin/posts/[id] error stage=${failureStage}:`, error);
 		return NextResponse.json({ error: "Internal server error" }, { status: 500 });
 	}
 }
