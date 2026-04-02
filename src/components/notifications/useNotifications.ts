@@ -140,8 +140,8 @@ export function useNotifications() {
 		}
 
 		let cancelled = false;
-		let cancelUnreadBootstrap = () => undefined;
-		let cancelPushBootstrap = () => undefined;
+		let cancelUnreadBootstrap: () => void = () => {};
+		let cancelPushBootstrap: () => void = () => {};
 
 		const bootstrap = () => {
 			cancelUnreadBootstrap = scheduleIdleTask(() => {

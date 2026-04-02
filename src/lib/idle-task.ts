@@ -1,6 +1,6 @@
-export function scheduleIdleTask(callback: () => void, fallbackDelayMs = 600) {
+export function scheduleIdleTask(callback: () => void, fallbackDelayMs = 600): () => void {
 	if (typeof window === "undefined") {
-		return () => undefined;
+		return () => {};
 	}
 
 	if (typeof window.requestIdleCallback === "function") {
