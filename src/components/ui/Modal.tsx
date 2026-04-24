@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import classNames from "classnames";
@@ -31,6 +31,21 @@ const SIZE_CLASS_MAP: Record<ModalSize, string> = {
 	xl: "max-w-4xl",
 };
 
+const FOCUSABLE_SELECTOR = [
+	"a[href]",
+	"button:not([disabled])",
+	"textarea:not([disabled])",
+	"input:not([disabled])",
+	"select:not([disabled])",
+	"[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function getFocusableElements(container: HTMLElement) {
+	return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+		(element) => !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true"
+	);
+}
+
 export function Modal({
 	isOpen,
 	onClose,
@@ -46,11 +61,17 @@ export function Modal({
 	closeOnEsc = true,
 	hideCloseButton = false,
 }: ModalProps) {
+	const panelRef = useRef<HTMLDivElement>(null);
+	const previousActiveElementRef = useRef<HTMLElement | null>(null);
+	const titleId = useId();
+
 	useEffect(() => {
 		if (!isOpen) {
 			return;
 		}
 
+		previousActiveElementRef.current =
+			document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		const prevOverflow = document.body.style.overflow;
 		const prevPosition = document.body.style.position;
 		const prevTop = document.body.style.top;
@@ -64,11 +85,46 @@ export function Modal({
 		document.body.style.left = "0";
 		document.body.style.right = "0";
 		document.body.style.width = "100%";
+		const focusFrameId = window.requestAnimationFrame(() => {
+			const panel = panelRef.current;
+			if (!panel) {
+				return;
+			}
+			const [firstFocusable] = getFocusableElements(panel);
+			(firstFocusable ?? panel).focus();
+		});
 
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (event.key === "Escape") {
 				if (closeOnEsc) {
 					onClose();
+				}
+				return;
+			}
+			if (event.key === "Tab") {
+				const panel = panelRef.current;
+				if (!panel) {
+					return;
+				}
+				const focusableElements = getFocusableElements(panel);
+				if (focusableElements.length === 0) {
+					event.preventDefault();
+					panel.focus();
+					return;
+				}
+				const firstElement = focusableElements[0];
+				const lastElement = focusableElements[focusableElements.length - 1];
+				if (!firstElement || !lastElement) {
+					return;
+				}
+				if (event.shiftKey && document.activeElement === firstElement) {
+					event.preventDefault();
+					lastElement.focus();
+					return;
+				}
+				if (!event.shiftKey && document.activeElement === lastElement) {
+					event.preventDefault();
+					firstElement.focus();
 				}
 				return;
 			}
@@ -88,6 +144,7 @@ export function Modal({
 		window.addEventListener("keydown", handleKeyDown);
 
 		return () => {
+			window.cancelAnimationFrame(focusFrameId);
 			window.removeEventListener("keydown", handleKeyDown);
 			document.body.style.overflow = prevOverflow;
 			document.body.style.position = prevPosition;
@@ -96,6 +153,10 @@ export function Modal({
 			document.body.style.right = prevRight;
 			document.body.style.width = prevWidth;
 			window.scrollTo({ top: scrollY, behavior: "auto" });
+			const previousActiveElement = previousActiveElementRef.current;
+			if (previousActiveElement && document.contains(previousActiveElement)) {
+				previousActiveElement.focus();
+			}
 		};
 	}, [isOpen, closeOnEsc, onClose, onEnter]);
 
@@ -120,6 +181,7 @@ export function Modal({
 				overlayClassName,
 				isOpen ? "opacity-100 visible" : "opacity-0 invisible pointer-events-none"
 			)}
+			aria-hidden={!isOpen}
 			onClick={(event) => {
 				if (!closeOnBackdrop) return;
 				if (event.target === event.currentTarget) {
@@ -128,6 +190,12 @@ export function Modal({
 			}}
 		>
 			<div
+				ref={panelRef}
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby={title ? titleId : undefined}
+				aria-label={title ? undefined : "모달"}
+				tabIndex={-1}
 				className={classNames(
 					"w-full max-h-[90vh] flex flex-col transition-all duration-300 transform",
 					SIZE_CLASS_MAP[size],
@@ -138,7 +206,9 @@ export function Modal({
 			>
 				{showHeader && (
 					<div className={headerClassName}>
-						<h2 className="text-lg font-bold text-text-primary">{title ?? ""}</h2>
+						<h2 id={title ? titleId : undefined} className="text-lg font-bold text-text-primary">
+							{title ?? ""}
+						</h2>
 						{!hideCloseButton && (
 							<button
 								type="button"
