@@ -44,6 +44,7 @@ After setup, verify `.env.local`
 
 - `NEXTAUTH_SECRET`: auto-generated on first setup
 - `DATABASE_URL`: local default `file:./dev.db`
+- `MINECRAFT_VERIFY_SECRET`: 마인크래프트 서버/plugin이 `POST /api/minecraft/verify`를 호출할 때 쓰는 Bearer secret
 
 Generate a secret manually
 
@@ -151,6 +152,7 @@ DATABASE_URL="$TURSO_DATABASE_URL" TURSO_AUTH_TOKEN="$TURSO_AUTH_TOKEN" npx pris
 
 - Markdown 링크/이미지는 `http/https/mailto`(링크), `http/https`(이미지/링크 공통) 허용 정책으로 스킴 필터링
 - 외부 링크는 `rel="noopener noreferrer"` 적용
+- `POST /api/minecraft/verify`는 `Authorization: Bearer <MINECRAFT_VERIFY_SECRET>` 없이는 코드 검증/계정 연결을 수행하지 않음
 - Push 구독 endpoint는 `https` + 비로컬/사설망 endpoint만 허용
 - `POST /api/push/subscribe`는 이미 등록된 endpoint의 소유자 불일치 시 `409` 반환
 - `GET /api/push/subscribe`에도 레이트리밋 적용

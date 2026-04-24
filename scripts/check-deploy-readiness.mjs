@@ -29,11 +29,14 @@ function runChecks() {
 	const tursoAuthToken = env.TURSO_AUTH_TOKEN?.trim() ?? "";
 	const blobReadWriteToken = env.BLOB_READ_WRITE_TOKEN?.trim() ?? "";
 	const nextAuthSecret = env.NEXTAUTH_SECRET?.trim() ?? "";
+	const minecraftVerifySecret = env.MINECRAFT_VERIFY_SECRET?.trim() ?? "";
 	const nextAuthUrl = env.NEXTAUTH_URL?.trim() ?? "";
 	const authTrustHost = env.AUTH_TRUST_HOST?.trim() ?? "";
 
 	const knownPlaceholderSecrets = new Set([
 		"your-super-secret-key-change-this-in-production-min-32-chars",
+		"replace-with-long-random-secret",
+		"replace-with-minecraft-verify-secret",
 		"test-secret-key-for-local-tests",
 	]);
 
@@ -57,6 +60,12 @@ function runChecks() {
 		"NEXTAUTH_SECRET looks production-ready",
 		nextAuthSecret.length >= 32 && !knownPlaceholderSecrets.has(nextAuthSecret),
 		`length=${nextAuthSecret.length}`
+	);
+	pushCheck(
+		"MINECRAFT_VERIFY_SECRET looks production-ready",
+		minecraftVerifySecret.length >= 32 &&
+			!knownPlaceholderSecrets.has(minecraftVerifySecret),
+		`length=${minecraftVerifySecret.length}`
 	);
 	pushCheck(
 		"NEXTAUTH_URL is set",

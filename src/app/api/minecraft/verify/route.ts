@@ -6,6 +6,7 @@ import {
 	MINECRAFT_AUTH_CODE_REGEX,
 	normalizeMinecraftAuthCode,
 } from "@/lib/minecraft-auth-code";
+import { authorizeMinecraftVerifyRequest } from "@/lib/minecraft-verify-auth";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { z } from "zod";
 
@@ -37,6 +38,14 @@ export async function POST(req: NextRequest) {
 		const rateLimitedResponse = await enforceRateLimitAsync(req, RATE_LIMIT_POLICIES.minecraftVerify);
 		if (rateLimitedResponse) {
 			return rateLimitedResponse;
+		}
+
+		const authResult = authorizeMinecraftVerifyRequest(req);
+		if (!authResult.ok) {
+			return NextResponse.json(
+				{ error: authResult.error },
+				{ status: authResult.status }
+			);
 		}
 
 		const body = await readJsonBody(req, { maxBytes: 128 * 1024 });
