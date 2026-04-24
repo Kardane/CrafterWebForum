@@ -86,65 +86,11 @@ export function renderMeta(card: HTMLAnchorElement, chips: string[]) {
 	});
 }
 
-function renderStatus(card: HTMLAnchorElement, status?: string) {
+function removeVolatilePreviewNodes(card: HTMLAnchorElement) {
 	const body = ensureCardBody(card);
-	const existing = body.querySelector<HTMLSpanElement>(".external-link-card__status");
-	if (status === undefined) {
-		return;
-	}
-
-	const normalized = status.trim();
-	if (!normalized) {
-		existing?.remove();
-		return;
-	}
-	const statusNode = existing ?? document.createElement("span");
-	statusNode.className = "external-link-card__status";
-	statusNode.textContent = normalized;
-	if (!existing) {
-		body.appendChild(statusNode);
-	}
-}
-
-function renderAuthor(card: HTMLAnchorElement, authorName?: string, authorAvatarUrl?: string) {
-	const body = ensureCardBody(card);
-	const existing = body.querySelector<HTMLSpanElement>(".external-link-card__author");
-	const shouldUpdateAuthor = authorName !== undefined || authorAvatarUrl !== undefined;
-	if (!shouldUpdateAuthor) {
-		return;
-	}
-
-	const normalizedAuthorName = (authorName ?? "").trim();
-	const normalizedAuthorAvatarUrl = (authorAvatarUrl ?? "").trim();
-
-	if (!normalizedAuthorName && !normalizedAuthorAvatarUrl) {
-		existing?.remove();
-		return;
-	}
-	const authorNode = existing ?? document.createElement("span");
-	authorNode.className = "external-link-card__author";
-	authorNode.innerHTML = "";
-
-	if (normalizedAuthorAvatarUrl) {
-		const avatar = document.createElement("img");
-		avatar.src = normalizedAuthorAvatarUrl;
-		avatar.alt = "";
-		avatar.className = "external-link-card__author-avatar";
-		avatar.loading = "lazy";
-		avatar.decoding = "async";
-		authorNode.appendChild(avatar);
-	}
-
-	if (normalizedAuthorName) {
-		const name = document.createElement("span");
-		name.className = "external-link-card__author-name";
-		name.textContent = normalizedAuthorName;
-		authorNode.appendChild(name);
-	}
-
-	if (!existing) {
-		body.appendChild(authorNode);
-	}
+	body.querySelector(".external-link-card__description")?.remove();
+	body.querySelector(".external-link-card__author")?.remove();
+	body.querySelector(".external-link-card__status")?.remove();
 }
 
 function pushUniqueChip(chips: string[], value: string | undefined) {
@@ -184,7 +130,7 @@ function buildPreviewInfoChips(preview: LinkPreviewPayload) {
 }
 
 export function renderPreviewCard(card: HTMLAnchorElement, preview: LinkPreviewPayload) {
-	const body = ensureCardBody(card);
+	removeVolatilePreviewNodes(card);
 	const badgeNode = card.querySelector<HTMLElement>(".external-link-card__badge");
 	if (badgeNode && preview.badge) {
 		badgeNode.textContent = preview.badge;
@@ -199,19 +145,6 @@ export function renderPreviewCard(card: HTMLAnchorElement, preview: LinkPreviewP
 	if (subtitleNode) {
 		subtitleNode.textContent = preview.subtitle || subtitleNode.textContent || "";
 	}
-	const existingDescription = body.querySelector<HTMLElement>(".external-link-card__description");
-	if (preview.description !== undefined) {
-		if (preview.description) {
-			const descriptionNode = existingDescription ?? document.createElement("span");
-			descriptionNode.className = "external-link-card__description";
-			descriptionNode.textContent = preview.description;
-			if (!existingDescription) {
-				body.appendChild(descriptionNode);
-			}
-		} else {
-			existingDescription?.remove();
-		}
-	}
 
 	const thumbnailNode = card.querySelector<HTMLImageElement>(".external-link-card__thumb");
 	const iconNode = card.querySelector<HTMLImageElement>(".external-link-card__icon");
@@ -222,9 +155,6 @@ export function renderPreviewCard(card: HTMLAnchorElement, preview: LinkPreviewP
 	if (iconNode && preview.iconUrl) {
 		iconNode.src = preview.iconUrl;
 	}
-
-	renderAuthor(card, preview.authorName, preview.authorAvatarUrl);
-	renderStatus(card, preview.status);
 
 	renderMeta(card, buildPreviewInfoChips(preview));
 }

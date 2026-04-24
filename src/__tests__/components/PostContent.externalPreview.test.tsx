@@ -208,6 +208,39 @@ describe("PostContent external preview hydration", () => {
 		});
 	});
 
+	it("does not append volatile preview rows that change card height after hydration", async () => {
+		installIntersectionObserverMock();
+		const fetchMock = vi.fn(async () => {
+			return new Response(
+				JSON.stringify({
+					preview: {
+						title: "stable-title",
+						subtitle: "stable-subtitle",
+						description: "설명은 카드 높이를 흔들 수 있으므로 렌더하지 않음",
+						authorName: "preview-author",
+						authorAvatarUrl: "https://example.com/avatar.png",
+						status: "open",
+						chips: ["타입: 저장소"],
+					},
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			);
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: PostContent } = await import("@/components/posts/PostContent");
+		const view = render(<PostContent content={"[link](https://github.com/vercel/next.js/issues/5)"} />);
+
+		await flushVisibleCards();
+
+		await waitFor(() => {
+			expect(view.container.querySelector(".external-link-card__title")?.textContent).toBe("stable-title");
+			expect(view.container.querySelector(".external-link-card__description")).toBeNull();
+			expect(view.container.querySelector(".external-link-card__author")).toBeNull();
+			expect(view.container.querySelector(".external-link-card__status")).toBeNull();
+		});
+	});
+
 	it("falls back to icon thumbnail when preview image fails", async () => {
 		installIntersectionObserverMock();
 		const fetchMock = vi.fn(async () => {

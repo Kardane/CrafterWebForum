@@ -82,9 +82,7 @@ describe("CommentItem external preview hydration", () => {
 			expect(view.container.querySelector(".external-link-card__title")?.textContent).toBe(
 				"hydrated-comment-title"
 			);
-			expect(view.container.querySelector(".external-link-card__author-name")?.textContent).toBe(
-				"comment-author"
-			);
+			expect(view.container.querySelector(".external-link-card__author-name")).toBeNull();
 		});
 	});
 });
