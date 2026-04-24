@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 
 vi.mock("next-auth/react", () => ({
 	useSession: () => ({ data: null }),
@@ -83,6 +83,141 @@ describe("CommentItem external preview hydration", () => {
 				"hydrated-comment-title"
 			);
 			expect(view.container.querySelector(".external-link-card__author-name")).toBeNull();
+		});
+	});
+
+	it("keeps comment card thumbnail stable when preview image exists", async () => {
+		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			if (url.includes("/api/link-preview")) {
+				return new Response(
+					JSON.stringify({
+						preview: {
+							badge: "GitHub",
+							title: "stable-comment-title",
+							subtitle: "stable-comment-subtitle",
+							imageUrl: "https://example.com/preview-image.png",
+							iconUrl: "https://example.com/icon.png",
+							chips: ["chip-in-comment"],
+						},
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } }
+				);
+			}
+			return new Response(JSON.stringify({ items: [] }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: CommentItem } = await import("@/components/comments/CommentItem");
+		const comment = {
+			id: 102,
+			content: "[링크](https://github.com/vercel/next.js/issues/2)",
+			createdAt: "2026-03-06T00:00:00.000Z",
+			updatedAt: "2026-03-06T00:00:00.000Z",
+			isPinned: false,
+			parentId: null,
+			isPostAuthor: false,
+			author: {
+				id: 7,
+				nickname: "alice",
+				minecraftUuid: null,
+				role: "user",
+			},
+			replies: [],
+		};
+
+		const view = render(
+			<CommentItem
+				comment={comment}
+				onReplyRequest={vi.fn()}
+				onEdit={vi.fn()}
+				onDelete={vi.fn()}
+			/>
+		);
+
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledWith(
+				expect.stringContaining("/api/link-preview?url="),
+				expect.objectContaining({ cache: "force-cache" })
+			);
+		});
+
+		await waitFor(() => {
+			const thumb = view.container.querySelector<HTMLImageElement>(".external-link-card__thumb");
+			const icon = view.container.querySelector<HTMLImageElement>(".external-link-card__icon");
+			expect(thumb?.getAttribute("src")).not.toBe("https://example.com/preview-image.png");
+			expect(icon?.getAttribute("src")).toBe("https://example.com/icon.png");
+		});
+	});
+
+	it("does not re-fetch preview on comment hover rerender", async () => {
+		const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+			const url = String(input);
+			if (url.includes("/api/link-preview")) {
+				return new Response(
+					JSON.stringify({
+						preview: {
+							badge: "GitHub",
+							title: "hover-stable-title",
+							subtitle: "hover-stable-subtitle",
+							chips: ["chip-in-comment"],
+						},
+					}),
+					{ status: 200, headers: { "Content-Type": "application/json" } }
+				);
+			}
+			return new Response(JSON.stringify({ items: [] }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: CommentItem } = await import("@/components/comments/CommentItem");
+		const comment = {
+			id: 103,
+			content: "[링크](https://github.com/vercel/next.js/issues/3)",
+			createdAt: "2026-03-06T00:00:00.000Z",
+			updatedAt: "2026-03-06T00:00:00.000Z",
+			isPinned: false,
+			parentId: null,
+			isPostAuthor: false,
+			author: {
+				id: 7,
+				nickname: "alice",
+				minecraftUuid: null,
+				role: "user",
+			},
+			replies: [],
+		};
+
+		const view = render(
+			<CommentItem
+				comment={comment}
+				onReplyRequest={vi.fn()}
+				onEdit={vi.fn()}
+				onDelete={vi.fn()}
+			/>
+		);
+
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+			expect(view.container.querySelector(".external-link-card__title")?.textContent).toBe("hover-stable-title");
+		});
+
+		const wrapper = view.container.querySelector(".comment-wrapper");
+		if (!wrapper) {
+			throw new Error("comment wrapper is missing");
+		}
+
+		fireEvent.mouseEnter(wrapper);
+		fireEvent.mouseLeave(wrapper);
+
+		await waitFor(() => {
+			expect(fetchMock).toHaveBeenCalledTimes(1);
 		});
 	});
 });

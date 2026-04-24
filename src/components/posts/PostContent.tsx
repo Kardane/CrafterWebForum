@@ -2,7 +2,7 @@
 
 import { processMarkdown } from "@/lib/markdown";
 import { processAllEmbeds } from "@/lib/embeds";
-import { MouseEvent, useEffect, useMemo, useRef } from "react";
+import { memo, MouseEvent, useEffect, useMemo, useRef } from "react";
 import { useImageLightbox } from "@/components/ui/ImageLightboxProvider";
 import {
 	buildPostMetaChips,
@@ -160,7 +160,7 @@ function collectExternalLinkCardsFromElements(cards: HTMLAnchorElement[]) {
 	};
 }
 
-export default function PostContent({ content }: PostContentProps) {
+function PostContentInner({ content }: PostContentProps) {
 	const contentRef = useRef<HTMLDivElement>(null);
 	const postCardMetaCacheRef = useRef<Map<string, string[]>>(new Map());
 	const externalCardMetaCacheRef = useRef<Map<string, LinkPreviewPayload>>(new Map());
@@ -171,6 +171,7 @@ export default function PostContent({ content }: PostContentProps) {
 		rendered = processAllEmbeds(rendered);
 		return rendered;
 	}, [content]);
+	const markup = useMemo(() => ({ __html: html }), [html]);
 
 	useEffect(() => {
 		const root = contentRef.current;
@@ -529,9 +530,15 @@ export default function PostContent({ content }: PostContentProps) {
 			<div
 				ref={contentRef}
 				className="post-content prose prose-invert max-w-none"
-				dangerouslySetInnerHTML={{ __html: html }}
+				dangerouslySetInnerHTML={markup}
 				onClick={handleImageClick}
 			/>
 		</>
 	);
 }
+
+const PostContent = memo(PostContentInner, (prevProps, nextProps) => prevProps.content === nextProps.content);
+
+PostContent.displayName = "PostContent";
+
+export default PostContent;

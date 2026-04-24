@@ -93,6 +93,10 @@ function removeVolatilePreviewNodes(card: HTMLAnchorElement) {
 	body.querySelector(".external-link-card__status")?.remove();
 }
 
+function isCommentExternalCard(card: HTMLAnchorElement) {
+	return Boolean(card.closest(".comment-body"));
+}
+
 function pushUniqueChip(chips: string[], value: string | undefined) {
 	const normalized = value?.trim();
 	if (!normalized || chips.includes(normalized)) {
@@ -149,7 +153,7 @@ export function renderPreviewCard(card: HTMLAnchorElement, preview: LinkPreviewP
 	const thumbnailNode = card.querySelector<HTMLImageElement>(".external-link-card__thumb");
 	const iconNode = card.querySelector<HTMLImageElement>(".external-link-card__icon");
 	const mediaImageUrl = preview.imageUrl || preview.authorAvatarUrl || preview.iconUrl;
-	if (thumbnailNode && mediaImageUrl) {
+	if (thumbnailNode && mediaImageUrl && !isCommentExternalCard(card)) {
 		thumbnailNode.src = mediaImageUrl;
 	}
 	if (iconNode && preview.iconUrl) {
