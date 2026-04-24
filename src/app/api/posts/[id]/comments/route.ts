@@ -125,23 +125,6 @@ export async function GET(
 		const searchParams = new URL(request.url).searchParams;
 		const rawLimit = searchParams.get("limit");
 		const rawCursor = searchParams.get("cursor");
-		const usePagination = rawLimit !== null || rawCursor !== null;
-
-		if (!usePagination) {
-			const comments = await prisma.comment.findMany({
-				where: {
-					postId,
-				},
-				include: commentIncludeWithAuthor,
-				orderBy: [{ createdAt: "asc" }],
-			});
-			const commentsWithPostAuthorFlag = comments.map((comment) => ({
-				...comment,
-				isPostAuthor: comment.author.id === post.authorId,
-			}));
-
-			return NextResponse.json({ comments: buildCommentTree(commentsWithPostAuthorFlag) });
-		}
 
 		const parsedLimit = rawLimit === null ? DEFAULT_COMMENT_ROOT_LIMIT : Number.parseInt(rawLimit, 10);
 		if (!Number.isInteger(parsedLimit) || parsedLimit <= 0) {

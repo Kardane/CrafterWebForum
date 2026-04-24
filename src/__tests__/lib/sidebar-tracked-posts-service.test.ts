@@ -1,9 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const postFindManyMock = vi.fn();
-const postSubscriptionFindManyMock = vi.fn();
 const postReadFindManyMock = vi.fn();
-const commentCountMock = vi.fn();
 const commentGroupByMock = vi.fn();
 
 vi.mock("@/lib/prisma", () => ({
@@ -12,11 +10,7 @@ vi.mock("@/lib/prisma", () => ({
 			findMany: postFindManyMock,
 		},
 		comment: {
-			count: commentCountMock,
 			groupBy: commentGroupByMock,
-		},
-		postSubscription: {
-			findMany: postSubscriptionFindManyMock,
 		},
 		postRead: {
 			findMany: postReadFindManyMock,
@@ -28,9 +22,7 @@ describe("listSidebarTrackedPosts", () => {
 	beforeEach(() => {
 		vi.resetModules();
 		postFindManyMock.mockReset();
-		postSubscriptionFindManyMock.mockReset();
 		postReadFindManyMock.mockReset();
-		commentCountMock.mockReset();
 		commentGroupByMock.mockReset();
 	});
 
@@ -58,38 +50,30 @@ describe("listSidebarTrackedPosts", () => {
 			},
 		];
 		postFindManyMock.mockResolvedValue(activityRows);
-		postSubscriptionFindManyMock.mockResolvedValue([{ postId: 1 }, { postId: 3 }]);
 		postReadFindManyMock.mockResolvedValue([{ postId: 1, updatedAt: new Date("2026-03-03T09:30:00.000Z") }]);
-		commentGroupByMock.mockResolvedValue([
-			{ postId: 1, _max: { id: 1001 } },
-			{ postId: 3, _max: { id: 3001 } },
-		]);
-		commentCountMock.mockImplementation(async ({ where }: { where: { postId: number } }) => {
-			if (where.postId === 1) return 2;
-			return 0;
-		});
+		commentGroupByMock
+			.mockResolvedValueOnce([
+				{ postId: 1, _max: { id: 1001 } },
+				{ postId: 3, _max: { id: 3001 } },
+			])
+			.mockResolvedValueOnce([
+				{ postId: 1, _count: { _all: 2 } },
+			]);
 
 		const { listSidebarTrackedPosts } = await import("@/lib/services/sidebar-tracked-posts-service");
 		const result = await listSidebarTrackedPosts({ userId: 7, limit: 30 });
 
-		expect(postSubscriptionFindManyMock).toHaveBeenCalledWith({
-			where: {
-				userId: 7,
-				post: {
-					deletedAt: null,
-				},
-			},
-			select: {
-				postId: true,
-			},
-		});
 		expect(postFindManyMock).toHaveBeenCalledWith({
 			where: {
-				id: {
-					in: [1, 3],
-				},
 				deletedAt: null,
+				subscriptions: {
+					some: {
+						userId: 7,
+					},
+				},
 			},
+			orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+			take: 31,
 			select: {
 				id: true,
 				title: true,
@@ -167,14 +151,16 @@ describe("listSidebarTrackedPosts", () => {
 			},
 		];
 		postFindManyMock.mockResolvedValue(activityRows);
-		postSubscriptionFindManyMock.mockResolvedValue([{ postId: 11 }, { postId: 10 }, { postId: 9 }]);
 		postReadFindManyMock.mockResolvedValue([]);
-		commentGroupByMock.mockResolvedValue([
-			{ postId: 11, _max: { id: 111 } },
-			{ postId: 10, _max: { id: 101 } },
-			{ postId: 9, _max: { id: 91 } },
-		]);
-		commentCountMock.mockResolvedValue(0);
+		commentGroupByMock
+			.mockResolvedValueOnce([
+				{ postId: 11, _max: { id: 111 } },
+			])
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([
+				{ postId: 10, _max: { id: 101 } },
+			])
+			.mockResolvedValueOnce([]);
 
 		const { listSidebarTrackedPosts } = await import("@/lib/services/sidebar-tracked-posts-service");
 		const firstPage = await listSidebarTrackedPosts({ userId: 5, limit: 1 });
@@ -192,7 +178,7 @@ describe("listSidebarTrackedPosts", () => {
 	});
 
 	it("returns empty list when PostSubscription table is missing", async () => {
-		postSubscriptionFindManyMock.mockRejectedValue(
+		postFindManyMock.mockRejectedValue(
 			new Error("SQLITE_UNKNOWN: SQLite error: no such table: main.PostSubscription")
 		);
 
@@ -205,6 +191,7 @@ describe("listSidebarTrackedPosts", () => {
 			nextCursor: null,
 			hasMore: false,
 		});
-		expect(postFindManyMock).not.toHaveBeenCalled();
+		expect(postReadFindManyMock).not.toHaveBeenCalled();
+		expect(commentGroupByMock).not.toHaveBeenCalled();
 	});
 });

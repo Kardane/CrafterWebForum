@@ -186,13 +186,11 @@ export default function CommentSection({
 		() => getReadMarkerIndex(flattenedComments.length, readMarkerState?.lastReadCommentCount ?? 0),
 		[flattenedComments.length, readMarkerState?.lastReadCommentCount]
 	);
+	const totalCommentCount = readMarkerState?.totalCommentCount ?? flattenedComments.length;
 
 	const reloadComments = useCallback(async (options: ReloadCommentsOptions = {}) => {
 		const mode = options.mode ?? "full";
-		const query =
-			mode === "latest-window"
-				? `?limit=${Math.max(1, commentsPage.limit || initialCommentsPage?.limit || 12)}`
-				: "";
+		const query = `?limit=${Math.max(1, commentsPage.limit || initialCommentsPage?.limit || 12)}`;
 		try {
 			const response = await fetch(`/api/posts/${postId}/comments${query}`, { cache: "no-store" });
 			if (!response.ok) {
@@ -691,7 +689,7 @@ export default function CommentSection({
 				return;
 			}
 			const olderComments = data.comments;
-			setComments((prev) => {
+			setCommentsState((prev) => {
 				const existingRootIds = new Set(prev.map((comment) => comment.id));
 				const olderRoots = olderComments.filter((comment) => !existingRootIds.has(comment.id));
 				return [...olderRoots, ...prev];
@@ -706,7 +704,7 @@ export default function CommentSection({
 		} catch {
 			return;
 		}
-	}, [commentsPage.hasMore, commentsPage.limit, commentsPage.nextCursor, hasBufferedOlderComments, postId]);
+	}, [commentsPage.hasMore, commentsPage.limit, commentsPage.nextCursor, hasBufferedOlderComments, postId, setCommentsState]);
 
 	const handleTypingStateChange = useCallback(
 		(typing: boolean) => {
@@ -732,7 +730,7 @@ export default function CommentSection({
 	return (
 		<div className="comment-section">
 			<div className="comment-section-header" ref={headerRef}>
-				<h2 className="text-xl font-bold">댓글 {flattenedComments.length}개</h2>
+				<h2 className="text-xl font-bold">댓글 {totalCommentCount}개</h2>
 				{typingUsers.length > 0 && <span className="text-xs text-text-muted">{typingUsers.join(", ")} 입력 중...</span>}
 				<button
 					type="button"

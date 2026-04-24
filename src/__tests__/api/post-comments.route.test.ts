@@ -167,6 +167,41 @@ describe("POST /api/posts/[id]/comments", () => {
 		expect(fetchCommentSubtreeRowsByRootIdsMock).toHaveBeenCalledWith(12, [30]);
 	});
 
+	it("uses default root pagination when limit and cursor are omitted", async () => {
+		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1 } });
+		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null });
+		commentFindManyMock.mockResolvedValueOnce([
+			buildCommentRow({ id: 30, postId: 12, authorId: 1, parentId: null, nickname: "root-a" }),
+			buildCommentRow({ id: 20, postId: 12, authorId: 2, parentId: null, nickname: "root-b" }),
+		]);
+		fetchCommentSubtreeRowsByRootIdsMock.mockResolvedValue([
+			buildCommentRow({ id: 30, postId: 12, authorId: 1, parentId: null, nickname: "root-a" }),
+			buildCommentRow({ id: 20, postId: 12, authorId: 2, parentId: null, nickname: "root-b" }),
+		]);
+
+		const { GET } = await import("@/app/api/posts/[id]/comments/route");
+		const req = new Request("http://localhost/api/posts/12/comments");
+		const res = await GET(req as never, { params: Promise.resolve({ id: "12" }) });
+		const body = (await res.json()) as {
+			comments: Array<{ id: number }>;
+			page: { limit: number; nextCursor: number | null; hasMore: boolean };
+		};
+
+		expect(res.status).toBe(200);
+		expect(body.page).toEqual({ limit: 20, nextCursor: null, hasMore: false });
+		expect(body.comments.map((comment) => comment.id)).toEqual([30, 20]);
+		expect(commentFindManyMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: expect.objectContaining({
+					postId: 12,
+					parentId: null,
+				}),
+				take: 21,
+			})
+		);
+		expect(fetchCommentSubtreeRowsByRootIdsMock).toHaveBeenCalledWith(12, [30, 20]);
+	});
+
 	it("returns 400 when pagination cursor is invalid", async () => {
 		authMock.mockResolvedValue({ user: { id: "10", isApproved: 1 } });
 		postFindFirstMock.mockResolvedValue({ id: 12, authorId: 1, deletedAt: null });

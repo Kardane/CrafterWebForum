@@ -264,7 +264,7 @@ describe("CommentSection composer dock", () => {
 			});
 		}
 
-		expect(fetchMock).toHaveBeenCalledWith("/api/posts/1/comments", { cache: "no-store" });
+		expect(fetchMock).toHaveBeenCalledWith("/api/posts/1/comments?limit=12", { cache: "no-store" });
 		await waitFor(() => {
 			expect(scrollToCommentElementMock).toHaveBeenCalledWith(99, true, expect.any(Function));
 		});

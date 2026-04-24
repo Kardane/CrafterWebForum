@@ -549,9 +549,25 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 					},
 			  })
 			: Promise.resolve([] as Array<{ postId: number; lastReadCommentCount: number }>);
-		const [likes, reads] = await Promise.all([
+		const subscriptionsPromise = shouldLoadSubscriptionOverlay
+			? prisma.postSubscription.findMany({
+					where: {
+						userId: sessionUserId,
+						postId: { in: postIds },
+					},
+					select: { postId: true },
+			  }).catch((error) => {
+					if (isMissingPostSubscriptionTableError(error)) {
+						console.warn("[posts-service] post subscription table missing; skipping subscription overlay");
+						return [] as Array<{ postId: number }>;
+					}
+					throw error;
+			  })
+			: Promise.resolve([] as Array<{ postId: number }>);
+		const [likes, reads, subscriptions] = await Promise.all([
 			likesPromise,
 			readsPromise,
+			subscriptionsPromise,
 		]);
 		likedPostIdSet = new Set(likes.map((like) => like.postId));
 		if (shouldLoadReadOverlay) {
@@ -559,25 +575,7 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 				reads.map((read) => [read.postId, read.lastReadCommentCount])
 			);
 		}
-
-		if (shouldLoadSubscriptionOverlay) {
-			try {
-				const subscriptions = await prisma.postSubscription.findMany({
-					where: {
-						userId: sessionUserId,
-						postId: { in: postIds },
-					},
-					select: { postId: true },
-				});
-				subscribedPostIdSet = new Set(subscriptions.map((subscription) => subscription.postId));
-			} catch (error) {
-				if (isMissingPostSubscriptionTableError(error)) {
-					console.warn("[posts-service] post subscription table missing; skipping subscription overlay");
-				} else {
-					throw error;
-				}
-			}
-		}
+		subscribedPostIdSet = new Set(subscriptions.map((subscription) => subscription.postId));
 
 		queryAuxMs = performance.now() - queryAuxStart;
 	}

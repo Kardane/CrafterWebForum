@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { isMissingPostBoardMetadataColumnError, isMissingPostSubscriptionTableError } from "@/lib/db-schema-guard";
 import type { SidebarTrackedPost, SidebarTrackedPostsPage } from "@/types/sidebar";
@@ -33,6 +34,18 @@ interface ActivityRow {
 	authorMinecraftUuid: string | null;
 	commentCount: number;
 }
+
+type PostActivityRow = {
+	id: number;
+	title: string;
+	board?: string | null;
+	serverAddress?: string | null;
+	tags?: string | null;
+	updatedAt: Date;
+	authorId: number;
+	commentCount: number;
+	author: { nickname: string; minecraftUuid: string | null };
+};
 
 function normalizeLimit(value: number | undefined): number {
 	if (!Number.isInteger(value) || !value || value <= 0) {
@@ -98,49 +111,43 @@ function emptyResult(limit: number): ListSidebarTrackedPostsResult {
 	};
 }
 
-export async function listSidebarTrackedPosts(
-	input: ListSidebarTrackedPostsInput
-): Promise<ListSidebarTrackedPostsResult> {
-	const limit = normalizeLimit(input.limit);
-	const parsedCursor = parseCursor(input.cursor);
-
-	let subscribedRows: Array<{ postId: number }> = [];
-	try {
-		subscribedRows = await prisma.postSubscription.findMany({
-			where: {
-				userId: input.userId,
-				post: {
-					deletedAt: null,
+function buildTrackedPostWhere(userId: number, parsedCursor: ParsedCursor | null): Prisma.PostWhereInput {
+	const conditions: Prisma.PostWhereInput[] = [
+		{
+			deletedAt: null,
+			subscriptions: {
+				some: {
+					userId,
 				},
 			},
-			select: {
-				postId: true,
-			},
+		},
+	];
+	if (parsedCursor) {
+		const cursorDate = new Date(parsedCursor.timestampMs);
+		conditions.push({
+			OR: [
+				{ updatedAt: { lt: cursorDate } },
+				{
+					updatedAt: cursorDate,
+					id: { lt: parsedCursor.postId },
+				},
+			],
 		});
-	} catch (error) {
-		if (isMissingPostSubscriptionTableError(error)) {
-			console.warn("[sidebar-tracked-posts] post subscription table missing; returning empty subscription list");
-		} else {
-			throw error;
-		}
 	}
+	return conditions.length === 1 ? conditions[0] : { AND: conditions };
+}
 
-	const subscribedSet = new Set(subscribedRows.map((row) => row.postId));
-	const subscribedPostIdList = Array.from(subscribedSet);
-
-	if (subscribedPostIdList.length === 0) {
-		return emptyResult(limit);
-	}
-
-	let activityRows;
+async function loadTrackedActivityRows(input: {
+	userId: number;
+	parsedCursor: ParsedCursor | null;
+	limit: number;
+}): Promise<PostActivityRow[]> {
+	const where = buildTrackedPostWhere(input.userId, input.parsedCursor);
 	try {
-		activityRows = await prisma.post.findMany({
-			where: {
-				id: {
-					in: subscribedPostIdList,
-				},
-				deletedAt: null,
-			},
+		return await prisma.post.findMany({
+			where,
+			orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+			take: input.limit + 1,
 			select: {
 				id: true,
 				title: true,
@@ -158,17 +165,18 @@ export async function listSidebarTrackedPosts(
 			},
 		});
 	} catch (error) {
+		if (isMissingPostSubscriptionTableError(error)) {
+			console.warn("[sidebar-tracked-posts] post subscription table missing; returning empty subscription list");
+			return [];
+		}
 		if (!isMissingPostBoardMetadataColumnError(error)) {
 			throw error;
 		}
 		console.warn("[sidebar-tracked-posts] post board columns missing; using legacy tag metadata fallback");
-		activityRows = (await prisma.post.findMany({
-			where: {
-				id: {
-					in: subscribedPostIdList,
-				},
-				deletedAt: null,
-			},
+		return await prisma.post.findMany({
+			where,
+			orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
+			take: input.limit + 1,
 			select: {
 				id: true,
 				title: true,
@@ -183,41 +191,81 @@ export async function listSidebarTrackedPosts(
 					},
 				},
 			},
-		})) as Array<{
-			id: number;
-			title: string;
-			updatedAt: Date;
-			commentCount: number;
-			authorId: number;
-			tags: string | null;
-			author: { nickname: string; minecraftUuid: string | null };
-		}>;
+		});
 	}
+}
+
+async function loadNewCommentCountByPostId(input: {
+	rows: ActivityRow[];
+	readAtByPostId: Map<number, Date>;
+	userId: number;
+}) {
+	const unreadConditions = input.rows.map((row) => {
+		const lastReadAt = input.readAtByPostId.get(row.id);
+		return {
+			postId: row.id,
+			authorId: {
+				not: input.userId,
+			},
+			...(lastReadAt
+				? {
+					createdAt: {
+						gt: lastReadAt,
+					},
+				}
+				: {}),
+		};
+	});
+	if (unreadConditions.length === 0) {
+		return new Map<number, number>();
+	}
+	const rows = await prisma.comment.groupBy({
+		by: ["postId"],
+		where: {
+			OR: unreadConditions,
+		},
+		_count: {
+			_all: true,
+		},
+	});
+	return new Map(rows.map((row) => [row.postId, row._count._all]));
+}
+
+export async function listSidebarTrackedPosts(
+	input: ListSidebarTrackedPostsInput
+): Promise<ListSidebarTrackedPostsResult> {
+	const limit = normalizeLimit(input.limit);
+	const parsedCursor = parseCursor(input.cursor);
+
+	const activityRows = await loadTrackedActivityRows({
+		userId: input.userId,
+		parsedCursor,
+		limit,
+	});
 
 	if (activityRows.length === 0) {
 		return emptyResult(limit);
 	}
 
 	const normalizedActivityRows: ActivityRow[] = activityRows.map((row) => {
-		const metadata = parsePostTagMetadata("tags" in row ? row.tags : null, "board" in row ? row.board : null, "serverAddress" in row ? row.serverAddress : null);
-		return ({
-		id: row.id,
-		title: row.title,
-		board: metadata.board,
-		serverAddress: metadata.serverAddress,
-		updatedAt: row.updatedAt,
-		authorId: row.authorId,
-		authorNickname: row.author.nickname,
-		authorMinecraftUuid: row.author.minecraftUuid,
-		commentCount: row.commentCount,
-		});
+		const metadata = parsePostTagMetadata(row.tags ?? null, row.board ?? null, row.serverAddress ?? null);
+		return {
+			id: row.id,
+			title: row.title,
+			board: metadata.board,
+			serverAddress: metadata.serverAddress,
+			updatedAt: row.updatedAt,
+			authorId: row.authorId,
+			authorNickname: row.author.nickname,
+			authorMinecraftUuid: row.author.minecraftUuid,
+			commentCount: row.commentCount,
+		};
 	});
 
 	const sortedRows = [...normalizedActivityRows].sort(compareActivityDesc);
 	const cursorFilteredRows = parsedCursor ? sortedRows.filter((row) => isAfterCursor(row, parsedCursor)) : sortedRows;
-	const pagedRows = cursorFilteredRows.slice(0, limit + 1);
-	const hasMore = pagedRows.length > limit;
-	const selectedRows = hasMore ? pagedRows.slice(0, limit) : pagedRows;
+	const hasMore = cursorFilteredRows.length > limit;
+	const selectedRows = hasMore ? cursorFilteredRows.slice(0, limit) : cursorFilteredRows;
 
 	if (selectedRows.length === 0) {
 		return emptyResult(limit);
@@ -253,28 +301,11 @@ export async function listSidebarTrackedPosts(
 	});
 	const readAtByPostId = new Map(readRows.map((row) => [row.postId, row.updatedAt]));
 
-	const newCommentCountPairs = await Promise.all(
-		selectedRows.map(async (row) => {
-			const lastReadAt = readAtByPostId.get(row.id);
-			const count = await prisma.comment.count({
-				where: {
-					postId: row.id,
-					authorId: {
-						not: input.userId,
-					},
-					...(lastReadAt
-						? {
-							createdAt: {
-								gt: lastReadAt,
-							},
-						}
-						: {}),
-				},
-			});
-			return [row.id, count] as const;
-		})
-	);
-	const newCommentCountByPostId = new Map(newCommentCountPairs);
+	const newCommentCountByPostId = await loadNewCommentCountByPostId({
+		rows: selectedRows,
+		readAtByPostId,
+		userId: input.userId,
+	});
 
 	const items: SidebarTrackedPost[] = selectedRows.map((row) => ({
 		postId: row.id,
