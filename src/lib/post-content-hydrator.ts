@@ -147,6 +147,42 @@ function renderAuthor(card: HTMLAnchorElement, authorName?: string, authorAvatar
 	}
 }
 
+function pushUniqueChip(chips: string[], value: string | undefined) {
+	const normalized = value?.trim();
+	if (!normalized || chips.includes(normalized)) {
+		return;
+	}
+	chips.push(normalized);
+}
+
+function buildPreviewInfoChips(preview: LinkPreviewPayload) {
+	const chips: string[] = [];
+	for (const chip of preview.chips ?? []) {
+		if (chips.length >= 2) {
+			break;
+		}
+		pushUniqueChip(chips, chip);
+	}
+
+	const stats = preview.stats;
+	if (stats) {
+		if (stats.downloads !== undefined) pushUniqueChip(chips, `다운로드 ${stats.downloads.toLocaleString()}`);
+		if (stats.stars !== undefined) pushUniqueChip(chips, `스타 ${stats.stars.toLocaleString()}`);
+		if (stats.issues !== undefined) pushUniqueChip(chips, `이슈 ${stats.issues.toLocaleString()}`);
+		if (stats.version) pushUniqueChip(chips, `버전 ${stats.version}`);
+		if (stats.updatedAt) pushUniqueChip(chips, `업데이트 ${stats.updatedAt.split("T")[0]}`);
+	}
+
+	for (const metric of preview.metrics ?? []) {
+		if (chips.length >= 4) {
+			break;
+		}
+		pushUniqueChip(chips, metric);
+	}
+
+	return chips.slice(0, 4);
+}
+
 export function renderPreviewCard(card: HTMLAnchorElement, preview: LinkPreviewPayload) {
 	const body = ensureCardBody(card);
 	const badgeNode = card.querySelector<HTMLElement>(".external-link-card__badge");
@@ -190,23 +226,7 @@ export function renderPreviewCard(card: HTMLAnchorElement, preview: LinkPreviewP
 	renderAuthor(card, preview.authorName, preview.authorAvatarUrl);
 	renderStatus(card, preview.status);
 
-	const chips = [...(preview.chips ?? [])];
-	if (preview.stats) {
-		const stats = preview.stats;
-		if (stats.downloads !== undefined) chips.push(`⬇ ${stats.downloads.toLocaleString()} 다운로드`);
-		if (stats.stars !== undefined) chips.push(`★ ${stats.stars.toLocaleString()} 스타`);
-		if (stats.forks !== undefined) chips.push(`⑂ ${stats.forks.toLocaleString()} 포크`);
-		if (stats.issues !== undefined) chips.push(`💬 ${stats.issues.toLocaleString()} 이슈`);
-		if (stats.pulls !== undefined) chips.push(`🧩 ${stats.pulls.toLocaleString()} PR`);
-		if (stats.version) chips.push(`버전 ${stats.version}`);
-		if (stats.updatedAt) {
-			const dateStr = stats.updatedAt.split("T")[0];
-			chips.push(`업데이트 ${dateStr}`);
-		}
-	}
-	chips.push(...(preview.metrics ?? []));
-
-	renderMeta(card, chips);
+	renderMeta(card, buildPreviewInfoChips(preview));
 }
 
 export function buildPostMetaChips(item: PostMetaItemPayload) {

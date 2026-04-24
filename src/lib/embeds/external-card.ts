@@ -110,9 +110,7 @@ export function buildExternalCardByUrl(rawUrl: string): string {
 			extraAttributes = ` data-post-id="${escapeHtml(postId)}"`;
 			chips.push(
 				`ID ${postId}`,
-				textOr("externalCard.loadingViews", "조회 로딩"),
-				textOr("externalCard.loadingLikes", "추천 로딩"),
-				textOr("externalCard.loadingComments", "댓글 로딩")
+				textOr("externalCard.loadingMetadata", "정보 로딩")
 			);
 			return createCardHtml({
 				url: safeUrl,

@@ -167,6 +167,47 @@ describe("PostContent external preview hydration", () => {
 		});
 	});
 
+	it("limits hydrated preview info chips to essential items", async () => {
+		installIntersectionObserverMock();
+		const fetchMock = vi.fn(async () => {
+			return new Response(
+				JSON.stringify({
+					preview: {
+						title: "compact-title",
+						subtitle: "compact-subtitle",
+						chips: ["타입: 저장소", "언어: TypeScript", "라이선스: MIT"],
+						stats: {
+							stars: 1234,
+							forks: 55,
+							issues: 9,
+							pulls: 3,
+							version: "1.0.0",
+							updatedAt: "2026-04-24T00:00:00.000Z",
+						},
+						metrics: ["추가 지표 A", "추가 지표 B"],
+					},
+				}),
+				{ status: 200, headers: { "Content-Type": "application/json" } }
+			);
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const { default: PostContent } = await import("@/components/posts/PostContent");
+		const view = render(<PostContent content={"[link](https://github.com/vercel/next.js/issues/4)"} />);
+
+		await flushVisibleCards();
+
+		await waitFor(() => {
+			const chips = Array.from(view.container.querySelectorAll(".external-link-card__meta-chip"));
+			expect(chips.map((chip) => chip.textContent)).toEqual([
+				"타입: 저장소",
+				"언어: TypeScript",
+				"스타 1,234",
+				"이슈 9",
+			]);
+		});
+	});
+
 	it("falls back to icon thumbnail when preview image fails", async () => {
 		installIntersectionObserverMock();
 		const fetchMock = vi.fn(async () => {

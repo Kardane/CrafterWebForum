@@ -552,6 +552,11 @@ export default function CommentItem({
 					margin: 0;
 				}
 
+				.comment-body :global(.external-link-card) {
+					transform: none !important;
+					min-height: 96px;
+				}
+
 				.comment-body :global(.embed-container) {
 					width: fit-content;
 					max-width: 100%;
