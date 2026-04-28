@@ -10,6 +10,8 @@ import { authorizeMinecraftVerifyRequest } from "@/lib/minecraft-verify-auth";
 import { JsonBodyError, readJsonBody } from "@/lib/http-body";
 import { z } from "zod";
 
+export const runtime = "nodejs";
+
 const verifyBodySchema = z.object({
 	code: z
 		.string()
@@ -40,7 +42,7 @@ export async function POST(req: NextRequest) {
 			return rateLimitedResponse;
 		}
 
-		const authResult = authorizeMinecraftVerifyRequest(req);
+		const authResult = await authorizeMinecraftVerifyRequest(req);
 		if (!authResult.ok) {
 			return NextResponse.json(
 				{ error: authResult.error },

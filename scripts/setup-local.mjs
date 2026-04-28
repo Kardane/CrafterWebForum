@@ -63,6 +63,24 @@ function ensureEnvLocal() {
     console.log("Generated NEXTAUTH_SECRET in .env.local");
   }
 
+  if (next.includes('# MINECRAFT_VERIFY_SECRET="replace-with-minecraft-verify-secret"')) {
+    const secret = createHexSecret();
+    next = next.replace(
+      '# MINECRAFT_VERIFY_SECRET="replace-with-minecraft-verify-secret"',
+      `MINECRAFT_VERIFY_SECRET="${secret}"`,
+    );
+    console.log("Generated MINECRAFT_VERIFY_SECRET in .env.local");
+  }
+
+  if (next.includes('MINECRAFT_VERIFY_SECRET="replace-with-minecraft-verify-secret"')) {
+    const secret = createHexSecret();
+    next = next.replace(
+      'MINECRAFT_VERIFY_SECRET="replace-with-minecraft-verify-secret"',
+      `MINECRAFT_VERIFY_SECRET="${secret}"`,
+    );
+    console.log("Generated MINECRAFT_VERIFY_SECRET in .env.local");
+  }
+
   if (next.includes('DATABASE_URL="file:./prisma/dev.db"')) {
     next = next.replace('DATABASE_URL="file:./prisma/dev.db"', 'DATABASE_URL="file:./dev.db"');
     console.log("Normalized DATABASE_URL to file:./dev.db");

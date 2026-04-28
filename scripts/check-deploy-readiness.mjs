@@ -30,6 +30,7 @@ function runChecks() {
 	const blobReadWriteToken = env.BLOB_READ_WRITE_TOKEN?.trim() ?? "";
 	const nextAuthSecret = env.NEXTAUTH_SECRET?.trim() ?? "";
 	const minecraftVerifySecret = env.MINECRAFT_VERIFY_SECRET?.trim() ?? "";
+	const minecraftVerifyAllowedIps = env.MINECRAFT_VERIFY_ALLOWED_IPS?.trim() ?? "";
 	const nextAuthUrl = env.NEXTAUTH_URL?.trim() ?? "";
 	const authTrustHost = env.AUTH_TRUST_HOST?.trim() ?? "";
 
@@ -66,6 +67,11 @@ function runChecks() {
 		minecraftVerifySecret.length >= 32 &&
 			!knownPlaceholderSecrets.has(minecraftVerifySecret),
 		`length=${minecraftVerifySecret.length}`
+	);
+	pushCheck(
+		"MINECRAFT_VERIFY_ALLOWED_IPS is set for legacy plugin fallback",
+		minecraftVerifyAllowedIps.length > 0,
+		minecraftVerifyAllowedIps ? "configured" : "missing"
 	);
 	pushCheck(
 		"NEXTAUTH_URL is set",

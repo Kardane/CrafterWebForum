@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { enforceRateLimitAsync } from "@/lib/rate-limit";
 import { RATE_LIMIT_POLICIES } from "@/lib/rate-limit-policies";
+import {
+	getMinecraftVerifyAllowedSources,
+	isMinecraftVerifySecretConfigured,
+} from "@/lib/minecraft-verify-auth";
+
+export const runtime = "nodejs";
 
 /**
  * 마인크래프트 플러그인 상태 확인 API
@@ -26,7 +32,12 @@ export async function GET(req: NextRequest) {
 		}
 
 		return NextResponse.json(
-			{ ok: true, db },
+			{
+				ok: true,
+				db,
+				verify: isMinecraftVerifySecretConfigured() ? "ok" : "not_configured",
+				allowedSources: getMinecraftVerifyAllowedSources().length,
+			},
 			{
 				status: 200,
 				headers: {
@@ -37,7 +48,12 @@ export async function GET(req: NextRequest) {
 	} catch (error: unknown) {
 		console.error("[Minecraft] Status error:", error);
 		return NextResponse.json(
-			{ ok: true, db: "error" },
+			{
+				ok: true,
+				db: "error",
+				verify: isMinecraftVerifySecretConfigured() ? "ok" : "not_configured",
+				allowedSources: getMinecraftVerifyAllowedSources().length,
+			},
 			{
 				status: 200,
 				headers: {

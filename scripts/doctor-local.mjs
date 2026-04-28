@@ -92,6 +92,26 @@ checks.push(
   )
 );
 
+const minecraftVerifySecret = getEnvValue("MINECRAFT_VERIFY_SECRET", localEnv);
+checks.push(
+  check(
+    "MINECRAFT_VERIFY_SECRET configured",
+    minecraftVerifySecret.length >= 32 &&
+      minecraftVerifySecret !== "replace-with-minecraft-verify-secret" &&
+      minecraftVerifySecret !== "test-secret-key-for-local-tests",
+    minecraftVerifySecret ? "configured" : "missing"
+  )
+);
+
+const minecraftVerifyAllowedIps = getEnvValue("MINECRAFT_VERIFY_ALLOWED_IPS", localEnv);
+checks.push(
+  check(
+    "MINECRAFT_VERIFY_ALLOWED_IPS configured",
+    minecraftVerifyAllowedIps.length > 0,
+    minecraftVerifyAllowedIps ? "configured" : "missing"
+  )
+);
+
 if (isTursoUrl(databaseUrl)) {
   const tursoAuthToken = getEnvValue("TURSO_AUTH_TOKEN", localEnv);
   checks.push(

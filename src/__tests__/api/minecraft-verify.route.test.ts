@@ -76,13 +76,42 @@ describe("POST /api/minecraft/verify", () => {
 		expect(updateMock).not.toHaveBeenCalled();
 	});
 
+	it("allows missing authorization from configured minecraft server IP", async () => {
+		vi.stubEnv("MINECRAFT_VERIFY_ALLOWED_IPS", "172.65.204.41");
+		deleteManyMock.mockResolvedValue({ count: 0 });
+		findUniqueMock.mockResolvedValue({ code: "AB12CD3", ipAddress: "9.9.9.9" });
+		updateMock.mockResolvedValue({});
+
+		const { POST } = await import("@/app/api/minecraft/verify/route");
+		const req = new Request("http://localhost/api/minecraft/verify", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"x-vercel-forwarded-for": "172.65.204.41",
+			},
+			body: JSON.stringify({
+				code: "AB12CD3",
+				uuid: "u",
+				nickname: "nick",
+			}),
+		});
+
+		const res = await POST(req as never);
+		const body = await res.json();
+		expect(res.status).toBe(200);
+		expect(body.success).toBe(true);
+		expect(updateMock).toHaveBeenCalledTimes(1);
+	});
+
 	it("returns 401 when authorization header is invalid", async () => {
+		vi.stubEnv("MINECRAFT_VERIFY_ALLOWED_IPS", "172.65.204.41");
 		const { POST } = await import("@/app/api/minecraft/verify/route");
 		const req = new Request("http://localhost/api/minecraft/verify", {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 				Authorization: "Bearer wrong-secret",
+				"x-vercel-forwarded-for": "172.65.204.41",
 			},
 			body: JSON.stringify({
 				code: "AB12CD3",
