@@ -18,6 +18,8 @@ export type MinecraftVerifyAuthResult =
 			error: "unauthorized" | "minecraft_verify_not_configured";
 	  };
 
+type MinecraftVerifyUnauthorizedReason = "invalid_authorization" | "source_not_allowed";
+
 function digest(value: string) {
 	return createHash("sha256").update(value).digest();
 }
@@ -80,6 +82,20 @@ export function isMinecraftVerifySecretConfigured(secret = getMinecraftVerifySec
 		secret.length >= MINECRAFT_VERIFY_SECRET_MIN_LENGTH &&
 		!placeholderSecrets.has(secret)
 	);
+}
+
+function logUnauthorizedMinecraftVerifyRequest(
+	request: Request,
+	reason: MinecraftVerifyUnauthorizedReason
+) {
+	console.warn("[Minecraft] Verify unauthorized", {
+		reason,
+		requestIp: getRequestIp(request) || "unknown",
+		xRealIp: request.headers.get("x-real-ip") ?? "",
+		xVercelForwardedFor: request.headers.get("x-vercel-forwarded-for") ?? "",
+		xForwardedFor: request.headers.get("x-forwarded-for") ?? "",
+		allowedSources: getMinecraftVerifyAllowedSources(),
+	});
 }
 
 async function resolveAllowedSourceIps(source: string) {
@@ -148,6 +164,7 @@ export async function authorizeMinecraftVerifyRequest(request: Request): Promise
 		if (timingSafeEqual(digest(authorization), digest(expectedAuthorization))) {
 			return { ok: true };
 		}
+		logUnauthorizedMinecraftVerifyRequest(request, "invalid_authorization");
 		return {
 			ok: false,
 			status: 401,
@@ -159,6 +176,7 @@ export async function authorizeMinecraftVerifyRequest(request: Request): Promise
 		return { ok: true };
 	}
 
+	logUnauthorizedMinecraftVerifyRequest(request, "source_not_allowed");
 	return {
 		ok: false,
 		status: 401,
