@@ -41,6 +41,7 @@ interface CommentItemProps {
 	onEdit: (commentId: number, content: string) => Promise<void> | void;
 	onDelete: (commentId: number, event?: React.MouseEvent) => void;
 	onPin?: (commentId: number) => void;
+	canPin?: boolean;
 	onVote?: (commentId: number, optionId: number) => void;
 	shouldStartEdit?: boolean;
 	onEditRequestConsumed?: (commentId: number) => void;
@@ -63,6 +64,7 @@ export default function CommentItem({
 	onEdit,
 	onDelete,
 	onPin,
+	canPin = false,
 	onVote,
 	shouldStartEdit = false,
 	onEditRequestConsumed,
@@ -313,7 +315,7 @@ export default function CommentItem({
 							{copiedType === "link" ? <Check size={18} /> : <Link2 size={18} />}
 						</button>
 
-						{isAdmin && onPin && (
+						{canPin && onPin && (
 							<button
 								type="button"
 								className="action-btn"

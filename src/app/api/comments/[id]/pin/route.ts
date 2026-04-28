@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/admin-auth";
+import { auth } from "@/auth";
+import { resolveActiveUserFromSession } from "@/lib/active-user";
 import { getPostMutationTags, parsePostTags, safeRevalidateTags } from "@/lib/cache-tags";
 import { broadcastRealtime } from "@/lib/realtime/server-broadcast";
 import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
@@ -10,9 +11,12 @@ export async function POST(
 	{ params }: { params: Promise<{ id: string }> }
 ) {
 	try {
-		const admin = await requireAdmin();
-		if ("response" in admin) {
-			return admin.response;
+		const session = await auth();
+		const activeUser = await resolveActiveUserFromSession(session, {
+			requireApproved: false,
+		});
+		if (!activeUser.ok) {
+			return NextResponse.json({ error: activeUser.error }, { status: activeUser.status });
 		}
 
 		const { id } = await params;
@@ -23,10 +27,23 @@ export async function POST(
 
 		const existing = await prisma.comment.findUnique({
 			where: { id: commentId },
-			select: { id: true, isPinned: true, postId: true },
+			select: {
+				id: true,
+				isPinned: true,
+				postId: true,
+				post: {
+					select: {
+						authorId: true,
+					},
+				},
+			},
 		});
 		if (!existing) {
 			return NextResponse.json({ error: "Comment not found" }, { status: 404 });
+		}
+		const canPin = activeUser.context.role === "admin" || existing.post.authorId === activeUser.context.userId;
+		if (!canPin) {
+			return NextResponse.json({ error: "forbidden" }, { status: 403 });
 		}
 
 		const nextPinned = existing.isPinned ? 0 : 1;
@@ -58,7 +75,7 @@ export async function POST(
 				postId: existing.postId,
 				commentId: updated.id,
 				isPinned: Boolean(updated.isPinned),
-				actorUserId: admin.session.user.id,
+				actorUserId: activeUser.context.userId,
 			},
 		});
 

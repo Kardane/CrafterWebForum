@@ -173,17 +173,54 @@ describe("POST /api/comments/[id]/pin", () => {
 		postFindUniqueMock.mockReset();
 	});
 
-	it("returns 403 when caller is not admin", async () => {
+	it("returns 403 when caller is neither admin nor post author", async () => {
 		authMock.mockResolvedValue({ user: { id: "7", role: "user", nickname: "tester" } });
+		commentFindUniqueMock.mockResolvedValue({
+			id: 10,
+			isPinned: 0,
+			postId: 3,
+			post: { authorId: 9 },
+		});
 		const { POST } = await import("@/app/api/comments/[id]/pin/route");
-		const req = new Request("http://localhost/api/comments/1/pin", { method: "POST" });
-		const res = await POST(req as never, { params: Promise.resolve({ id: "1" }) });
+		const req = new Request("http://localhost/api/comments/10/pin", { method: "POST" });
+		const res = await POST(req as never, { params: Promise.resolve({ id: "10" }) });
 		expect(res.status).toBe(403);
+		expect(commentUpdateMock).not.toHaveBeenCalled();
+	});
+
+	it("toggles pin state for post author", async () => {
+		authMock.mockResolvedValue({ user: { id: "7", role: "user", nickname: "author" } });
+		commentFindUniqueMock.mockResolvedValue({
+			id: 10,
+			isPinned: 0,
+			postId: 3,
+			post: { authorId: 7 },
+		});
+		commentUpdateMock.mockResolvedValue({ id: 10, isPinned: 1 });
+
+		const { POST } = await import("@/app/api/comments/[id]/pin/route");
+		const req = new Request("http://localhost/api/comments/10/pin", { method: "POST" });
+		const res = await POST(req as never, { params: Promise.resolve({ id: "10" }) });
+		const body = await res.json();
+
+		expect(res.status).toBe(200);
+		expect(commentUpdateMock).toHaveBeenCalledWith(
+			expect.objectContaining({
+				where: { id: 10 },
+				data: { isPinned: 1 },
+			})
+		);
+		expect(body.comment.isPinned).toBe(true);
 	});
 
 	it("toggles pin state for admin", async () => {
 		authMock.mockResolvedValue({ user: { id: "1", role: "admin", nickname: "admin" } });
-		commentFindUniqueMock.mockResolvedValue({ id: 10, isPinned: 0, postId: 3 });
+		commentFindUniqueMock.mockResolvedValue({
+			id: 10,
+			isPinned: 0,
+			postId: 3,
+			post: { authorId: 7 },
+		});
 		commentUpdateMock.mockResolvedValue({ id: 10, isPinned: 1 });
 
 		const { POST } = await import("@/app/api/comments/[id]/pin/route");

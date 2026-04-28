@@ -139,6 +139,7 @@ async function PostDetailContent({ data, sessionUserId }: PostDetailContentProps
 				<div className="mt-8">
 					<CommentSection
 						postId={post.id}
+						postAuthorId={post.author_id}
 						initialComments={comments}
 						initialCommentsPage={commentsPage}
 						readMarker={readMarker}

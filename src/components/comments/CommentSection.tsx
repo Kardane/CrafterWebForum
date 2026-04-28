@@ -54,6 +54,7 @@ import { REALTIME_EVENTS, REALTIME_TOPICS } from "@/lib/realtime/constants";
 
 interface CommentSectionProps {
 	postId: number;
+	postAuthorId?: number;
 	initialComments: Comment[];
 	initialCommentsPage?: {
 		limit: number;
@@ -96,6 +97,7 @@ const COMPOSER_RESERVE_HEIGHT = 220;
 
 export default function CommentSection({
 	postId,
+	postAuthorId,
 	initialComments,
 	initialCommentsPage,
 	readMarker,
@@ -146,6 +148,8 @@ export default function CommentSection({
 	// --- 파생 데이터 ---
 	const flattenedComments = useMemo(() => flattenCommentsForStream(comments), [comments]);
 	const sessionUserId = toSessionUserId(session?.user?.id);
+	const isAdmin = (session?.user as { role?: string } | undefined)?.role === "admin";
+	const canPinComments = isAdmin || (typeof postAuthorId === "number" && sessionUserId === postAuthorId);
 
 	const latestOwnCommentId = useMemo(() => {
 		if (!sessionUserId) return null;
@@ -802,6 +806,7 @@ export default function CommentSection({
 										onReplyRequest={handleReplyRequest}
 										onEdit={handleCommentUpdate}
 										onPin={handleCommentPinToggle}
+										canPin={canPinComments}
 										onVote={handleCommentVote}
 										onDelete={(cId, event) => {
 											if (event?.shiftKey) void handleCommentDeleteConfirmed(cId, pendingDeleteId);
