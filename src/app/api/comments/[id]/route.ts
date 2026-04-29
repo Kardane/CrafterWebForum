@@ -189,7 +189,6 @@ export async function DELETE(
 			if (!isMissingPostCommentCountColumnError(error)) {
 				throw error;
 			}
-			console.warn('[API] DELETE /api/comments/[id] post commentCount column missing; updating timestamp only');
 			await prisma.post.update({
 				where: { id: comment.postId },
 				data: {

@@ -51,7 +51,6 @@ export async function getUserProfile(userId: number): Promise<UserProfileResult 
 			if (!isMissingPostBoardMetadataColumnError(error)) {
 				throw error;
 			}
-			console.warn("[user-service] post board columns missing; using legacy tag metadata fallback");
 			const legacyPosts = await prisma.post.findMany({
 				where: { authorId: user.id, deletedAt: null },
 				select: { tags: true },

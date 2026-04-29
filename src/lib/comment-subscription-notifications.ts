@@ -41,7 +41,6 @@ export async function queuePostSubscriptionNotificationsAndDeliveries(params: {
 		});
 	} catch (error) {
 		if (isMissingPostSubscriptionTableError(error)) {
-			console.warn("[comment-subscription] post subscription table missing; skipping subscription notifications");
 			return [];
 		}
 		throw error;
@@ -135,9 +134,7 @@ export async function queuePostSubscriptionNotificationsAndDeliveries(params: {
 				data: deliveries,
 			});
 		} catch (error) {
-			if (isMissingNotificationDeliveryTableError(error)) {
-				console.warn("[comment-subscription] notification delivery table missing; skipping push queue");
-			} else {
+			if (!isMissingNotificationDeliveryTableError(error)) {
 				throw error;
 			}
 		}

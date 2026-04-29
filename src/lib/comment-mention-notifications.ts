@@ -108,9 +108,7 @@ export async function queueMentionNotificationsAndDeliveries(params: {
 				data: deliveries,
 			});
 		} catch (error) {
-			if (isMissingNotificationDeliveryTableError(error)) {
-				console.warn("[comment-mention] notification delivery table missing; skipping push queue");
-			} else {
+			if (!isMissingNotificationDeliveryTableError(error)) {
 				throw error;
 			}
 		}

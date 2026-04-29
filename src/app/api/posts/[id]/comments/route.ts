@@ -54,7 +54,6 @@ async function loadCommentTargetPost(postId: number) {
 		if (!isMissingPostBoardMetadataColumnError(error)) {
 			throw error;
 		}
-		console.warn("[API] comments route post board columns missing; using legacy tag metadata fallback");
 		const legacyPost = await prisma.post.findFirst({
 			where: {
 				id: postId,
@@ -191,13 +190,6 @@ export async function POST(
 	{ params }: { params: Promise<{ id: string }> }
 ) {
 	try {
-		const timing = {
-			load_post: 0,
-			validate_parent: 0,
-			write_comment: 0,
-			write_post_read: 0,
-			enqueue_side_effect_job: 0,
-		};
 		const { id } = await params;
 		const session = await auth();
 		const activeUser = await resolveActiveUserFromSession(session, { requireApproved: false });
@@ -224,9 +216,7 @@ export async function POST(
 		const content = parsedBody.data.content;
 		const normalizedParentId = parsedBody.data.parentId ?? null;
 
-		const loadPostStartedAt = Date.now();
 		const post = await loadCommentTargetPost(postId);
-		timing.load_post = Date.now() - loadPostStartedAt;
 
 		if (!post) {
 			return NextResponse.json({ error: "Post not found" }, { status: 404 });
@@ -236,7 +226,6 @@ export async function POST(
 		}
 
 		if (normalizedParentId !== null) {
-			const validateParentStartedAt = Date.now();
 			const parentComment = await prisma.comment.findFirst({
 				where: {
 					id: normalizedParentId,
@@ -247,12 +236,10 @@ export async function POST(
 			if (!parentComment) {
 				return NextResponse.json({ error: "Parent comment not found" }, { status: 404 });
 			}
-			timing.validate_parent = Date.now() - validateParentStartedAt;
 		}
 
 		let comment;
 		let commentCount: number;
-		const writeCommentStartedAt = Date.now();
 		try {
 			const [createdComment, updatedPost] = await prisma.$transaction([
 				prisma.comment.create({
@@ -283,7 +270,6 @@ export async function POST(
 			if (!isMissingPostCommentCountColumnError(error)) {
 				throw error;
 			}
-			console.warn("[API] POST /api/posts/[id]/comments post commentCount column missing; using counted fallback");
 			comment = await prisma.comment.create({
 				data: {
 					content,
@@ -308,9 +294,7 @@ export async function POST(
 				},
 			});
 		}
-		timing.write_comment = Date.now() - writeCommentStartedAt;
 
-		const writePostReadStartedAt = Date.now();
 		await prisma.postRead.upsert({
 			where: {
 				userId_postId: {
@@ -328,7 +312,6 @@ export async function POST(
 				lastReadCommentCount: commentCount,
 			},
 		});
-		timing.write_post_read = Date.now() - writePostReadStartedAt;
 		safeRevalidateTags(
 			getPostMutationTags({
 				postId,
@@ -337,8 +320,6 @@ export async function POST(
 		);
 
 		const actorNickname = activeUser.context.nickname || "누군가";
-		const enqueueSideEffectStartedAt = Date.now();
-		let sideEffectMode: "job" | "inline_fallback" = "job";
 		try {
 			await enqueueCommentSideEffectJob({
 				commentId: comment.id,
@@ -351,7 +332,6 @@ export async function POST(
 			if (!isMissingCommentSideEffectJobTableError(error)) {
 				throw error;
 			}
-			sideEffectMode = "inline_fallback";
 			await runCommentSideEffects({
 				commentId: comment.id,
 				postId,
@@ -360,7 +340,6 @@ export async function POST(
 				content,
 			});
 		}
-		timing.enqueue_side_effect_job = Date.now() - enqueueSideEffectStartedAt;
 
 		void broadcastRealtime({
 			topic: REALTIME_TOPICS.post(postId),
@@ -396,13 +375,6 @@ export async function POST(
 				lastReadCommentCount: commentCount,
 				totalCommentCount: commentCount,
 			},
-		});
-
-		console.info("[comment-write] completed", {
-			postId,
-			commentId: comment.id,
-			sideEffectMode,
-			...timing,
 		});
 
 		return NextResponse.json({

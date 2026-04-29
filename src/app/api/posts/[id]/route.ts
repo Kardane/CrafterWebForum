@@ -49,7 +49,6 @@ async function getEditablePost(postId: number) {
 		if (!isMissingPostBoardMetadataColumnError(error)) {
 			throw error;
 		}
-		console.warn("[API] PATCH /api/posts/[id] post board columns missing; falling back to tag metadata for edit");
 		const legacyPost = await prisma.post.findFirst({
 			where: {
 				id: postId,
@@ -204,7 +203,6 @@ export async function PATCH(
 			if (!isMissingPostBoardMetadataColumnError(error)) {
 				throw error;
 			}
-			console.warn("[API] PATCH /api/posts/[id] post board columns missing; storing board metadata in tags only");
 			failureStage = "update_post_legacy_fallback";
 			await prisma.post.update({
 				where: { id: postId },

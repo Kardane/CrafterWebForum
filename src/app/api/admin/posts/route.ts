@@ -52,7 +52,6 @@ export async function GET(request: Request) {
 			if (!isMissingPostBoardMetadataColumnError(error)) {
 				throw error;
 			}
-			console.warn("[API] GET /api/admin/posts post board columns missing; using legacy tag metadata fallback");
 			[posts, total] = await Promise.all([
 				prisma.post.findMany({
 					where,

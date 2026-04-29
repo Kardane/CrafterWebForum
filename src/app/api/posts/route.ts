@@ -166,7 +166,6 @@ export async function POST(request: NextRequest) {
 			if (!isMissingPostBoardMetadataColumnError(error) && !isMissingPostCommentCountColumnError(error)) {
 				throw error;
 			}
-			console.warn("[API] POST /api/posts stage=create_post_primary legacy post columns missing; storing board metadata in tags only");
 			try {
 				failureStage = "create_post_legacy_fallback";
 				post = await createLegacyPostWithRawInsert({
@@ -206,7 +205,6 @@ export async function POST(request: NextRequest) {
 			if (!isRecoverablePostSubscriptionWriteError(error)) {
 				throw error;
 			}
-			console.warn("[API] POST /api/posts stage=auto_subscribe_author authored auto-subscription unavailable; skipping");
 		}
 		failureStage = "revalidate";
 		safeRevalidateTags(

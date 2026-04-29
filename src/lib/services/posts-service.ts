@@ -440,7 +440,6 @@ async function listPostsCoreUncached(
 		if (!isMissingLegacyPostListColumnError(error)) {
 			throw error;
 		}
-		console.warn("[posts-service] legacy post columns missing; using tag/comment fallback");
 		const legacyResult = await loadLegacyPostsCore(input, legacyWhereCondition, skip, limit);
 		posts = legacyResult.rows.map((row) => ({
 			...row,
@@ -558,7 +557,6 @@ export async function listPosts(input: ListPostsInput): Promise<ListPostsResult>
 					select: { postId: true },
 			  }).catch((error) => {
 					if (isMissingPostSubscriptionTableError(error)) {
-						console.warn("[posts-service] post subscription table missing; skipping subscription overlay");
 						return [] as Array<{ postId: number }>;
 					}
 					throw error;

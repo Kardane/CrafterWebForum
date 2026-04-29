@@ -263,7 +263,6 @@ async function getPostDetailCoreUncached(
 		if (!isMissingPostBoardMetadataColumnError(error) && !isMissingPostCommentCountColumnError(error)) {
 			throw error;
 		}
-		console.warn("[post-detail] legacy post columns missing; using tag/comment fallback");
 		post = await loadLegacyDetailPost(input.postId);
 	}
 	const queryPostMs = performance.now() - queryPostStart;
@@ -379,9 +378,7 @@ export async function getPostDetail(
 			},
 		});
 	} catch (error) {
-		if (isMissingPostSubscriptionTableError(error)) {
-			console.warn("[post-detail] post subscription table missing; using unsubscribed fallback");
-		} else {
+		if (!isMissingPostSubscriptionTableError(error)) {
 			throw error;
 		}
 	}

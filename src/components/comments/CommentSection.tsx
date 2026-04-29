@@ -131,7 +131,9 @@ export default function CommentSection({
 	const [requestedEditCommentId, setRequestedEditCommentId] = useState<number | null>(null);
 	const headerRef = useRef<HTMLDivElement>(null);
 	const streamRef = useRef<HTMLDivElement>(null);
+	const olderLoaderRef = useRef<HTMLDivElement>(null);
 	const composerShellRef = useRef<HTMLDivElement>(null);
+	const isAutoLoadingOlderRef = useRef(false);
 	const [composerDockInsets, setComposerDockInsets] = useState<{ left: number; right: number } | null>(null);
 	const initialUrlCommentJumpHandledRef = useRef(false);
 	const initialFreshReloadHandledRef = useRef(false);
@@ -710,6 +712,32 @@ export default function CommentSection({
 		}
 	}, [commentsPage.hasMore, commentsPage.limit, commentsPage.nextCursor, hasBufferedOlderComments, postId, setCommentsState]);
 
+	useEffect(() => {
+		if (!hasOlderComments || !olderLoaderRef.current || typeof IntersectionObserver === "undefined") {
+			return;
+		}
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (!entries.some((entry) => entry.isIntersecting) || isAutoLoadingOlderRef.current) {
+					return;
+				}
+				isAutoLoadingOlderRef.current = true;
+				void Promise.resolve(handleLoadOlderComments()).finally(() => {
+					isAutoLoadingOlderRef.current = false;
+				});
+			},
+			{
+				root: streamRef.current,
+				rootMargin: "160px 0px 0px 0px",
+				threshold: 0,
+			}
+		);
+
+		observer.observe(olderLoaderRef.current);
+		return () => observer.disconnect();
+	}, [handleLoadOlderComments, hasOlderComments]);
+
 	const handleTypingStateChange = useCallback(
 		(typing: boolean) => {
 			void fetch(`/api/realtime/comment-typing`, {
@@ -749,7 +777,7 @@ export default function CommentSection({
 			<div className="comment-stream" ref={streamRef}>
 				<div className="comment-list" style={{ paddingBottom: `${COMPOSER_RESERVE_HEIGHT}px` }}>
 					{hasOlderComments && (
-						<div className="older-loader">
+						<div className="older-loader" ref={olderLoaderRef}>
 							<button type="button" className="btn btn-secondary btn-sm" onClick={handleLoadOlderComments}>
 								이전 댓글 {olderLoadCount}개 보기
 							</button>

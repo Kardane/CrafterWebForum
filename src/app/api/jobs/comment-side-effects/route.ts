@@ -81,10 +81,8 @@ async function handleDispatch(request: NextRequest) {
 			}
 
 			processed += 1;
-			const startedAt = Date.now();
-
 			try {
-				const result = await runCommentSideEffects({
+				await runCommentSideEffects({
 					commentId: candidate.commentId,
 					postId: candidate.postId,
 					actorUserId: candidate.actorUserId,
@@ -101,15 +99,6 @@ async function handleDispatch(request: NextRequest) {
 					},
 				});
 
-				console.info("[comment-side-effects] job completed", {
-					jobId: candidate.id,
-					commentId: candidate.commentId,
-					postId: candidate.postId,
-					...result.durations,
-					totalMs: Date.now() - startedAt,
-					mentionCount: result.mentionTargets.length,
-					subscriptionCount: result.subscriptionTargets.length,
-				});
 				completed += 1;
 			} catch (error) {
 				const attemptCount = candidate.attemptCount + 1;

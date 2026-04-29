@@ -166,13 +166,11 @@ async function loadTrackedActivityRows(input: {
 		});
 	} catch (error) {
 		if (isMissingPostSubscriptionTableError(error)) {
-			console.warn("[sidebar-tracked-posts] post subscription table missing; returning empty subscription list");
 			return [];
 		}
 		if (!isMissingPostBoardMetadataColumnError(error)) {
 			throw error;
 		}
-		console.warn("[sidebar-tracked-posts] post board columns missing; using legacy tag metadata fallback");
 		return await prisma.post.findMany({
 			where,
 			orderBy: [{ updatedAt: "desc" }, { id: "desc" }],

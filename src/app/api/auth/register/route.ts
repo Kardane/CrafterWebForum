@@ -121,9 +121,6 @@ export async function POST(req: NextRequest) {
 			where: { code: normalizedCode },
 		});
 
-		console.log(
-			`[Auth] User Registered (Pending): ${nickname} (UUID: ${codeData.linkedUuid})`
-		);
 
 		const successMessage = "회원가입이 완료되었습니다. 관리자 승인 후 이용 가능합니다.";
 

@@ -430,4 +430,75 @@ describe("CommentSection composer dock", () => {
 		expect(container.querySelector(".comment-row.comment-interactive-row")).toBeTruthy();
 		expect(container.querySelector(".comment-wrapper")?.getAttribute("style") ?? "").not.toContain("flex");
 	});
+
+	it("automatically loads older comments when the older loader enters view", async () => {
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+		let observerCallback: IntersectionObserverCallback | null = null;
+		class IntersectionObserverMock {
+			constructor(callback: IntersectionObserverCallback) {
+				observerCallback = callback;
+			}
+
+			observe = vi.fn();
+			unobserve = vi.fn();
+			disconnect = vi.fn();
+		}
+		vi.stubGlobal("IntersectionObserver", IntersectionObserverMock);
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => ({
+				comments: [
+					{
+						id: 40,
+						content: "older",
+						createdAt: "2026-03-09T00:00:00.000Z",
+						updatedAt: "2026-03-09T00:00:00.000Z",
+						isPinned: false,
+						parentId: null,
+						isPostAuthor: false,
+						author: { id: 2, nickname: "older", minecraftUuid: null, role: "user" },
+						replies: [],
+					},
+				],
+				page: {
+					limit: 12,
+					nextCursor: 40,
+					hasMore: false,
+				},
+			}),
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		render(
+			<CommentSection
+				postId={1}
+				initialComments={[
+					{
+						id: 50,
+						content: "current",
+						createdAt: "2026-03-10T00:00:00.000Z",
+						updatedAt: "2026-03-10T00:00:00.000Z",
+						isPinned: false,
+						parentId: null,
+						isPostAuthor: false,
+						author: { id: 1, nickname: "writer", minecraftUuid: null, role: "user" },
+						replies: [],
+					},
+				]}
+				initialCommentsPage={{ limit: 12, nextCursor: 50, hasMore: true }}
+			/>
+		);
+
+		await act(async () => {
+			observerCallback?.(
+				[{ isIntersecting: true } as IntersectionObserverEntry],
+				{} as IntersectionObserver
+			);
+			await Promise.resolve();
+		});
+
+		expect(fetchMock).toHaveBeenCalledWith("/api/posts/1/comments?limit=12&cursor=50", {
+			cache: "no-store",
+		});
+	});
 });
