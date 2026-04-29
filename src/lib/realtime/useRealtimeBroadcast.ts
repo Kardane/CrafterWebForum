@@ -12,6 +12,8 @@ export function useRealtimeBroadcast(topic: string | null, handlers: Record<stri
 		handlersRef.current = handlers;
 	}, [handlers]);
 
+	const eventKey = Object.keys(handlers).sort().join("\n");
+
 	useEffect(() => {
 		if (!topic) {
 			return;
@@ -21,17 +23,17 @@ export function useRealtimeBroadcast(topic: string | null, handlers: Record<stri
 			return;
 		}
 
-		const channel = client.channel(topic);
-		for (const event of Object.keys(handlersRef.current)) {
-			channel.on("broadcast", { event }, ({ payload }) => {
+		const unsubscribes = Object.keys(handlersRef.current).map((event) =>
+			client.subscribe(topic, event, (payload) => {
 				const handler = handlersRef.current[event];
 				handler?.((payload ?? {}) as Record<string, unknown>);
-			});
-		}
+			})
+		);
 
-		channel.subscribe();
 		return () => {
-			void client.removeChannel(channel);
+			for (const unsubscribe of unsubscribes) {
+				unsubscribe();
+			}
 		};
-	}, [topic]);
+	}, [topic, eventKey]);
 }

@@ -135,8 +135,12 @@ export function useNotifications() {
 
 	useEffect(() => {
 		if (!sessionUserId) {
-			setUnreadCount(0);
-			return;
+			const resetTimer = window.setTimeout(() => {
+				setUnreadCount(0);
+			}, 0);
+			return () => {
+				window.clearTimeout(resetTimer);
+			};
 		}
 
 		let cancelled = false;

@@ -1,8 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import AdminUsersTab from "@/components/admin/tabs/AdminUsersTab";
 
-const fetchAdminJsonMock = vi.fn();
-const fetchAdminResponseMock = vi.fn();
+const { fetchAdminJsonMock, fetchAdminResponseMock } = vi.hoisted(() => ({
+	fetchAdminJsonMock: vi.fn(),
+	fetchAdminResponseMock: vi.fn(),
+}));
 
 vi.mock("lucide-react", () => ({
 	MoreHorizontal: () => null,
@@ -58,8 +61,6 @@ describe("AdminUsersTab", () => {
 	});
 
 	it("유저 생성 버튼을 보여주고 생성 모달을 열 수 있어야 함", async () => {
-		const { default: AdminUsersTab } = await import("@/components/admin/tabs/AdminUsersTab");
-
 		render(<AdminUsersTab />);
 
 		await waitFor(() => expect(fetchAdminJsonMock).toHaveBeenCalledWith("/api/admin/users"));
@@ -70,8 +71,6 @@ describe("AdminUsersTab", () => {
 	});
 
 	it("비밀번호 확인이 다르면 생성 요청을 보내지 않아야 함", async () => {
-		const { default: AdminUsersTab } = await import("@/components/admin/tabs/AdminUsersTab");
-
 		render(<AdminUsersTab />);
 		await waitFor(() => expect(fetchAdminJsonMock).toHaveBeenCalled());
 		fireEvent.click(screen.getByRole("button", { name: "유저 생성" }));
@@ -86,8 +85,6 @@ describe("AdminUsersTab", () => {
 	});
 
 	it("생성 성공 시 관리자 유저 생성 API를 호출하고 목록을 다시 불러와야 함", async () => {
-		const { default: AdminUsersTab } = await import("@/components/admin/tabs/AdminUsersTab");
-
 		render(<AdminUsersTab />);
 		await waitFor(() => expect(fetchAdminJsonMock).toHaveBeenCalledTimes(1));
 		fireEvent.click(screen.getByRole("button", { name: "유저 생성" }));

@@ -31,6 +31,10 @@ function runChecks() {
 	const nextAuthSecret = env.NEXTAUTH_SECRET?.trim() ?? "";
 	const minecraftVerifySecret = env.MINECRAFT_VERIFY_SECRET?.trim() ?? "";
 	const minecraftVerifyAllowedIps = env.MINECRAFT_VERIFY_ALLOWED_IPS?.trim() ?? "";
+	const realtimeWsUrl = env.NEXT_PUBLIC_REALTIME_WS_URL?.trim() ?? "";
+	const realtimeBroadcastUrl = env.REALTIME_BROADCAST_URL?.trim() ?? "";
+	const realtimeServerSecret = env.REALTIME_SERVER_SECRET?.trim() ?? "";
+	const realtimeJwtSecret = env.REALTIME_JWT_SECRET?.trim() ?? "";
 	const nextAuthUrl = env.NEXTAUTH_URL?.trim() ?? "";
 	const authTrustHost = env.AUTH_TRUST_HOST?.trim() ?? "";
 
@@ -38,6 +42,8 @@ function runChecks() {
 		"your-super-secret-key-change-this-in-production-min-32-chars",
 		"replace-with-long-random-secret",
 		"replace-with-minecraft-verify-secret",
+		"replace-with-realtime-server-secret",
+		"replace-with-realtime-jwt-secret",
 		"test-secret-key-for-local-tests",
 	]);
 
@@ -72,6 +78,38 @@ function runChecks() {
 		"MINECRAFT_VERIFY_ALLOWED_IPS is set for legacy plugin fallback",
 		minecraftVerifyAllowedIps.length > 0,
 		minecraftVerifyAllowedIps ? "configured" : "missing"
+	);
+	pushCheck(
+		"NEXT_PUBLIC_REALTIME_WS_URL is set",
+		realtimeWsUrl.length > 0,
+		realtimeWsUrl || "missing"
+	);
+	pushCheck(
+		"NEXT_PUBLIC_REALTIME_WS_URL uses wss",
+		/^wss:\/\//i.test(realtimeWsUrl),
+		realtimeWsUrl || "missing"
+	);
+	pushCheck(
+		"REALTIME_BROADCAST_URL is set",
+		realtimeBroadcastUrl.length > 0,
+		realtimeBroadcastUrl || "missing"
+	);
+	pushCheck(
+		"REALTIME_BROADCAST_URL uses https",
+		/^https:\/\//i.test(realtimeBroadcastUrl),
+		realtimeBroadcastUrl || "missing"
+	);
+	pushCheck(
+		"REALTIME_SERVER_SECRET looks production-ready",
+		realtimeServerSecret.length >= 32 &&
+			!knownPlaceholderSecrets.has(realtimeServerSecret),
+		`length=${realtimeServerSecret.length}`
+	);
+	pushCheck(
+		"REALTIME_JWT_SECRET looks production-ready",
+		realtimeJwtSecret.length >= 32 &&
+			!knownPlaceholderSecrets.has(realtimeJwtSecret),
+		`length=${realtimeJwtSecret.length}`
 	);
 	pushCheck(
 		"NEXTAUTH_URL is set",

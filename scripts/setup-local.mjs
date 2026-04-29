@@ -81,6 +81,24 @@ function ensureEnvLocal() {
     console.log("Generated MINECRAFT_VERIFY_SECRET in .env.local");
   }
 
+  if (next.includes('REALTIME_SERVER_SECRET="replace-with-realtime-server-secret"')) {
+    const secret = createHexSecret();
+    next = next.replace(
+      'REALTIME_SERVER_SECRET="replace-with-realtime-server-secret"',
+      `REALTIME_SERVER_SECRET="${secret}"`,
+    );
+    console.log("Generated REALTIME_SERVER_SECRET in .env.local");
+  }
+
+  if (next.includes('REALTIME_JWT_SECRET="replace-with-realtime-jwt-secret"')) {
+    const secret = createHexSecret();
+    next = next.replace(
+      'REALTIME_JWT_SECRET="replace-with-realtime-jwt-secret"',
+      `REALTIME_JWT_SECRET="${secret}"`,
+    );
+    console.log("Generated REALTIME_JWT_SECRET in .env.local");
+  }
+
   if (next.includes('DATABASE_URL="file:./prisma/dev.db"')) {
     next = next.replace('DATABASE_URL="file:./prisma/dev.db"', 'DATABASE_URL="file:./dev.db"');
     console.log("Normalized DATABASE_URL to file:./dev.db");

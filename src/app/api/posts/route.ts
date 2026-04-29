@@ -205,6 +205,9 @@ export async function POST(request: NextRequest) {
 			if (!isRecoverablePostSubscriptionWriteError(error)) {
 				throw error;
 			}
+			console.warn(
+				"[API] POST /api/posts stage=auto_subscribe_author authored auto-subscription unavailable; skipping"
+			);
 		}
 		failureStage = "revalidate";
 		safeRevalidateTags(

@@ -109,8 +109,12 @@ export default function ToolsDock({ isVisible }: ToolsDockProps) {
 
 	useEffect(() => {
 		if (!isVisible || !isPostDetailPage) {
-			setMobileComposerOffset(null);
-			return;
+			const clearOffsetFrame = window.requestAnimationFrame(() => {
+				setMobileComposerOffset(null);
+			});
+			return () => {
+				window.cancelAnimationFrame(clearOffsetFrame);
+			};
 		}
 
 		let observer: ResizeObserver | null = null;

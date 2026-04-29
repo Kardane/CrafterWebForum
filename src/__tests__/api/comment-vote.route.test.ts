@@ -32,7 +32,7 @@ function buildPollContent(overrides?: Partial<PollData>) {
 		settings: {
 			duration_hours: 24,
 			allow_multi: false,
-			created_at: "2026-03-15T00:00:00.000Z",
+			created_at: "2099-03-15T00:00:00.000Z",
 		},
 		voters: {},
 		...overrides,

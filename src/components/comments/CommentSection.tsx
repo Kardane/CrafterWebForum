@@ -194,30 +194,78 @@ export default function CommentSection({
 	);
 	const totalCommentCount = readMarkerState?.totalCommentCount ?? flattenedComments.length;
 
+	const fetchCommentsPage = useCallback(async () => {
+		const query = `?limit=${Math.max(1, commentsPage.limit || initialCommentsPage?.limit || 12)}`;
+		const response = await fetch(`/api/posts/${postId}/comments${query}`, { cache: "no-store" });
+		if (!response.ok) {
+			return null;
+		}
+		return (await response.json()) as {
+			comments?: Comment[];
+			page?: {
+				limit?: number;
+				nextCursor?: number | null;
+				hasMore?: boolean;
+			};
+		};
+	}, [commentsPage.limit, initialCommentsPage?.limit, postId]);
+
+	const applyLoadedCommentsPage = useCallback((data: {
+		comments?: Comment[];
+		page?: {
+			limit?: number;
+			nextCursor?: number | null;
+			hasMore?: boolean;
+		};
+	}, options: ReloadCommentsOptions = {}) => {
+		if (!Array.isArray(data.comments)) {
+			return;
+		}
+		if (options.syncToBottomAfterLoad) {
+			pendingBottomSyncAfterReloadRef.current = true;
+		}
+		setCommentsState(data.comments);
+		if (data.page) {
+			setCommentsPage((prev) => {
+				const nextState = {
+					limit:
+						typeof data.page?.limit === "number" && Number.isInteger(data.page.limit) && data.page.limit > 0
+							? data.page.limit
+							: prev.limit,
+					nextCursor:
+						typeof data.page?.nextCursor === "number" || data.page?.nextCursor === null
+							? (data.page.nextCursor ?? null)
+							: prev.nextCursor,
+					hasMore:
+						typeof data.page?.hasMore === "boolean" ? data.page.hasMore : prev.hasMore,
+				};
+				return nextState.limit === prev.limit &&
+					nextState.nextCursor === prev.nextCursor &&
+					nextState.hasMore === prev.hasMore
+					? prev
+					: nextState;
+			});
+		}
+	}, [setCommentsState]);
+
 	const reloadComments = useCallback(async (options: ReloadCommentsOptions = {}) => {
 		const mode = options.mode ?? "full";
-		const query = `?limit=${Math.max(1, commentsPage.limit || initialCommentsPage?.limit || 12)}`;
 		try {
-			const response = await fetch(`/api/posts/${postId}/comments${query}`, { cache: "no-store" });
-			if (!response.ok) {
+			const data = await fetchCommentsPage();
+			if (!data) {
 				return;
 			}
-			const data = (await response.json()) as {
-				comments?: Comment[];
-				page?: {
-					limit?: number;
-					nextCursor?: number | null;
-					hasMore?: boolean;
-				};
-			};
 			if (Array.isArray(data.comments)) {
 				if (mode === "latest-window") {
 					const mergeResult = mergeLatestWindowComments(commentsRef.current, data.comments);
 					if (mergeResult.shouldFallbackToFullReload) {
-						void reloadComments({
-							mode: "full",
-							syncToBottomAfterLoad: options.syncToBottomAfterLoad,
-						});
+						const fullData = await fetchCommentsPage();
+						if (fullData) {
+							applyLoadedCommentsPage(fullData, {
+								mode: "full",
+								syncToBottomAfterLoad: options.syncToBottomAfterLoad,
+							});
+						}
 						return;
 					}
 					if (mergeResult.didChange) {
@@ -227,37 +275,13 @@ export default function CommentSection({
 						setCommentsState(mergeResult.comments);
 					}
 				} else {
-					if (options.syncToBottomAfterLoad) {
-						pendingBottomSyncAfterReloadRef.current = true;
-					}
-					setCommentsState(data.comments);
-				}
-				if (data.page) {
-					setCommentsPage((prev) => {
-						const nextState = {
-							limit:
-								typeof data.page?.limit === "number" && Number.isInteger(data.page.limit) && data.page.limit > 0
-									? data.page.limit
-									: prev.limit,
-							nextCursor:
-								typeof data.page?.nextCursor === "number" || data.page?.nextCursor === null
-									? (data.page.nextCursor ?? null)
-									: prev.nextCursor,
-							hasMore:
-								typeof data.page?.hasMore === "boolean" ? data.page.hasMore : prev.hasMore,
-						};
-						return nextState.limit === prev.limit &&
-							nextState.nextCursor === prev.nextCursor &&
-							nextState.hasMore === prev.hasMore
-							? prev
-							: nextState;
-					});
+					applyLoadedCommentsPage(data, options);
 				}
 			}
 		} catch {
 			return;
 		}
-	}, [commentsPage.limit, initialCommentsPage?.limit, postId, setCommentsState]);
+	}, [applyLoadedCommentsPage, fetchCommentsPage, setCommentsState]);
 
 	const pinnedComments = useMemo<PinnedCommentItem[]>(
 		() =>

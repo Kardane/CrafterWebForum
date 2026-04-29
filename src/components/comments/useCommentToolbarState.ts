@@ -33,8 +33,13 @@ export function useCommentToolbarState({ commentId, isEditing }: UseCommentToolb
 			return;
 		}
 		clearSuppressionTimer();
-		setIsActionSuppressed(false);
-		setIsToolbarActive(false);
+		const resetTimer = window.setTimeout(() => {
+			setIsActionSuppressed(false);
+			setIsToolbarActive(false);
+		}, 0);
+		return () => {
+			window.clearTimeout(resetTimer);
+		};
 	}, [clearSuppressionTimer, isEditing]);
 
 	const activateToolbar = useCallback(() => {

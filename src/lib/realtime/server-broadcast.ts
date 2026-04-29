@@ -6,15 +6,17 @@ interface BroadcastMessage {
 	payload: BroadcastPayload;
 }
 
+const PLACEHOLDER_SERVER_SECRET = "replace-with-realtime-server-secret";
+
 function resolveRealtimeConfig() {
-	const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-	const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-	if (!projectUrl || !serviceRoleKey) {
+	const endpoint = process.env.REALTIME_BROADCAST_URL?.trim();
+	const serverSecret = process.env.REALTIME_SERVER_SECRET?.trim();
+	if (!endpoint || !serverSecret || serverSecret === PLACEHOLDER_SERVER_SECRET) {
 		return null;
 	}
 	return {
-		endpoint: `${projectUrl.replace(/\/$/, "")}/realtime/v1/api/broadcast`,
-		apiKey: serviceRoleKey,
+		endpoint,
+		serverSecret,
 	};
 }
 
@@ -29,18 +31,9 @@ export async function broadcastRealtime(message: BroadcastMessage) {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
-				apikey: config.apiKey,
-				Authorization: `Bearer ${config.apiKey}`,
+				Authorization: `Bearer ${config.serverSecret}`,
 			},
-			body: JSON.stringify({
-				messages: [
-					{
-						topic: message.topic,
-						event: message.event,
-						payload: message.payload,
-					},
-				],
-			}),
+			body: JSON.stringify(message),
 			cache: "no-store",
 		});
 	} catch (error) {

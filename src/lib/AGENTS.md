@@ -36,7 +36,7 @@
 
 - `services/`: 서버 응답 shape를 만드는 집계 계층
 - `link-preview/`: 외부 provider 파서와 캐시
-- `realtime/`: Supabase topic/event 브로드캐스트
+- `realtime/`: OCI WebSocket topic/event 브로드캐스트
 - `embeds/`: 포스트 본문 HTML 임베드 처리
 
 ## 빠른 체크

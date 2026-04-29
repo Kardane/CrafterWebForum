@@ -112,6 +112,44 @@ checks.push(
   )
 );
 
+const realtimeWsUrl = getEnvValue("NEXT_PUBLIC_REALTIME_WS_URL", localEnv);
+checks.push(
+  check(
+    "NEXT_PUBLIC_REALTIME_WS_URL configured",
+    /^wss?:\/\//i.test(realtimeWsUrl),
+    realtimeWsUrl ? "configured" : "missing"
+  )
+);
+
+const realtimeBroadcastUrl = getEnvValue("REALTIME_BROADCAST_URL", localEnv);
+checks.push(
+  check(
+    "REALTIME_BROADCAST_URL configured",
+    /^https?:\/\//i.test(realtimeBroadcastUrl),
+    realtimeBroadcastUrl ? "configured" : "missing"
+  )
+);
+
+const realtimeServerSecret = getEnvValue("REALTIME_SERVER_SECRET", localEnv);
+checks.push(
+  check(
+    "REALTIME_SERVER_SECRET configured",
+    realtimeServerSecret.length >= 32 &&
+      realtimeServerSecret !== "replace-with-realtime-server-secret",
+    realtimeServerSecret ? "configured" : "missing"
+  )
+);
+
+const realtimeJwtSecret = getEnvValue("REALTIME_JWT_SECRET", localEnv);
+checks.push(
+  check(
+    "REALTIME_JWT_SECRET configured",
+    realtimeJwtSecret.length >= 32 &&
+      realtimeJwtSecret !== "replace-with-realtime-jwt-secret",
+    realtimeJwtSecret ? "configured" : "missing"
+  )
+);
+
 if (isTursoUrl(databaseUrl)) {
   const tursoAuthToken = getEnvValue("TURSO_AUTH_TOKEN", localEnv);
   checks.push(

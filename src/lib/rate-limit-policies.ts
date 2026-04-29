@@ -51,4 +51,9 @@ export const RATE_LIMIT_POLICIES: Record<string, RateLimitPolicy> = {
 		limit: 20,
 		windowMs: 60_000,
 	},
+	realtimeToken: {
+		namespace: "realtime:token",
+		limit: 60,
+		windowMs: 60_000,
+	},
 };
