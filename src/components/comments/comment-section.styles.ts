@@ -32,6 +32,35 @@ export const commentSectionStyles = `
 		display: flex;
 		justify-content: center;
 		margin: 6px 0 14px;
+		min-height: 34px;
+	}
+
+	.older-loading {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--text-secondary);
+		font-size: 0.86rem;
+		line-height: 1;
+		padding: 9px 12px;
+		border: 1px solid var(--border);
+		border-radius: 999px;
+		background: var(--bg-secondary);
+	}
+
+	.older-loading-spinner {
+		width: 14px;
+		height: 14px;
+		border: 2px solid color-mix(in srgb, var(--text-muted) 32%, transparent);
+		border-top-color: var(--accent);
+		border-radius: 999px;
+		animation: older-loading-spin 0.8s linear infinite;
+	}
+
+	@keyframes older-loading-spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	.comment-row {

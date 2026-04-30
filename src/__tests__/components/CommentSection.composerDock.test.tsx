@@ -611,6 +611,14 @@ describe("CommentSection composer dock", () => {
 	it("아래로 스크롤하거나 같은 cursor가 이미 자동 요청된 상태면 이전 댓글을 자동으로 반복 로드하지 않아야 함", async () => {
 		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
 		Object.defineProperty(window, "scrollY", { value: 400, configurable: true, writable: true });
+		vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+		const rafCallbacks: FrameRequestCallback[] = [];
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+			rafCallbacks.push(cb);
+			return rafCallbacks.length;
+		});
+		vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+		vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
 		vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
 			const element = this as HTMLElement;
 			return {
@@ -675,6 +683,12 @@ describe("CommentSection composer dock", () => {
 			fireEvent.scroll(window);
 			await Promise.resolve();
 		});
+		await act(async () => {
+			for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
+				cb(0);
+			}
+			await Promise.resolve();
+		});
 		expect(fetchMock).not.toHaveBeenCalled();
 
 		await act(async () => {
@@ -683,8 +697,20 @@ describe("CommentSection composer dock", () => {
 			await Promise.resolve();
 		});
 		await act(async () => {
+			for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
+				cb(0);
+			}
+			await Promise.resolve();
+		});
+		await act(async () => {
 			Object.defineProperty(window, "scrollY", { value: 360, configurable: true, writable: true });
 			fireEvent.scroll(window);
+			await Promise.resolve();
+		});
+		await act(async () => {
+			for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
+				cb(0);
+			}
 			await Promise.resolve();
 		});
 
