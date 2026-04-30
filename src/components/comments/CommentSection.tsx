@@ -87,6 +87,23 @@ interface ReloadCommentsOptions {
 	syncToBottomAfterLoad?: boolean;
 }
 
+interface LoadOlderCommentsOptions {
+	preserveScrollAnchor?: boolean;
+}
+
+type ScrollAnchorSnapshot =
+	| {
+		type: "element";
+		element: HTMLElement;
+		scrollHeight: number;
+		scrollTop: number;
+	}
+	| {
+		type: "window";
+		scrollHeight: number;
+		scrollTop: number;
+	};
+
 type RenderRow =
 	| { type: "date-divider"; key: string; label: string }
 	| { type: "read-marker"; key: string }
@@ -94,6 +111,18 @@ type RenderRow =
 	| { type: "thread-toggle"; key: string; rootId: number; replyCount: number; isCollapsed: boolean };
 
 const COMPOSER_RESERVE_HEIGHT = 220;
+const OLDER_AUTO_LOAD_THRESHOLD_PX = 240;
+
+function getDocumentScrollHeight() {
+	return Math.max(document.documentElement.scrollHeight, document.body?.scrollHeight ?? 0);
+}
+
+function getScrollableCommentRoot(stream: HTMLElement | null) {
+	if (!stream) {
+		return null;
+	}
+	return stream.scrollHeight > stream.clientHeight + 1 ? stream : null;
+}
 
 export default function CommentSection({
 	postId,
@@ -134,6 +163,8 @@ export default function CommentSection({
 	const olderLoaderRef = useRef<HTMLDivElement>(null);
 	const composerShellRef = useRef<HTMLDivElement>(null);
 	const isAutoLoadingOlderRef = useRef(false);
+	const lastAutoLoadScrollTopRef = useRef(0);
+	const lastRequestedOlderCursorRef = useRef<number | null>(null);
 	const [composerDockInsets, setComposerDockInsets] = useState<{ left: number; right: number } | null>(null);
 	const initialUrlCommentJumpHandledRef = useRef(false);
 	const initialFreshReloadHandledRef = useRef(false);
@@ -351,6 +382,38 @@ export default function CommentSection({
 		ensureCommentVisible,
 		flattenedCommentsLength: flattenedComments.length,
 	});
+
+	const captureScrollAnchor = useCallback((): ScrollAnchorSnapshot => {
+		const scrollableRoot = getScrollableCommentRoot(streamRef.current);
+		if (scrollableRoot) {
+			return {
+				type: "element",
+				element: scrollableRoot,
+				scrollHeight: scrollableRoot.scrollHeight,
+				scrollTop: scrollableRoot.scrollTop,
+			};
+		}
+		return {
+			type: "window",
+			scrollHeight: getDocumentScrollHeight(),
+			scrollTop: window.scrollY,
+		};
+	}, []);
+
+	const restoreScrollAnchor = useCallback((snapshot: ScrollAnchorSnapshot | null) => {
+		if (!snapshot) {
+			return;
+		}
+		requestAnimationFrame(() => {
+			if (snapshot.type === "element") {
+				const nextScrollTop = snapshot.scrollTop + (snapshot.element.scrollHeight - snapshot.scrollHeight);
+				snapshot.element.scrollTop = Math.max(0, nextScrollTop);
+				return;
+			}
+			const nextScrollTop = snapshot.scrollTop + (getDocumentScrollHeight() - snapshot.scrollHeight);
+			window.scrollTo({ top: Math.max(0, nextScrollTop), behavior: "auto" });
+		});
+	}, []);
 
 	const {
 		isLoading,
@@ -688,9 +751,11 @@ export default function CommentSection({
 		requestAnimationFrame(() => scrollToCommentElement(latestOwnCommentId, true, setHighlightedCommentId));
 	};
 
-	const handleLoadOlderComments = useCallback(async () => {
+	const handleLoadOlderComments = useCallback(async (options: LoadOlderCommentsOptions = {}) => {
+		const anchorSnapshot = options.preserveScrollAnchor ? captureScrollAnchor() : null;
 		if (hasBufferedOlderComments) {
 			setVisibleStart((prev) => Math.max(0, prev - LATEST_CHUNK_SIZE));
+			restoreScrollAnchor(anchorSnapshot);
 			return;
 		}
 		if (!commentsPage.hasMore || commentsPage.nextCursor === null) {
@@ -731,36 +796,74 @@ export default function CommentSection({
 					hasMore: data.page.hasMore,
 				});
 			}
+			restoreScrollAnchor(anchorSnapshot);
 		} catch {
 			return;
 		}
-	}, [commentsPage.hasMore, commentsPage.limit, commentsPage.nextCursor, hasBufferedOlderComments, postId, setCommentsState]);
+	}, [
+		captureScrollAnchor,
+		commentsPage.hasMore,
+		commentsPage.limit,
+		commentsPage.nextCursor,
+		hasBufferedOlderComments,
+		postId,
+		restoreScrollAnchor,
+		setCommentsState,
+	]);
 
 	useEffect(() => {
-		if (!hasOlderComments || !olderLoaderRef.current || typeof IntersectionObserver === "undefined") {
+		if (!hasOlderComments || !olderLoaderRef.current) {
 			return;
 		}
 
-		const observer = new IntersectionObserver(
-			(entries) => {
-				if (!entries.some((entry) => entry.isIntersecting) || isAutoLoadingOlderRef.current) {
+		const scrollableRoot = getScrollableCommentRoot(streamRef.current);
+		const scrollTarget: Window | HTMLElement = scrollableRoot ?? window;
+		const readScrollTop = () => (scrollableRoot ? scrollableRoot.scrollTop : window.scrollY);
+		const isNearOlderLoader = () => {
+			if (scrollableRoot) {
+				return scrollableRoot.scrollTop <= OLDER_AUTO_LOAD_THRESHOLD_PX;
+			}
+			const rect = olderLoaderRef.current?.getBoundingClientRect();
+			return rect ? rect.top >= 0 && rect.top <= OLDER_AUTO_LOAD_THRESHOLD_PX : window.scrollY <= OLDER_AUTO_LOAD_THRESHOLD_PX;
+		};
+
+		lastAutoLoadScrollTopRef.current = readScrollTop();
+
+		const handleOlderAutoLoadScroll = () => {
+			const currentScrollTop = readScrollTop();
+			const isScrollingUp = currentScrollTop < lastAutoLoadScrollTopRef.current;
+			lastAutoLoadScrollTopRef.current = currentScrollTop;
+
+			if (!isScrollingUp || !isNearOlderLoader() || isAutoLoadingOlderRef.current) {
+				return;
+			}
+			if (!hasBufferedOlderComments) {
+				if (!commentsPage.hasMore || commentsPage.nextCursor === null) {
 					return;
 				}
-				isAutoLoadingOlderRef.current = true;
-				void Promise.resolve(handleLoadOlderComments()).finally(() => {
-					isAutoLoadingOlderRef.current = false;
-				});
-			},
-			{
-				root: streamRef.current,
-				rootMargin: "160px 0px 0px 0px",
-				threshold: 0,
+				if (lastRequestedOlderCursorRef.current === commentsPage.nextCursor) {
+					return;
+				}
+				lastRequestedOlderCursorRef.current = commentsPage.nextCursor;
 			}
-		);
 
-		observer.observe(olderLoaderRef.current);
-		return () => observer.disconnect();
-	}, [handleLoadOlderComments, hasOlderComments]);
+			isAutoLoadingOlderRef.current = true;
+			void handleLoadOlderComments({ preserveScrollAnchor: true }).finally(() => {
+				isAutoLoadingOlderRef.current = false;
+			});
+		};
+
+		scrollTarget.addEventListener("scroll", handleOlderAutoLoadScroll, { passive: true });
+		return () => {
+			scrollTarget.removeEventListener("scroll", handleOlderAutoLoadScroll);
+		};
+	}, [
+		commentsPage.hasMore,
+		commentsPage.nextCursor,
+		handleLoadOlderComments,
+		hasBufferedOlderComments,
+		hasOlderComments,
+	]);
 
 	const handleTypingStateChange = useCallback(
 		(typing: boolean) => {
@@ -802,7 +905,11 @@ export default function CommentSection({
 				<div className="comment-list" style={{ paddingBottom: `${COMPOSER_RESERVE_HEIGHT}px` }}>
 					{hasOlderComments && (
 						<div className="older-loader" ref={olderLoaderRef}>
-							<button type="button" className="btn btn-secondary btn-sm" onClick={handleLoadOlderComments}>
+							<button
+								type="button"
+								className="btn btn-secondary btn-sm"
+								onClick={() => void handleLoadOlderComments({ preserveScrollAnchor: true })}
+							>
 								이전 댓글 {olderLoadCount}개 보기
 							</button>
 						</div>

@@ -1,13 +1,17 @@
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import CommentSection from "@/components/comments/CommentSection";
 
 const scrollToBottomMock = vi.fn();
 const scrollToCommentElementMock = vi.fn();
+const mockState = vi.hoisted(() => ({
+	useSessionMock: vi.fn(() => ({ data: null })),
+	commentItemPropsMock: vi.fn(),
+}));
 
 vi.mock("next-auth/react", () => ({
-	useSession: () => ({ data: null }),
+	useSession: mockState.useSessionMock,
 }));
 
 vi.mock("lucide-react", () => ({
@@ -27,7 +31,10 @@ vi.mock("@/components/ui/Modal", () => ({
 }));
 
 vi.mock("@/components/comments/CommentItem", () => ({
-	default: () => null,
+	default: (props: { canPin?: boolean }) => {
+		mockState.commentItemPropsMock(props);
+		return <div data-testid="comment-item" />;
+	},
 }));
 
 vi.mock("@/components/comments/PinnedCommentsModal", () => ({
@@ -118,7 +125,68 @@ describe("CommentSection composer dock", () => {
 		window.history.replaceState(null, "", "/");
 		scrollToBottomMock.mockReset();
 		scrollToCommentElementMock.mockReset();
+		mockState.useSessionMock.mockReset();
+		mockState.useSessionMock.mockReturnValue({ data: null });
+		mockState.commentItemPropsMock.mockReset();
 		vi.restoreAllMocks();
+	});
+
+	it("포스트 작성자 세션이면 댓글 아이템에 고정 권한을 전달해야 함", () => {
+		mockState.useSessionMock.mockReturnValue({
+			data: { user: { id: "7", role: "user" } },
+		});
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+
+		render(
+			<CommentSection
+				postId={1}
+				postAuthorId={7}
+				initialComments={[
+					{
+						id: 50,
+						content: "current",
+						createdAt: "2026-03-10T00:00:00.000Z",
+						updatedAt: "2026-03-10T00:00:00.000Z",
+						isPinned: false,
+						parentId: null,
+						isPostAuthor: false,
+						author: { id: 2, nickname: "commenter", minecraftUuid: null, role: "user" },
+						replies: [],
+					},
+				]}
+			/>
+		);
+
+		expect(mockState.commentItemPropsMock).toHaveBeenCalledWith(expect.objectContaining({ canPin: true }));
+	});
+
+	it("포스트 작성자가 아닌 일반 사용자면 댓글 아이템에 고정 권한을 전달하지 않아야 함", () => {
+		mockState.useSessionMock.mockReturnValue({
+			data: { user: { id: "8", role: "user" } },
+		});
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+
+		render(
+			<CommentSection
+				postId={1}
+				postAuthorId={7}
+				initialComments={[
+					{
+						id: 50,
+						content: "current",
+						createdAt: "2026-03-10T00:00:00.000Z",
+						updatedAt: "2026-03-10T00:00:00.000Z",
+						isPinned: false,
+						parentId: null,
+						isPostAuthor: false,
+						author: { id: 2, nickname: "commenter", minecraftUuid: null, role: "user" },
+						replies: [],
+					},
+				]}
+			/>
+		);
+
+		expect(mockState.commentItemPropsMock).toHaveBeenCalledWith(expect.objectContaining({ canPin: false }));
 	});
 
 	it("헤더 좌우 인셋을 측정해서 composer-dock 좌우를 맞춰야 함", async () => {
@@ -431,19 +499,132 @@ describe("CommentSection composer dock", () => {
 		expect(container.querySelector(".comment-wrapper")?.getAttribute("style") ?? "").not.toContain("flex");
 	});
 
-	it("automatically loads older comments when the older loader enters view", async () => {
+	it("위로 스크롤해서 이전 댓글 버튼 근처에 왔을 때만 이전 댓글을 자동 로드하고 위치를 유지해야 함", async () => {
 		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
-		let observerCallback: IntersectionObserverCallback | null = null;
-		class IntersectionObserverMock {
-			constructor(callback: IntersectionObserverCallback) {
-				observerCallback = callback;
+		let documentHeight = 1000;
+		Object.defineProperty(document.documentElement, "scrollHeight", {
+			configurable: true,
+			get: () => documentHeight,
+		});
+		Object.defineProperty(window, "scrollY", { value: 500, configurable: true, writable: true });
+		const windowScrollToMock = vi.fn();
+		vi.spyOn(window, "scrollTo").mockImplementation(windowScrollToMock as typeof window.scrollTo);
+		const rafCallbacks: FrameRequestCallback[] = [];
+		vi.spyOn(window, "requestAnimationFrame").mockImplementation((cb: FrameRequestCallback) => {
+			rafCallbacks.push(cb);
+			return rafCallbacks.length;
+		});
+		vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => undefined);
+		vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+			const element = this as HTMLElement;
+			if (element.classList?.contains("older-loader")) {
+				return {
+					left: 0,
+					right: 100,
+					top: 120,
+					bottom: 160,
+					width: 100,
+					height: 40,
+					x: 0,
+					y: 120,
+					toJSON: () => ({}),
+				} as DOMRect;
 			}
+			return {
+				left: 0,
+				right: 0,
+				top: 0,
+				bottom: 0,
+				width: 0,
+				height: 0,
+				x: 0,
+				y: 0,
+				toJSON: () => ({}),
+			} as DOMRect;
+		});
+		const fetchMock = vi.fn().mockResolvedValue({
+			ok: true,
+			json: async () => {
+				documentHeight = 1400;
+				return {
+					comments: [
+						{
+							id: 40,
+							content: "older",
+							createdAt: "2026-03-09T00:00:00.000Z",
+							updatedAt: "2026-03-09T00:00:00.000Z",
+							isPinned: false,
+							parentId: null,
+							isPostAuthor: false,
+							author: { id: 2, nickname: "older", minecraftUuid: null, role: "user" },
+							replies: [],
+						},
+					],
+					page: {
+						limit: 12,
+						nextCursor: 40,
+						hasMore: false,
+					},
+				};
+			},
+		});
+		vi.stubGlobal("fetch", fetchMock);
 
-			observe = vi.fn();
-			unobserve = vi.fn();
-			disconnect = vi.fn();
-		}
-		vi.stubGlobal("IntersectionObserver", IntersectionObserverMock);
+		render(
+			<CommentSection
+				postId={1}
+				initialComments={[
+					{
+						id: 50,
+						content: "current",
+						createdAt: "2026-03-10T00:00:00.000Z",
+						updatedAt: "2026-03-10T00:00:00.000Z",
+						isPinned: false,
+						parentId: null,
+						isPostAuthor: false,
+						author: { id: 1, nickname: "writer", minecraftUuid: null, role: "user" },
+						replies: [],
+					},
+				]}
+				initialCommentsPage={{ limit: 12, nextCursor: 50, hasMore: true }}
+			/>
+		);
+
+		await act(async () => {
+			Object.defineProperty(window, "scrollY", { value: 450, configurable: true, writable: true });
+			fireEvent.scroll(window);
+			await Promise.resolve();
+		});
+		await act(async () => {
+			for (const cb of rafCallbacks.splice(0, rafCallbacks.length)) {
+				cb(0);
+			}
+			await Promise.resolve();
+		});
+
+		expect(fetchMock).toHaveBeenCalledWith("/api/posts/1/comments?limit=12&cursor=50", {
+			cache: "no-store",
+		});
+		expect(windowScrollToMock).toHaveBeenCalledWith({ top: 850, behavior: "auto" });
+	});
+
+	it("아래로 스크롤하거나 같은 cursor가 이미 자동 요청된 상태면 이전 댓글을 자동으로 반복 로드하지 않아야 함", async () => {
+		Object.defineProperty(globalThis, "ResizeObserver", { value: ResizeObserverMock, configurable: true });
+		Object.defineProperty(window, "scrollY", { value: 400, configurable: true, writable: true });
+		vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (this: Element) {
+			const element = this as HTMLElement;
+			return {
+				left: 0,
+				right: 100,
+				top: element.classList?.contains("older-loader") ? 100 : 0,
+				bottom: element.classList?.contains("older-loader") ? 140 : 0,
+				width: 100,
+				height: 40,
+				x: 0,
+				y: element.classList?.contains("older-loader") ? 100 : 0,
+				toJSON: () => ({}),
+			} as DOMRect;
+		});
 		const fetchMock = vi.fn().mockResolvedValue({
 			ok: true,
 			json: async () => ({
@@ -462,8 +643,8 @@ describe("CommentSection composer dock", () => {
 				],
 				page: {
 					limit: 12,
-					nextCursor: 40,
-					hasMore: false,
+					nextCursor: 50,
+					hasMore: true,
 				},
 			}),
 		});
@@ -490,15 +671,23 @@ describe("CommentSection composer dock", () => {
 		);
 
 		await act(async () => {
-			observerCallback?.(
-				[{ isIntersecting: true } as IntersectionObserverEntry],
-				{} as IntersectionObserver
-			);
+			Object.defineProperty(window, "scrollY", { value: 430, configurable: true, writable: true });
+			fireEvent.scroll(window);
+			await Promise.resolve();
+		});
+		expect(fetchMock).not.toHaveBeenCalled();
+
+		await act(async () => {
+			Object.defineProperty(window, "scrollY", { value: 380, configurable: true, writable: true });
+			fireEvent.scroll(window);
+			await Promise.resolve();
+		});
+		await act(async () => {
+			Object.defineProperty(window, "scrollY", { value: 360, configurable: true, writable: true });
+			fireEvent.scroll(window);
 			await Promise.resolve();
 		});
 
-		expect(fetchMock).toHaveBeenCalledWith("/api/posts/1/comments?limit=12&cursor=50", {
-			cache: "no-store",
-		});
+		expect(fetchMock).toHaveBeenCalledTimes(1);
 	});
 });
